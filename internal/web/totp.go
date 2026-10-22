@@ -13,7 +13,6 @@ import (
 
 	"latch/internal/audit"
 	"latch/internal/model"
-	"latch/internal/password"
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
@@ -500,11 +499,16 @@ func (s *Server) disableTOTP(w http.ResponseWriter, r *http.Request) {
 		s.renderAccountTOTP(w, r, sess, user, msgGroupRequires, "")
 		return
 	}
-	// The password is always checked and the code only after it matches
-	// (so a recovery code is used up, and the account's code limit spent,
-	// only then); the one failure message tells a guesser nothing about
-	// either.
-	if !s.passwordMatches(ctx, user, r.PostFormValue("password")) {
+	// The password is checked first, against the account's sign-in budget,
+	// and the code only after it matches (so a recovery code is used up, and
+	// the account's code limit spent, only then); the one failure message
+	// tells a guesser nothing about either.
+	pwOK, throttled := s.checkCurrentPassword(ctx, user, r.PostFormValue("password"))
+	if throttled {
+		s.renderAccountTOTP(w, r, sess, user, msgThrottled, "")
+		return
+	}
+	if !pwOK {
 		s.renderAccountTOTP(w, r, sess, user, msgDisableMismatch, "")
 		return
 	}
@@ -531,14 +535,4 @@ func (s *Server) disableTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditUser(ctx, audit.TOTPDisabled, user.ID, "Turned off two-step sign in", nil)
 	http.Redirect(w, r, "/account/totp", http.StatusSeeOther)
-}
-
-// passwordMatches reports whether pw is the user's password. A hash that
-// cannot be checked counts as no match.
-func (s *Server) passwordMatches(ctx context.Context, user *model.User, pw string) bool {
-	match, err := password.Verify(pw, storedHash(user))
-	if err != nil && !errors.Is(err, password.ErrUnusable) {
-		s.d.Log.ErrorContext(ctx, "totp disable: stored password hash cannot be checked", "user_id", user.ID, "error", err)
-	}
-	return match
 }

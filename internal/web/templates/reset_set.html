@@ -1,0 +1,15 @@
+{{define "content"}}
+{{- if .Data.Invite}}
+<h1>Welcome to {{.Brand.Name}}. Choose your password.</h1>
+{{- else}}
+<h1>Choose a new password</h1>
+{{- end}}
+<p>At least {{.Data.MinLength}} characters. A few unrelated words are easy to remember and hard to guess.</p>
+<form method="post" class="form">
+  <label for="password">New password</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" required autofocus>
+  <label for="confirm">Type it again</label>
+  <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+  <button type="submit">Save password</button>
+</form>
+{{end}}

@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Reset your password</h1>
+<p>Enter the email address you sign in with and we'll email you a link to choose a new password.</p>
+<form method="post" action="/reset" class="form">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" autocomplete="username" required autofocus>
+  <button type="submit">Email me a link</button>
+</form>
+<p><a href="/login">Back to sign in</a></p>
+{{end}}

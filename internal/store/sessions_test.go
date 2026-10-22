@@ -83,6 +83,31 @@ func TestDeleteSessionsForUser(t *testing.T) {
 	}
 }
 
+func TestDeleteOtherSessions(t *testing.T) {
+	ctx := context.Background()
+	s := OpenTest(t)
+	a := mkUser(t, s, "a@example.org")
+	b := mkUser(t, s, "b@example.org")
+	exp := time.Now().Add(time.Hour)
+	mkSession(t, s, "a1", a.ID, exp)
+	mkSession(t, s, "a2", a.ID, exp)
+	mkSession(t, s, "a3", a.ID, exp)
+	mkSession(t, s, "b1", b.ID, exp)
+	if err := s.DeleteOtherSessions(ctx, a.ID, "a2"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a1", "a3"} {
+		if _, err := s.GetSession(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	for _, id := range []string{"a2", "b1"} {
+		if _, err := s.GetSession(ctx, id); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+}
+
 // TouchSession writes only the two times, so a touch running alongside the
 // TOTP step cannot undo TOTPPassed.
 func TestTouchSessionKeepsTOTPPassed(t *testing.T) {

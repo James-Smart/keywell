@@ -62,7 +62,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	// checked, so a concurrent burst cannot exceed them; a successful
 	// sign-in gives its places back, so only failures use up the budget and
 	// members sharing one address (the space's NAT) can all sign in.
-	ipKey, acctKey := "ip:"+ClientIP(r), "acct:"+email
+	ipKey, acctKey := "ip:"+ClientIP(r), loginAccountKey(email)
 	if !s.d.Limits.LoginIP.Allow(ipKey) {
 		s.renderLogin(w, r, msgThrottled, form)
 		return
@@ -149,6 +149,40 @@ func (s *Server) authenticate(ctx context.Context, email, pw string) (user *mode
 		return user, false, nil
 	}
 	return user, true, nil
+}
+
+// loginAccountKey is the key in Limiters.LoginAccount of the account with
+// email.
+func loginAccountKey(email string) string {
+	return "acct:" + strings.ToLower(strings.TrimSpace(email))
+}
+
+// checkCurrentPassword reports whether pw is the signed-in user's password,
+// for pages that ask for it again. The check draws on the account's
+// sign-in budget (Limiters.LoginAccount, shared with the sign-in form) as a
+// sign-in does: a wrong password uses up a place, a right one clears the
+// count. Once the budget is spent the password is not checked and
+// throttled is true.
+func (s *Server) checkCurrentPassword(ctx context.Context, user *model.User, pw string) (ok, throttled bool) {
+	key := loginAccountKey(user.Email)
+	if !s.d.Limits.LoginAccount.Allow(key) {
+		return false, true
+	}
+	if !s.passwordMatches(ctx, user, pw) {
+		return false, false
+	}
+	s.d.Limits.LoginAccount.Reset(key)
+	return true, false
+}
+
+// passwordMatches reports whether pw is the user's password. A hash that
+// cannot be checked counts as no match.
+func (s *Server) passwordMatches(ctx context.Context, user *model.User, pw string) bool {
+	match, err := password.Verify(pw, storedHash(user))
+	if err != nil && !errors.Is(err, password.ErrUnusable) {
+		s.d.Log.ErrorContext(ctx, "stored password hash cannot be checked", "user_id", user.ID, "error", err)
+	}
+	return match
 }
 
 // storedHash is the hash a user's password is checked against: the native

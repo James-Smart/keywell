@@ -106,6 +106,15 @@ func (s *Store) DeleteSessionsForUser(ctx context.Context, userID string) error 
 	return nil
 }
 
+// DeleteOtherSessions removes every session belonging to the user except
+// keepID, e.g. after a password change made in that session.
+func (s *Store) DeleteOtherSessions(ctx context.Context, userID, keepID string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=? AND id<>?`, userID, keepID); err != nil {
+		return fmt.Errorf("store: delete other sessions: %w", err)
+	}
+	return nil
+}
+
 // DeleteExpiredSessions removes expired sessions and returns how many were removed.
 func (s *Store) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, formatTime(time.Now()))

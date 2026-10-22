@@ -62,3 +62,31 @@ func TestHasActiveInviteToken(t *testing.T) {
 	mkReset(t, s, "inv2", u.ID, model.ResetPurposeInvite, time.Now().Add(-time.Hour))
 	check(u.ID, false)
 }
+
+// PeekResetToken finds an unused, unexpired token without using it up.
+func TestPeekResetToken(t *testing.T) {
+	ctx := context.Background()
+	s := OpenTest(t)
+	u := mkUser(t, s, "p@example.org")
+	now := time.Now()
+	mkReset(t, s, "good", u.ID, model.ResetPurposeInvite, now.Add(time.Hour))
+	mkReset(t, s, "old", u.ID, model.ResetPurposeReset, now.Add(-time.Minute))
+	for range 2 {
+		tok, err := s.PeekResetToken(ctx, "good")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tok.UsedAt != nil || tok.UserID != u.ID || tok.Purpose != model.ResetPurposeInvite ||
+			!tok.ExpiresAt.After(now) {
+			t.Fatalf("token: %+v", tok)
+		}
+	}
+	if _, err := s.ConsumeResetToken(ctx, "good"); err != nil {
+		t.Fatalf("consume after peek: %v", err)
+	}
+	for _, h := range []string{"good", "old", "missing"} {
+		if _, err := s.PeekResetToken(ctx, h); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s: %v", h, err)
+		}
+	}
+}

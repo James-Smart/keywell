@@ -568,7 +568,8 @@ func TestDisableCountsTowardTOTPThrottle(t *testing.T) {
 	signInWithCode(t, env, c, "alex@example.org", secret)
 	sid := jarSession(t, env, c)
 
-	// A wrong password does not get as far as the code, so it costs nothing.
+	// A wrong password does not get as far as the code, so it costs none of
+	// the code budget (and the right one clears the sign-in budget it used).
 	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}}, secret, 3)
 	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}}, secret, 10)
 
@@ -711,8 +712,8 @@ func TestDisableRefusedWhenGroupRequiresTOTP(t *testing.T) {
 }
 
 // A session still waiting for its code reaches no account page, the TOTP
-// pages included. (The account pages other than TOTP arrive in later tasks;
-// GET / stands in for them.)
+// pages included. (The member home arrives in a later task; GET / stands in
+// for it.)
 func TestIncompleteSessionCannotReachAccount(t *testing.T) {
 	env := testenv.New(t)
 	u := env.CreateUser(t, "alex@example.org", testPW)
@@ -722,6 +723,13 @@ func TestIncompleteSessionCannotReachAccount(t *testing.T) {
 
 	resp, _ := get(t, c, env.TS.URL+"/")
 	assertRedirect(t, resp, "/login/totp?next=%2F")
+	resp, _ = get(t, c, env.TS.URL+"/account/password")
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Fpassword")
+	resp, _ = post(t, env, c, "/account/password", url.Values{"current": {testPW}, "password": {newPW}, "confirm": {newPW}})
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Fpassword")
+	if getUser(t, env, u.ID).PasswordHash != u.PasswordHash {
+		t.Fatal("an incomplete session changed the password")
+	}
 	resp, _ = get(t, c, env.TS.URL+"/account/totp")
 	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
 	resp, _ = get(t, c, env.TS.URL+"/account/totp/qr.png")
@@ -733,4 +741,29 @@ func TestIncompleteSessionCannotReachAccount(t *testing.T) {
 	if !getUser(t, env, u.ID).TOTPEnrolled() {
 		t.Fatal("an incomplete session turned TOTP off")
 	}
+}
+
+// Wrong passwords when turning TOTP off use up the account's sign-in
+// budget; once it is spent nothing is checked.
+func TestDisableWrongPasswordThrottled(t *testing.T) {
+	env := testenv.New(t)
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	c := env.Client(t)
+	signInWithCode(t, env, c, "alex@example.org", secret)
+
+	for i := range 10 {
+		resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}, "code": {validCode(t, secret)}})
+		if resp.StatusCode != http.StatusOK || !strings.Contains(body, disableMismatch) {
+			t.Fatalf("wrong password %d: status %d\n%s", i+1, resp.StatusCode, body)
+		}
+	}
+	resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, throttled) {
+		t.Fatalf("throttled disable: status %d\n%s", resp.StatusCode, body)
+	}
+	if !getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("TOTP turned off while throttled")
+	}
+	assertLoginRefused(t, env, "alex@example.org", testPW, throttled)
 }

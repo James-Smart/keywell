@@ -34,13 +34,27 @@ func (s *Store) ConsumeResetToken(ctx context.Context, tokenHash string) (*model
 	if n != 1 {
 		return nil, ErrNotFound
 	}
+	return s.readResetToken(ctx, `SELECT `+resetCols+` FROM password_reset_tokens WHERE token_hash=?`, tokenHash)
+}
+
+// PeekResetToken returns an unused, unexpired token without using it up.
+// It returns ErrNotFound if the token is missing, already used or expired.
+func (s *Store) PeekResetToken(ctx context.Context, tokenHash string) (*model.ResetToken, error) {
+	return s.readResetToken(ctx, `SELECT `+resetCols+` FROM password_reset_tokens
+		WHERE token_hash=? AND used_at IS NULL AND expires_at > ?`, tokenHash, formatTime(time.Now()))
+}
+
+const resetCols = `token_hash, user_id, purpose, created_at, expires_at, used_at`
+
+// readResetToken returns the row query selects (columns resetCols), or
+// ErrNotFound when it selects none.
+func (s *Store) readResetToken(ctx context.Context, query string, args ...any) (*model.ResetToken, error) {
 	var (
 		t                             model.ResetToken
 		purpose, createdAt, expiresAt string
 		usedAt                        sql.NullString
 	)
-	err = s.db.QueryRowContext(ctx, `SELECT token_hash, user_id, purpose, created_at, expires_at, used_at
-		FROM password_reset_tokens WHERE token_hash=?`, tokenHash).
+	err := s.db.QueryRowContext(ctx, query, args...).
 		Scan(&t.TokenHash, &t.UserID, &purpose, &createdAt, &expiresAt, &usedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
