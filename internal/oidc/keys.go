@@ -64,13 +64,23 @@ type verifyKey struct {
 // It fails if the active key cannot be unsealed with enc.
 func NewKeyManager(ctx context.Context, s *store.Store, enc *secrets.Encryptor) (*KeyManager, error) {
 	k := &KeyManager{store: s, enc: enc, now: time.Now}
-	if err := k.load(ctx); err != nil {
-		return nil, err
-	}
-	if err := k.EnsureKey(ctx); err != nil {
+	if err := k.Reload(ctx); err != nil {
 		return nil, err
 	}
 	return k, nil
+}
+
+// Reload re-reads the keys from the store, so rotations and retirements
+// made by another process (such as latch rotate-keys) take effect, and
+// generates a key if none can sign. If it fails, the cache is unchanged.
+func (k *KeyManager) Reload(ctx context.Context) error {
+	k.mu.Lock()
+	err := k.load(ctx)
+	k.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return k.EnsureKey(ctx)
 }
 
 // WithAudit makes Rotate record its rotations with a. It returns k.
@@ -88,7 +98,8 @@ func (k *KeyManager) SetClock(now func() time.Time) {
 	k.now = now
 }
 
-// load replaces the cache with the stored keys.
+// load replaces the cache with the stored keys, reusing the active private
+// key if it has not changed. The caller holds mu.
 func (k *KeyManager) load(ctx context.Context) error {
 	rows, err := k.store.ListSigningKeys(ctx)
 	if err != nil {
@@ -110,15 +121,16 @@ func (k *KeyManager) load(ctx context.Context) error {
 			continue
 		}
 		public = append(public, publicJWK(row.KID, pub))
-		if active == nil {
-			if active, err = k.unseal(row.PrivateKeyEnc); err != nil {
-				return fmt.Errorf("oidc: signing key %s: %w", row.KID, err)
-			}
-			activeKID = row.KID
+		if active != nil {
+			continue
+		}
+		activeKID = row.KID
+		if row.KID == k.activeKID {
+			active = k.active
+		} else if active, err = k.unseal(row.PrivateKeyEnc); err != nil {
+			return fmt.Errorf("oidc: signing key %s: %w", row.KID, err)
 		}
 	}
-	k.mu.Lock()
-	defer k.mu.Unlock()
 	k.active, k.activeKID, k.public, k.verify = active, activeKID, public, verify
 	return nil
 }
@@ -161,9 +173,13 @@ func (k *KeyManager) Rotate(ctx context.Context) (newKID string, err error) {
 	return nk.kid, nil
 }
 
-// RetireOlderThan retires every key other than the active one created more
-// than d ago, removing it from the JWKS, and returns how many it retired.
-// A retired key still verifies tokens for RetiredKeyGrace.
+// RetireOlderThan retires every key, other than the active one, that was
+// superseded at least d ago, removes it from the JWKS, and returns how many
+// it retired. A key is superseded when the next newer key is created, so
+// after a rotation the old key stays published for d, long enough for apps
+// to verify the tokens it signed. RetireOlderThan(0) retires every key but
+// the active one, which is how an operator revokes a compromised key. A
+// retired key still verifies tokens in process for RetiredKeyGrace.
 func (k *KeyManager) RetireOlderThan(ctx context.Context, d time.Duration) (int, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -174,8 +190,8 @@ func (k *KeyManager) RetireOlderThan(ctx context.Context, d time.Duration) (int,
 		return 0, fmt.Errorf("oidc: retire signing keys: %w", err)
 	}
 	retired := map[string]bool{}
-	for _, row := range rows {
-		if row.KID == k.activeKID || row.RetiredAt != nil || !row.CreatedAt.Before(cutoff) {
+	for i, row := range rows { // newest first, so rows[i-1] superseded rows[i]
+		if i == 0 || row.KID == k.activeKID || row.RetiredAt != nil || rows[i-1].CreatedAt.After(cutoff) {
 			continue
 		}
 		if err = k.store.RetireSigningKey(ctx, row.KID, now); err != nil {

@@ -67,6 +67,12 @@ func verifyJWT(t *testing.T, token, wantKID, wantTyp string, key any) map[string
 	return claims
 }
 
+// published reports whether k's JWKS lists kid.
+func published(k *oidc.KeyManager, kid string) bool {
+	set := k.JWKS()
+	return len(set.Key(kid)) != 0
+}
+
 // jwksKey returns the one key with kid in the published set.
 func jwksKey(t *testing.T, k *oidc.KeyManager, kid string) jose.JSONWebKey {
 	t.Helper()
@@ -385,4 +391,93 @@ func TestRetiredKeyStopsVerifyingAfterGrace(t *testing.T) {
 	check("23h after retiring", true)
 	offset = 25 * time.Hour
 	check("25h after retiring", false)
+}
+
+func TestRetireOlderThanMeasuresFromSupersession(t *testing.T) {
+	ctx := context.Background()
+	const day = 24 * time.Hour
+	k := newKeyManager(t, store.OpenTest(t), newEncryptor(t))
+	var offset time.Duration
+	k.SetClock(func() time.Time { return time.Now().Add(offset) })
+	kidA := k.ActiveKID()
+
+	// A is 100 days old but was superseded just now, so it stays published
+	// for the tokens it signed.
+	offset = 100 * day
+	kidB, err := k.Rotate(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := k.RetireOlderThan(ctx, 90*day); err != nil || n != 0 {
+		t.Fatalf("RetireOlderThan(90d) just after rotating = %d, %v; want 0", n, err)
+	}
+	if !published(k, kidA) {
+		t.Fatal("superseded key left the JWKS as soon as it was superseded")
+	}
+
+	// B is superseded by C at day 150, so at day 191 A has been superseded
+	// for 91 days and B for only 41.
+	offset = 150 * day
+	kidC, err := k.Rotate(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offset = 191 * day
+	if n, err := k.RetireOlderThan(ctx, 90*day); err != nil || n != 1 {
+		t.Fatalf("RetireOlderThan(90d) 91 days after A was superseded = %d, %v; want 1", n, err)
+	}
+	if published(k, kidA) || !published(k, kidB) || !published(k, kidC) || len(k.JWKS().Keys) != 2 {
+		t.Fatalf("JWKS after retiring: A %v, B %v, C %v, %d keys; want only B and C",
+			published(k, kidA), published(k, kidB), published(k, kidC), len(k.JWKS().Keys))
+	}
+}
+
+func TestReloadPicksUpAnotherManagersChanges(t *testing.T) {
+	ctx := context.Background()
+	s := store.OpenTest(t)
+	enc := newEncryptor(t)
+	a := newKeyManager(t, s, enc) // e.g. latch rotate-keys
+	b := newKeyManager(t, s, enc) // e.g. the running server
+	oldKID := a.ActiveKID()
+
+	newKID, err := a.Rotate(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ActiveKID() != oldKID || published(b, newKID) {
+		t.Fatal("b saw the rotation before reloading")
+	}
+	if err := b.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if b.ActiveKID() != newKID || !published(b, oldKID) || !published(b, newKID) {
+		t.Fatalf("after reload: active %q, old published %v, new published %v",
+			b.ActiveKID(), published(b, oldKID), published(b, newKID))
+	}
+	token, err := b.Sign(map[string]any{"sub": "u1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, _ := a.PublicKey(newKID)
+	verifyJWT(t, token, newKID, "JWT", pub)
+
+	// A retirement elsewhere reaches b too; the second reload changes nothing.
+	if n, err := a.RetireOlderThan(ctx, 0); err != nil || n != 1 {
+		t.Fatalf("RetireOlderThan(0) = %d, %v; want 1", n, err)
+	}
+	for i := range 2 {
+		if err := b.Reload(ctx); err != nil {
+			t.Fatalf("reload %d: %v", i, err)
+		}
+		if b.ActiveKID() != newKID || published(b, oldKID) || len(b.JWKS().Keys) != 1 {
+			t.Fatalf("reload %d after retiring: active %q, old published %v, %d keys",
+				i, b.ActiveKID(), published(b, oldKID), len(b.JWKS().Keys))
+		}
+		if _, ok := b.PublicKey(oldKID); !ok {
+			t.Fatalf("reload %d: key retired just now no longer verifies", i)
+		}
+	}
+	if rows, _ := s.ListSigningKeys(ctx); len(rows) != 2 {
+		t.Fatalf("%d signing keys after reloads, want 2", len(rows))
+	}
 }
