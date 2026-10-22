@@ -120,6 +120,23 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error 
 	return s.revokeWhere(ctx, "store: revoke refresh token", "token_hash", tokenHash)
 }
 
+// RevokeRefreshTokenIfActive revokes the token as of now if it is neither
+// revoked nor expired, and reports whether it did. It is atomic, so of two
+// concurrent calls for one token at most one returns true.
+func (s *Store) RevokeRefreshTokenIfActive(ctx context.Context, tokenHash string, now time.Time) (bool, error) {
+	at := formatTime(now)
+	res, err := s.db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at=?
+		WHERE token_hash=? AND revoked_at IS NULL AND expires_at > ?`, at, tokenHash, at)
+	if err != nil {
+		return false, fmt.Errorf("store: revoke active refresh token: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("store: revoke active refresh token: %w", err)
+	}
+	return n == 1, nil
+}
+
 // RevokeRefreshTokenFamily revokes every token in the family.
 func (s *Store) RevokeRefreshTokenFamily(ctx context.Context, familyID string) error {
 	return s.revokeWhere(ctx, "store: revoke refresh token family", "family_id", familyID)

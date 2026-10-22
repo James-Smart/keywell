@@ -52,6 +52,42 @@ func TestConsumeAuthCodeOnce(t *testing.T) {
 	}
 }
 
+func TestRevokeRefreshTokenIfActive(t *testing.T) {
+	ctx := context.Background()
+	s := OpenTest(t)
+	u, a := oauthFixture(t, s)
+	now := time.Now().UTC()
+	mk := func(hash string, exp time.Time) {
+		t.Helper()
+		rt := &model.RefreshToken{TokenHash: hash, FamilyID: "f", ApplicationID: a.ID, UserID: u.ID, Scope: "openid",
+			AuthTime: now, CreatedAt: now, ExpiresAt: exp, AbsoluteExpiresAt: now.Add(24 * time.Hour)}
+		if err := s.CreateRefreshToken(ctx, rt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("live", now.Add(time.Hour))
+	mk("expiring", now)
+	mk("old", now.Add(-time.Second))
+
+	ok, err := s.RevokeRefreshTokenIfActive(ctx, "live", now)
+	if err != nil || !ok {
+		t.Fatalf("first revoke: %v %v, want true", ok, err)
+	}
+	rt, err := s.GetRefreshToken(ctx, "live")
+	if err != nil || rt.RevokedAt == nil || !rt.RevokedAt.Equal(now) {
+		t.Fatalf("revoked_at %v (%v), want %v", rt.RevokedAt, err, now)
+	}
+	for _, h := range []string{"live", "expiring", "old", "missing"} {
+		if ok, err := s.RevokeRefreshTokenIfActive(ctx, h, now); err != nil || ok {
+			t.Errorf("%s: %v %v, want false", h, ok, err)
+		}
+	}
+	// An expired token is not marked revoked by the attempt.
+	if rt, err := s.GetRefreshToken(ctx, "old"); err != nil || rt.RevokedAt != nil {
+		t.Errorf("expired token: revoked_at %v (%v), want unset", rt.RevokedAt, err)
+	}
+}
+
 func TestRefreshTokenFamilyRevoke(t *testing.T) {
 	ctx := context.Background()
 	s := OpenTest(t)

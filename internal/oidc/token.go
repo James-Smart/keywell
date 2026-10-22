@@ -269,9 +269,10 @@ func verifierMatches(challenge, verifier string) bool {
 }
 
 // refreshGrant redeems a refresh token (RFC 6749 §6), rotating it: the
-// presented token is revoked and a new one joins its family. Presenting a
-// revoked token means it was copied, so the whole family is revoked; so is
-// it when the member has been disabled or lost access to the application.
+// presented token is revoked, atomically, and a new one joins its family.
+// Presenting a revoked token means it was copied, so the whole family is
+// revoked, as it is when two redemptions of one token race; so is it when
+// the member has been disabled or lost access to the application.
 func (p *Provider) refreshGrant(ctx context.Context, app *model.Application, form url.Values) (tokenResponse, *model.User, error) {
 	raw := form.Get("refresh_token")
 	if raw == "" {
@@ -310,12 +311,27 @@ func (p *Provider) refreshGrant(ctx context.Context, app *model.Application, for
 			}
 		}
 	}
-	if err := p.d.Store.RevokeRefreshToken(ctx, rt.TokenHash); err != nil {
-		return tokenResponse{}, nil, fmt.Errorf("refresh grant: revoke presented token: %w", err)
-	}
 	resp, err := p.issueTokens(ctx, u, app, scopes, rt.Nonce, rt.AuthTime,
 		slices.Contains(scopes, scopeOpenID), p.refreshAllowed(granted), rt)
-	return resp, u, err
+	if err != nil {
+		return tokenResponse{}, nil, err
+	}
+	// Claim the presented token only now that its successor is stored, and
+	// hand the successor out only if the claim succeeds. A redemption racing
+	// this one either loses the claim or finds the token revoked, and either
+	// way revokes the family, which by then holds this successor. Claiming
+	// first would let that family revocation land before the successor
+	// exists, and the successor would outlive it.
+	claimed, err := p.d.Store.RevokeRefreshTokenIfActive(ctx, rt.TokenHash, p.now())
+	if err != nil {
+		return tokenResponse{}, nil, fmt.Errorf("refresh grant: revoke presented token: %w", err)
+	}
+	if !claimed {
+		p.d.Log.WarnContext(ctx, "refresh token redeemed twice at once; revoking its family",
+			"family_id", rt.FamilyID, "client_id", app.ClientID)
+		return p.endFamily(ctx, rt, errBadRefresh)
+	}
+	return resp, u, nil
 }
 
 // endFamily revokes every refresh token in rt's family and returns cause.
@@ -342,8 +358,47 @@ func (p *Provider) clientCredentialsGrant(ctx context.Context, app *model.Applic
 	if err != nil {
 		return tokenResponse{}, nil, fmt.Errorf("client credentials: get service account: %w", err)
 	}
-	resp, err := p.issueTokens(ctx, u, app, ParseScopes(form.Get("scope")), "", time.Time{}, false, false, nil)
+	groups, err := p.d.Store.ListGroupsForUser(ctx, u.ID)
+	if err != nil {
+		return tokenResponse{}, nil, fmt.Errorf("client credentials: list groups: %w", err)
+	}
+	// Every identity claim is built, whatever the scope; serviceAccessClaims
+	// picks the ones the token carries.
+	identity := BuildClaims(u, groups, app, []string{scopeProfile, scopeEmail, scopeGroups})
+	resp, err := p.accessTokenResponse(u, app, identity, serviceAccessClaims, ParseScopes(form.Get("scope")), p.now())
 	return resp, u, err
+}
+
+// The identity claims an access token carries, besides sub. A member's
+// token has them only when its scopes granted them (BuildClaims leaves the
+// others out); a service account's (client credentials) always has them
+// (spec §6.5), email only when the account has one.
+var (
+	memberAccessClaims  = []string{"email", "groups"}
+	serviceAccessClaims = []string{"email", "groups", "metadata", "preferred_username"}
+)
+
+// accessTokenResponse signs an access token for u at app and returns a
+// token response holding it. The token carries sub and the claims named in
+// keys from identity (BuildClaims output), and scope lists scopes.
+func (p *Provider) accessTokenResponse(u *model.User, app *model.Application, identity map[string]any, keys, scopes []string, now time.Time) (tokenResponse, error) {
+	ttl := p.ttl(app, ttlAccess)
+	scope := strings.Join(scopes, " ")
+	at := map[string]any{
+		"iss": p.issuer, "sub": identity["sub"], "aud": []string{app.ClientID}, "client_id": app.ClientID,
+		"exp": now.Add(ttl).Unix(), "iat": now.Unix(), "jti": secrets.RandomToken(16), "scope": scope,
+		userIDClaim: u.ID,
+	}
+	for _, k := range keys {
+		if v, ok := identity[k]; ok {
+			at[k] = v
+		}
+	}
+	access, err := p.d.Keys.SignTyped(at, accessTokenType)
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int(ttl / time.Second), Scope: scope}, nil
 }
 
 // allowedUser loads the user with id and checks they may still use app,
@@ -386,23 +441,11 @@ func (p *Provider) issueTokens(ctx context.Context, u *model.User, app *model.Ap
 	now := p.now()
 	scope := strings.Join(scopes, " ")
 	identity := BuildClaims(u, groups, app, scopes)
-
-	accessTTL := p.ttl(app, ttlAccess)
-	at := map[string]any{
-		"iss": p.issuer, "sub": identity["sub"], "aud": []string{app.ClientID}, "client_id": app.ClientID,
-		"exp": now.Add(accessTTL).Unix(), "iat": now.Unix(), "jti": secrets.RandomToken(16), "scope": scope,
-		userIDClaim: u.ID,
-	}
-	for _, k := range []string{"email", "groups"} {
-		if v, ok := identity[k]; ok {
-			at[k] = v
-		}
-	}
-	access, err := p.d.Keys.SignTyped(at, accessTokenType)
+	resp, err := p.accessTokenResponse(u, app, identity, memberAccessClaims, scopes, now)
 	if err != nil {
 		return tokenResponse{}, err
 	}
-	resp := tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int(accessTTL / time.Second), Scope: scope}
+	access := resp.AccessToken
 
 	if withIDToken {
 		id := identity // the identity claims plus these; the access token is already signed

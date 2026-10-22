@@ -477,6 +477,85 @@ func TestRefreshSlidesUpToAbsoluteLimit(t *testing.T) {
 	tokenFails(t, resp, body, 400, "invalid_grant")
 }
 
+// refreshResult is the outcome of postRefresh.
+type refreshResult struct {
+	status int
+	body   map[string]any
+	err    error
+}
+
+// postRefresh redeems token as app with Basic credentials. It takes no
+// *testing.T so that other goroutines may call it.
+func postRefresh(env *testenv.Env, app *model.Application, secret, token string) refreshResult {
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}}
+	req, err := http.NewRequest(http.MethodPost, env.TS.URL+"/oauth/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return refreshResult{err: err}
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(url.QueryEscape(app.ClientID), url.QueryEscape(secret))
+	resp, err := env.TS.Client().Do(req)
+	if err != nil {
+		return refreshResult{err: err}
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	return refreshResult{status: resp.StatusCode, body: body, err: err}
+}
+
+// Two redemptions of one refresh token racing each other: exactly one wins,
+// and the loser counts as reuse, so the winner's new token dies with the
+// family. Several rounds, so the requests interleave at least once.
+func TestConcurrentRefreshRotatesOnce(t *testing.T) {
+	env := testenv.New(t)
+	app := wikiApp(t, env)
+	c, _, body := memberTokens(t, env, app, wikiSecret)
+	rt := str(t, body, "refresh_token")
+
+	for round := range 10 {
+		if round > 0 {
+			code, _, _ := env.Authorize(t, c, app, false)
+			body, resp := env.Exchange(t, app, wikiSecret, code, "", wikiRedirect)
+			tokenOK(t, resp, body)
+			rt = str(t, body, "refresh_token")
+		}
+		start := make(chan struct{})
+		results := make(chan refreshResult, 2)
+		for range 2 {
+			go func() {
+				<-start
+				results <- postRefresh(env, app, wikiSecret, rt)
+			}()
+		}
+		close(start)
+
+		var winner string
+		var refused int
+		for range 2 {
+			r := <-results
+			switch {
+			case r.err != nil:
+				t.Fatalf("round %d: %v", round, r.err)
+			case r.status == http.StatusOK:
+				if winner != "" {
+					t.Fatalf("round %d: both concurrent refreshes succeeded", round)
+				}
+				winner, _ = r.body["refresh_token"].(string)
+			case r.status == http.StatusBadRequest && r.body["error"] == "invalid_grant":
+				refused++
+			default:
+				t.Fatalf("round %d: status %d %v", round, r.status, r.body)
+			}
+		}
+		if winner == "" || refused != 1 {
+			t.Fatalf("round %d: winner %q, %d refused; want one of each", round, winner, refused)
+		}
+		body, resp := env.Refresh(t, app, wikiSecret, winner)
+		tokenFails(t, resp, body, 400, "invalid_grant")
+	}
+}
+
 // Review Focus 4.
 func TestRefreshDisabledUserFails(t *testing.T) {
 	env := testenv.New(t)
@@ -582,7 +661,8 @@ func TestClientCredentialsServiceAccount(t *testing.T) {
 	env := testenv.New(t)
 	ctx := context.Background()
 	doors := env.CreateGroup(t, "Doors", false, false)
-	sa := &model.User{Name: "Door controller", Type: model.UserTypeService, IsActive: true}
+	sa := &model.User{Name: "Door controller", Type: model.UserTypeService, IsActive: true,
+		Username: "door-controller", Metadata: map[string]any{"site": "front door"}}
 	if err := env.Store.CreateUser(ctx, sa); err != nil {
 		t.Fatal(err)
 	}
@@ -593,29 +673,45 @@ func TestClientCredentialsServiceAccount(t *testing.T) {
 		Name: "Door Controller", Slug: "doors", ClientID: "doors-client",
 		RedirectURIs: []string{"https://doors.example.org/cb"}, ServiceAccountID: sa.ID,
 	}, "doors-secret")
-	form := url.Values{"grant_type": {"client_credentials"}, "scope": {"groups"}}
+	form := url.Values{"grant_type": {"client_credentials"}} // no scope: the §6.5 claims come regardless
 
 	body, resp := env.PostAsClient(t, "/oauth/token", app, "doors-secret", form)
 	tokenOK(t, resp, body)
-	wantClaims(t, "response", body, map[string]any{"token_type": "Bearer", "expires_in": float64(3600), "scope": "groups"})
+	wantClaims(t, "response", body, map[string]any{"token_type": "Bearer", "expires_in": float64(3600), "scope": ""})
 	for _, k := range []string{"id_token", "refresh_token"} {
 		if _, ok := body[k]; ok {
 			t.Errorf("client credentials response has %s", k)
 		}
 	}
 	access := str(t, body, "access_token")
-	wantClaims(t, "access token", verifyToken(t, env, access, "at+jwt"), map[string]any{
-		"iss": env.TS.URL, "sub": sa.ID, "aud": []any{"doors-client"}, "client_id": "doors-client",
-		"scope": "groups", "groups": []any{"Doors"},
+	at := verifyToken(t, env, access, "at+jwt")
+	wantClaims(t, "access token", at, map[string]any{
+		"iss": env.TS.URL, "sub": sa.ID, "aud": []any{"doors-client"}, "client_id": "doors-client", "scope": "",
+		"groups": []any{"Doors"}, "metadata": map[string]any{"site": "front door"}, "preferred_username": "door-controller",
 	})
+	if _, ok := at["email"]; ok {
+		t.Errorf("access token has email %v for a service account without one", at["email"])
+	}
 	if n := countTokenIssued(t, env, model.ActorServiceAccount, sa.ID, app, "client_credentials"); n != 1 {
 		t.Errorf("%d %s events, want 1", n, audit.TokenIssued)
 	}
-	// Spec §6.5: userinfo accepts these tokens.
-	ui, resp := userinfo(t, env, access)
-	if resp.StatusCode != http.StatusOK || ui["sub"] != sa.ID || !reflect.DeepEqual(ui["groups"], []any{"Doors"}) {
+	// Spec §6.5: userinfo accepts these tokens (its claims follow the
+	// token's scopes, here none).
+	if ui, resp := userinfo(t, env, access); resp.StatusCode != http.StatusOK || ui["sub"] != sa.ID {
 		t.Errorf("userinfo status %d %v", resp.StatusCode, ui)
 	}
+
+	// email appears once the service account has one; scope is echoed.
+	sa.Email = "doors@example.org"
+	if err := env.Store.UpdateUser(ctx, sa); err != nil {
+		t.Fatal(err)
+	}
+	body, resp = env.PostAsClient(t, "/oauth/token", app, "doors-secret",
+		url.Values{"grant_type": {"client_credentials"}, "scope": {"email nonsense"}})
+	tokenOK(t, resp, body)
+	wantClaims(t, "access token with email", verifyToken(t, env, body["access_token"], "at+jwt"), map[string]any{
+		"scope": "email", "email": "doors@example.org", "groups": []any{"Doors"}, "preferred_username": "door-controller",
+	})
 
 	body, resp = env.PostAsClient(t, "/oauth/token", wikiApp(t, env), wikiSecret, form)
 	tokenFails(t, resp, body, 400, "unauthorized_client")
