@@ -42,12 +42,7 @@ func (l *Limiter) Allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := l.now()
-	l.calls++
-	if l.calls%sweepEvery == 0 {
-		l.sweep(now)
-	}
-
+	now := l.tick()
 	kept := l.prune(l.events[key], now)
 	if len(kept) >= l.limit {
 		l.store(key, kept)
@@ -55,6 +50,44 @@ func (l *Limiter) Allow(key string) bool {
 	}
 	l.store(key, append(kept, now))
 	return true
+}
+
+// Peek reports whether key is under the limit, without recording an
+// attempt. Use it with Record when only some attempts (e.g. failed sign-ins)
+// should count.
+func (l *Limiter) Peek(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.tick()
+	kept := l.prune(l.events[key], now)
+	l.store(key, kept)
+	return len(kept) < l.limit
+}
+
+// Record counts an attempt by key whether or not it is over the limit. Only
+// the newest limit attempts are kept: they decide when key is next under it.
+func (l *Limiter) Record(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.tick()
+	kept := append(l.prune(l.events[key], now), now)
+	if len(kept) > l.limit {
+		kept = kept[len(kept)-l.limit:]
+	}
+	l.store(key, kept)
+}
+
+// tick returns the current time and sweeps idle keys every sweepEvery
+// calls. l.mu must be held.
+func (l *Limiter) tick() time.Time {
+	now := l.now()
+	l.calls++
+	if l.calls%sweepEvery == 0 {
+		l.sweep(now)
+	}
+	return now
 }
 
 // Reset forgets all attempts for key, e.g. after a successful login.

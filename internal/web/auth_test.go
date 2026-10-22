@@ -284,6 +284,20 @@ func TestLoginThrottledPerIP(t *testing.T) {
 	assertFailed(t, env, c, resp, body, throttled)
 }
 
+// Only failed attempts count: members behind one NAT address must be able
+// to sign in more often than the per-IP limit.
+func TestLoginSuccessesNotThrottled(t *testing.T) {
+	env := testenv.New(t)
+	env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+	for i := range 60 {
+		resp, _ := postLogin(t, env, c, creds("alex@example.org", testPW))
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("sign-in %d: status %d, want 303", i+1, resp.StatusCode)
+		}
+	}
+}
+
 func TestLoginRedirectsToNext(t *testing.T) {
 	env := testenv.New(t)
 	env.CreateUser(t, "alex@example.org", testPW)

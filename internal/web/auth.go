@@ -58,8 +58,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	pw := r.PostFormValue("password")
 	form := loginData{Email: typed, Next: r.PostFormValue("next"), App: r.PostFormValue("app")}
 
-	acctKey := "acct:" + email
-	if !s.d.Limits.LoginIP.Allow("ip:"+ClientIP(r)) || !s.d.Limits.LoginAccount.Allow(acctKey) {
+	// Only failed attempts count toward the limits, so members sharing one
+	// address (the space's NAT) can all sign in.
+	ipKey, acctKey := "ip:"+ClientIP(r), "acct:"+email
+	if !s.d.Limits.LoginIP.Peek(ipKey) || !s.d.Limits.LoginAccount.Peek(acctKey) {
 		s.renderLogin(w, r, msgThrottled, form)
 		return
 	}
@@ -70,6 +72,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		s.d.Limits.LoginIP.Record(ipKey)
+		s.d.Limits.LoginAccount.Record(acctKey)
 		if user != nil {
 			s.auditUser(ctx, audit.LoginFailure, user.ID, "Sign-in failed", nil)
 		} else {
