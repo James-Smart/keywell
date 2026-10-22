@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Two-step sign in</h1>
+<p>Enter the six-digit code from the authenticator app on your phone.</p>
+<form method="post" action="/login/totp" class="form">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <label for="code">Code</label>
+  <input id="code" name="code" type="text" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required autofocus>
+  <button type="submit">Continue</button>
+</form>
+<p>Lost your phone? Enter one of your recovery codes instead.</p>
+<p><a href="/logout">Sign out</a></p>
+{{end}}

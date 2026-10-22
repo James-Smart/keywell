@@ -1,0 +1,504 @@
+package web_test
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"html"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	pqtotp "github.com/pquerna/otp/totp"
+
+	"latch/internal/audit"
+	"latch/internal/model"
+	"latch/internal/secrets"
+	"latch/internal/store"
+	"latch/internal/testenv"
+)
+
+var (
+	codeMismatch    = html.EscapeString("That code didn't match. Check your phone's clock and try again.")
+	disableMismatch = html.EscapeString("Your password or code didn't match.")
+	groupRequires   = "Your group requires two-step sign in."
+	requiredNotice  = "Your group requires two-step sign in. Set it up now."
+	// savedButton is the codes page's way on, to next ("/" by default).
+	savedButton = `<a class="button" href="/">I've saved these</a>`
+)
+
+// post sends form to path with c and returns the response and body.
+func post(t *testing.T, env *testenv.Env, c *http.Client, path string, form url.Values) (*http.Response, string) {
+	t.Helper()
+	resp, err := c.PostForm(env.TS.URL+path, form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp, string(body)
+}
+
+// validCode is the current TOTP code for secret.
+func validCode(t *testing.T, secret string) string {
+	t.Helper()
+	code, err := pqtotp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
+
+// wrongCode is a six-digit code that is not valid for secret in any of the
+// time steps Validate accepts.
+func wrongCode(t *testing.T, secret string) string {
+	t.Helper()
+	now := time.Now()
+	valid := map[string]bool{}
+	for _, at := range []time.Time{now.Add(-time.Minute), now.Add(-30 * time.Second), now, now.Add(30 * time.Second), now.Add(time.Minute)} {
+		code, err := pqtotp.GenerateCode(secret, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		valid[code] = true
+	}
+	for i := 0; ; i++ {
+		if code := fmt.Sprintf("%06d", i); !valid[code] {
+			return code
+		}
+	}
+}
+
+var manualKeyRE = regexp.MustCompile(`<code class="key">([A-Z2-7 ]+)</code>`)
+
+// manualKey returns the key the enrolment page shows, without spaces.
+func manualKey(t *testing.T, body string) string {
+	t.Helper()
+	m := manualKeyRE.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("no manual key on the page:\n%s", body)
+	}
+	return strings.ReplaceAll(m[1], " ", "")
+}
+
+// beginEnrolment starts enrolment with form, follows the redirect back to
+// the TOTP page and returns the manual key it shows.
+func beginEnrolment(t *testing.T, env *testenv.Env, c *http.Client, form url.Values) string {
+	t.Helper()
+	resp, _ := post(t, env, c, "/account/totp/begin", form)
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/account/totp") {
+		t.Fatalf("begin: status %d location %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp, body := get(t, c, env.TS.URL+resp.Header.Get("Location"))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("enrolment page: status %d", resp.StatusCode)
+	}
+	for _, want := range []string{`src="/account/totp/qr.png"`, `action="/account/totp/confirm"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("enrolment page missing %q", want)
+		}
+	}
+	return manualKey(t, body)
+}
+
+// signInWithCode signs in with the password and then a TOTP code.
+func signInWithCode(t *testing.T, env *testenv.Env, c *http.Client, email, secret string) {
+	t.Helper()
+	env.Login(t, c, email, testPW)
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/")
+}
+
+func getUser(t *testing.T, env *testenv.Env, id string) *model.User {
+	t.Helper()
+	u, err := env.Store.GetUser(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+// secondFactors returns the second_factor detail of each login.success
+// event that completed a two-step sign-in.
+func secondFactors(t *testing.T, env *testenv.Env) []string {
+	t.Helper()
+	var got []string
+	for _, e := range auditEvents(t, env, audit.LoginSuccess) {
+		if f, _ := e.Detail["second_factor"].(string); f == "totp" || f == "recovery" {
+			got = append(got, f)
+		}
+	}
+	return got
+}
+
+var recoveryCodeRE = regexp.MustCompile(`<code>([a-z2-9]{5}-[a-z2-9]{5})</code>`)
+
+func TestEnrolConfirmShowsCodesOnce(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	sid := jarSession(t, env, c)
+
+	resp, body := get(t, c, env.TS.URL+"/account/totp")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `action="/account/totp/begin"`) ||
+		strings.Contains(body, "qr.png") || strings.Contains(body, requiredNotice) {
+		t.Fatalf("status page before enrolment: status %d\n%s", resp.StatusCode, body)
+	}
+	if resp, _ := get(t, c, env.TS.URL+"/account/totp/qr.png"); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("qr.png with nothing pending: status %d, want 404", resp.StatusCode)
+	}
+
+	key := beginEnrolment(t, env, c, nil)
+	if len(key) != 32 {
+		t.Fatalf("manual key %q", key)
+	}
+	// The pending secret is stored sealed.
+	sealed, _, err := env.Store.GetTOTPEnrolment(ctx, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(sealed, []byte(key)) {
+		t.Fatal("pending secret stored in plain text")
+	}
+	if plain, err := env.Enc.Open(sealed); err != nil || string(plain) != key {
+		t.Fatalf("pending secret opens to %q, %v; page shows %q", plain, err, key)
+	}
+
+	resp, png := get(t, c, env.TS.URL+"/account/totp/qr.png")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" ||
+		!strings.HasPrefix(png, "\x89PNG\r\n\x1a\n") {
+		t.Fatalf("qr.png: status %d type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+
+	resp, body = post(t, env, c, "/account/totp/confirm", url.Values{"code": {wrongCode(t, key)}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) || manualKey(t, body) != key {
+		t.Fatalf("wrong confirm code: status %d\n%s", resp.StatusCode, body)
+	}
+	if getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("enrolled by a wrong code")
+	}
+
+	resp, _ = post(t, env, c, "/account/totp/confirm", url.Values{"code": {validCode(t, key)}})
+	assertRedirect(t, resp, "/account/totp/codes")
+
+	got := getUser(t, env, u.ID)
+	if !got.TOTPEnrolled() {
+		t.Fatal("not enrolled after confirming")
+	}
+	if plain, err := env.Enc.Open(got.TOTPSecretEnc); err != nil || string(plain) != key {
+		t.Fatalf("stored secret opens to %q, %v", plain, err)
+	}
+	if events := auditEvents(t, env, audit.TOTPEnrolled); len(events) != 1 || events[0].ActorID != u.ID {
+		t.Fatalf("totp enrol events %+v", events)
+	}
+
+	resp, body = get(t, c, env.TS.URL+"/account/totp/codes")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, savedButton) {
+		t.Fatalf("codes page: status %d\n%s", resp.StatusCode, body)
+	}
+	codes := map[string]bool{}
+	for _, m := range recoveryCodeRE.FindAllStringSubmatch(body, -1) {
+		codes[m[1]] = true
+	}
+	if len(codes) != 10 {
+		t.Fatalf("codes page shows %d distinct codes, want 10:\n%s", len(codes), body)
+	}
+	if n, err := env.Store.CountUnusedRecoveryCodes(ctx, u.ID); err != nil || n != 10 {
+		t.Fatalf("stored recovery codes: %d, %v", n, err)
+	}
+	for code := range codes {
+		if ok, err := env.Store.ConsumeRecoveryCode(ctx, u.ID, secrets.HashToken(code)); !ok || err != nil {
+			t.Fatalf("shown code %q is not a stored recovery code: %v", code, err)
+		}
+		break
+	}
+
+	resp, _ = get(t, c, env.TS.URL+"/account/totp/codes")
+	assertRedirect(t, resp, "/account/totp")
+	if _, _, err := env.Store.GetTOTPEnrolment(ctx, sid); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("enrolment kept after the codes were shown: %v", err)
+	}
+	if resp, _ := get(t, c, env.TS.URL+"/account/totp/qr.png"); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("qr.png after enrolment: status %d, want 404", resp.StatusCode)
+	}
+	resp, body = get(t, c, env.TS.URL+"/account/totp")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `action="/account/totp/disable"`) ||
+		strings.Contains(body, `action="/account/totp/begin"`) {
+		t.Fatalf("status page after enrolment: status %d\n%s", resp.StatusCode, body)
+	}
+}
+
+func TestLoginTOTPCodeAndRecovery(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	const recovery = "abcde-fghjk"
+	if err := env.Store.ReplaceRecoveryCodes(ctx, u.ID,
+		[]string{secrets.HashToken(recovery), secrets.HashToken("mnpqr-stuvw")}); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.Client(t)
+	form := creds("alex@example.org", testPW)
+	form.Set("next", "/account?tab=2")
+	resp, _ := postLogin(t, env, c, form)
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%3Ftab%3D2")
+
+	resp, body := get(t, c, env.TS.URL+"/login/totp?next=%2Faccount%3Ftab%3D2")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /login/totp: status %d", resp.StatusCode)
+	}
+	for _, want := range []string{`action="/login/totp"`, `name="code"`, `name="next" value="/account?tab=2"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("TOTP page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "alex@example.org") {
+		t.Error("TOTP page shows the user as signed in")
+	}
+
+	resp, body = post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, secret)}, "next": {"/account?tab=2"}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) ||
+		!strings.Contains(body, `name="next" value="/account?tab=2"`) {
+		t.Fatalf("wrong code: status %d\n%s", resp.StatusCode, body)
+	}
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}, "next": {"/account?tab=2"}})
+	assertRedirect(t, resp, "/account?tab=2")
+	sess, err := env.Store.GetSession(ctx, jarSession(t, env, c))
+	if err != nil || !sess.TOTPPassed {
+		t.Fatalf("session after code: %+v, %v", sess, err)
+	}
+	if resp, _ := get(t, c, env.TS.URL+"/"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / after the code: status %d", resp.StatusCode)
+	}
+	// A complete session has nothing more to do here.
+	resp, _ = get(t, c, env.TS.URL+"/login/totp?next=%2Faccount")
+	assertRedirect(t, resp, "/account")
+
+	// A recovery code works once, typed any way, and next is still checked.
+	c2 := env.Client(t)
+	env.Login(t, c2, "alex@example.org", testPW)
+	resp, _ = post(t, env, c2, "/login/totp", url.Values{"code": {" ABCDE FGHJK "}, "next": {"https://evil.example"}})
+	assertRedirect(t, resp, "/")
+	if n, err := env.Store.CountUnusedRecoveryCodes(ctx, u.ID); err != nil || n != 1 {
+		t.Fatalf("unused recovery codes: %d, %v", n, err)
+	}
+
+	c3 := env.Client(t)
+	env.Login(t, c3, "alex@example.org", testPW)
+	resp, body = post(t, env, c3, "/login/totp", url.Values{"code": {recovery}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) {
+		t.Fatalf("reused recovery code: status %d\n%s", resp.StatusCode, body)
+	}
+
+	if got := secondFactors(t, env); len(got) != 2 || got[0] != "totp" || got[1] != "recovery" {
+		t.Fatalf("second factors audited: %v", got)
+	}
+	if got := getUser(t, env, u.ID); got.LastLoginAt == nil {
+		t.Fatal("LastLoginAt not set")
+	}
+}
+
+func TestLoginTOTPFiveFailuresEndsSession(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	sid := jarSession(t, env, c)
+
+	// A wrong recovery code counts the same as a wrong six-digit code.
+	for i, code := range []string{wrongCode(t, secret), "zzzzz-zzzzz", wrongCode(t, secret), wrongCode(t, secret)} {
+		resp, body := post(t, env, c, "/login/totp", url.Values{"code": {code}})
+		if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) {
+			t.Fatalf("failure %d: status %d", i+1, resp.StatusCode)
+		}
+	}
+	if events := auditEvents(t, env, audit.LoginTOTPFailure); len(events) != 0 {
+		t.Fatalf("failures audited before the limit: %+v", events)
+	}
+
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, secret)}})
+	assertRedirect(t, resp, "/login")
+	if jarSession(t, env, c) != "" {
+		t.Fatal("session cookie not cleared")
+	}
+	if _, err := env.Store.GetSession(ctx, sid); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("session still stored: %v", err)
+	}
+	events := auditEvents(t, env, audit.LoginTOTPFailure)
+	if len(events) != 1 || events[0].ActorID != u.ID || events[0].TargetID != u.ID {
+		t.Fatalf("totp failure events %+v", events)
+	}
+
+	// Without the session even the right code gets nowhere.
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login?") {
+		t.Fatalf("code after the session ended: status %d location %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if got := secondFactors(t, env); len(got) != 0 {
+		t.Fatalf("sign-in completed: %v", got)
+	}
+}
+
+func TestRequiredByGroupForcesEnrolment(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	env.CreateGroup(t, "Admin", true, true)
+	u := env.CreateUser(t, "admin@example.org", testPW, "Admin")
+	c := env.Client(t)
+
+	resp, _ := postLogin(t, env, c, creds("admin@example.org", testPW))
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2F")
+	resp, _ = get(t, c, env.TS.URL+"/")
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2F")
+	// There is no code to enter yet.
+	resp, _ = get(t, c, env.TS.URL+"/login/totp")
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2F")
+
+	resp, body := get(t, c, env.TS.URL+"/account/totp?required=1&next=%2F")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, requiredNotice) ||
+		!strings.Contains(body, `action="/account/totp/begin"`) {
+		t.Fatalf("required enrolment page: status %d\n%s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, "admin@example.org") {
+		t.Error("enrolment page shows the user as signed in")
+	}
+
+	key := beginEnrolment(t, env, c, url.Values{"required": {"1"}, "next": {"/"}})
+	resp, _ = post(t, env, c, "/account/totp/confirm",
+		url.Values{"code": {validCode(t, key)}, "required": {"1"}, "next": {"/"}})
+	assertRedirect(t, resp, "/account/totp/codes?next=%2F")
+	sess, err := env.Store.GetSession(ctx, jarSession(t, env, c))
+	if err != nil || !sess.TOTPPassed {
+		t.Fatalf("session after enrolment: %+v, %v", sess, err)
+	}
+	if !getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("not enrolled")
+	}
+
+	resp, body = get(t, c, env.TS.URL+"/account/totp/codes?next=%2F")
+	if resp.StatusCode != http.StatusOK || len(recoveryCodeRE.FindAllString(body, -1)) != 10 ||
+		!strings.Contains(body, savedButton) {
+		t.Fatalf("codes page: status %d\n%s", resp.StatusCode, body)
+	}
+	if resp, _ := get(t, c, env.TS.URL+"/"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / after enrolment: status %d", resp.StatusCode)
+	}
+}
+
+func TestDisableRequiresPasswordAndCode(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	if err := env.Store.ReplaceRecoveryCodes(ctx, u.ID, []string{secrets.HashToken("abcde-fghjk")}); err != nil {
+		t.Fatal(err)
+	}
+	c := env.Client(t)
+	signInWithCode(t, env, c, "alex@example.org", secret)
+
+	resp, body := get(t, c, env.TS.URL+"/account/totp")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `action="/account/totp/disable"`) {
+		t.Fatalf("status page: status %d\n%s", resp.StatusCode, body)
+	}
+	// Neither a begin nor a QR code is on offer while enrolled.
+	resp, _ = post(t, env, c, "/account/totp/begin", nil)
+	assertRedirect(t, resp, "/account/totp")
+	if resp, _ := get(t, c, env.TS.URL+"/account/totp/qr.png"); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("qr.png while enrolled: status %d", resp.StatusCode)
+	}
+
+	for name, form := range map[string]url.Values{
+		"wrong password": {"password": {"not the password"}, "code": {validCode(t, secret)}},
+		"wrong code":     {"password": {testPW}, "code": {wrongCode(t, secret)}},
+		"no code":        {"password": {testPW}},
+	} {
+		resp, body := post(t, env, c, "/account/totp/disable", form)
+		if resp.StatusCode != http.StatusOK || !strings.Contains(body, disableMismatch) {
+			t.Errorf("%s: status %d", name, resp.StatusCode)
+		}
+		if !getUser(t, env, u.ID).TOTPEnrolled() {
+			t.Fatalf("%s: TOTP turned off", name)
+		}
+	}
+
+	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/account/totp")
+	got := getUser(t, env, u.ID)
+	if got.TOTPEnrolled() || got.TOTPSecretEnc != nil {
+		t.Fatalf("still enrolled: %+v", got)
+	}
+	if n, err := env.Store.CountUnusedRecoveryCodes(ctx, u.ID); err != nil || n != 0 {
+		t.Fatalf("recovery codes left: %d, %v", n, err)
+	}
+	if events := auditEvents(t, env, audit.TOTPDisabled); len(events) != 1 || events[0].ActorID != u.ID {
+		t.Fatalf("totp disable events %+v", events)
+	}
+	resp, body = get(t, c, env.TS.URL+"/account/totp")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `action="/account/totp/begin"`) {
+		t.Fatalf("status page after disabling: status %d\n%s", resp.StatusCode, body)
+	}
+}
+
+func TestDisableRefusedWhenGroupRequiresTOTP(t *testing.T) {
+	env := testenv.New(t)
+	env.CreateGroup(t, "Admin", true, true)
+	u := env.CreateUser(t, "admin@example.org", testPW, "Admin")
+	secret := env.EnrolTOTP(t, u)
+	c := env.Client(t)
+	signInWithCode(t, env, c, "admin@example.org", secret)
+
+	resp, body := get(t, c, env.TS.URL+"/account/totp")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, groupRequires) ||
+		strings.Contains(body, `action="/account/totp/disable"`) {
+		t.Fatalf("status page: status %d\n%s", resp.StatusCode, body)
+	}
+	resp, body = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, groupRequires) {
+		t.Fatalf("disable: status %d\n%s", resp.StatusCode, body)
+	}
+	if !getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("TOTP turned off despite the group requirement")
+	}
+	if events := auditEvents(t, env, audit.TOTPDisabled); len(events) != 0 {
+		t.Fatalf("totp disable events %+v", events)
+	}
+}
+
+// A session still waiting for its code reaches no account page, the TOTP
+// pages included. (The account pages other than TOTP arrive in later tasks;
+// GET / stands in for them.)
+func TestIncompleteSessionCannotReachAccount(t *testing.T) {
+	env := testenv.New(t)
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+
+	resp, _ := get(t, c, env.TS.URL+"/")
+	assertRedirect(t, resp, "/login/totp?next=%2F")
+	resp, _ = get(t, c, env.TS.URL+"/account/totp")
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
+	resp, _ = get(t, c, env.TS.URL+"/account/totp/qr.png")
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
+	resp, _ = post(t, env, c, "/account/totp/begin", nil)
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
+	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
+	if !getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("an incomplete session turned TOTP off")
+	}
+}

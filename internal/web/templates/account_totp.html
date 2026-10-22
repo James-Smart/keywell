@@ -1,0 +1,47 @@
+{{define "content"}}
+<h1>Two-step sign in</h1>
+{{- with .Data}}
+{{- if .EnrolledOn}}
+<p>Two-step sign in is on. You set it up on {{.EnrolledOn}}.</p>
+{{- if .GroupRequires}}
+<p>Your group requires two-step sign in. It can't be turned off.</p>
+{{- else}}
+<h2>Turn it off</h2>
+<form method="post" action="/account/totp/disable" class="form">
+  <label for="password">Current password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <label for="code">Code from your app</label>
+  <input id="code" name="code" type="text" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required>
+  <button type="submit" class="button-secondary">Turn off two-step sign in</button>
+</form>
+{{- end}}
+{{- else if .ManualKey}}
+<p>Scan this QR code with the authenticator app on your phone.</p>
+<img class="qr" src="/account/totp/qr.png" alt="QR code to scan with your authenticator app" width="256" height="256">
+<p>Can't scan it? Type this key into the app instead:</p>
+<p><code class="key">{{.ManualKey}}</code></p>
+<form method="post" action="/account/totp/confirm" class="form">
+  {{- with .Next}}
+  <input type="hidden" name="next" value="{{.}}">
+  {{- end}}
+  <label for="code">Enter the six-digit code the app shows</label>
+  <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+  <button type="submit">Turn on two-step sign in</button>
+</form>
+{{- else}}
+<p>Two-step sign in is off.</p>
+<p>When it's on, you enter a six-digit code from an app on your phone after your password, so someone who learns your password still can't sign in as you.</p>
+<form method="post" action="/account/totp/begin" class="form">
+  {{- with .Next}}
+  <input type="hidden" name="next" value="{{.}}">
+  {{- end}}
+  <button type="submit">Set up two-step sign in</button>
+</form>
+{{- end}}
+{{- end}}
+{{- if .User}}
+<p><a href="/">Back to the start page</a></p>
+{{- else}}
+<p><a href="/logout">Sign out</a></p>
+{{- end}}
+{{end}}

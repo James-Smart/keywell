@@ -26,6 +26,7 @@ import (
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
+	"latch/internal/totp"
 	"latch/internal/web"
 )
 
@@ -64,6 +65,8 @@ type Env struct {
 	Mailer *mail.Memory
 	Cfg    *config.Config
 	Clock  *Clock
+	// Enc is the server's encryptor, for sealing and opening TOTP secrets.
+	Enc *secrets.Encryptor
 }
 
 // Option adjusts how New builds the stack.
@@ -134,7 +137,28 @@ func New(t *testing.T, opts ...Option) *Env {
 	})
 	handler.Store(&h)
 
-	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock}
+	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc}
+}
+
+// EnrolTOTP enrols u in TOTP directly through the store, as if they had
+// confirmed it, and returns the base32 secret for generating codes. u's
+// TOTP fields are updated to match.
+func (e *Env) EnrolTOTP(t *testing.T, u *model.User) (secret string) {
+	t.Helper()
+	secret, err := totp.GenerateSecret()
+	if err != nil {
+		t.Fatalf("testenv: totp secret: %v", err)
+	}
+	sealed, err := e.Enc.Seal([]byte(secret))
+	if err != nil {
+		t.Fatalf("testenv: seal totp secret: %v", err)
+	}
+	confirmed := time.Now().UTC()
+	if err := e.Store.SetTOTP(context.Background(), u.ID, sealed, &confirmed); err != nil {
+		t.Fatalf("testenv: enrol %s in totp: %v", u.Email, err)
+	}
+	u.TOTPSecretEnc, u.TOTPConfirmedAt = sealed, &confirmed
+	return secret
 }
 
 // CreateUser creates an active member with the given password (none if

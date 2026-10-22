@@ -82,3 +82,54 @@ func TestDeleteSessionsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TouchSession writes only the two times, so a touch running alongside the
+// TOTP step cannot undo TOTPPassed.
+func TestTouchSessionKeepsTOTPPassed(t *testing.T) {
+	ctx := context.Background()
+	s := OpenTest(t)
+	u := mkUser(t, s, "touch@example.org")
+	now := time.Now().UTC()
+	sess := mkSession(t, s, "touch", u.ID, now.Add(time.Hour))
+	sess.TOTPPassed = true
+	if err := s.UpdateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+
+	seen, exp := now.Add(time.Minute), now.Add(2*time.Hour)
+	if err := s.TouchSession(ctx, "touch", seen, exp); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSession(ctx, "touch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.TOTPPassed || !got.LastSeenAt.Equal(seen) || !got.ExpiresAt.Equal(exp) {
+		t.Fatalf("after touch: %+v", got)
+	}
+	if err := s.TouchSession(ctx, "missing", seen, exp); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("touch missing session: %v", err)
+	}
+}
+
+func TestIncrementTOTPFailures(t *testing.T) {
+	ctx := context.Background()
+	s := OpenTest(t)
+	u := mkUser(t, s, "fail@example.org")
+	exp := time.Now().Add(time.Hour)
+	mkSession(t, s, "one", u.ID, exp)
+	mkSession(t, s, "two", u.ID, exp)
+
+	for want := 1; want <= 3; want++ {
+		n, err := s.IncrementTOTPFailures(ctx, "one")
+		if err != nil || n != want {
+			t.Fatalf("increment %d: got %d, %v", want, n, err)
+		}
+	}
+	if n, err := s.IncrementTOTPFailures(ctx, "two"); err != nil || n != 1 {
+		t.Fatalf("other session: got %d, %v", n, err)
+	}
+	if _, err := s.IncrementTOTPFailures(ctx, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing session: %v", err)
+	}
+}

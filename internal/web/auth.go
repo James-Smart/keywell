@@ -109,7 +109,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if err := s.d.Store.TouchLastLogin(ctx, user.ID, sess.CreatedAt); err != nil {
 		s.d.Log.ErrorContext(ctx, "login: record last login", "user_id", user.ID, "error", err)
 	}
-	s.auditUser(ctx, audit.LoginSuccess, user.ID, "Signed in", nil)
+	if due {
+		// Recorded now so a correct password is in the log even if the
+		// second step never completes; that step records its own success.
+		s.auditUser(ctx, audit.LoginSuccess, user.ID, "Password accepted, second step due",
+			map[string]any{"second_factor": "pending"})
+	} else {
+		s.auditUser(ctx, audit.LoginSuccess, user.ID, "Signed in", nil)
+	}
 	s.afterLogin(w, r, user, sess)
 }
 
@@ -175,7 +182,12 @@ func (s *Server) secondFactorDue(ctx context.Context, user *model.User) (bool, e
 	if user.TOTPEnrolled() {
 		return true, nil
 	}
-	groups, err := s.d.Store.ListGroupsForUser(ctx, user.ID)
+	return s.groupRequiresTOTP(ctx, user.ID)
+}
+
+// groupRequiresTOTP reports whether any of the user's groups requires TOTP.
+func (s *Server) groupRequiresTOTP(ctx context.Context, userID string) (bool, error) {
+	groups, err := s.d.Store.ListGroupsForUser(ctx, userID)
 	if err != nil {
 		return false, err
 	}

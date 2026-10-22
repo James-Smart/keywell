@@ -27,7 +27,7 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(applied, []string{"0001_core.sql"}) {
+	if !reflect.DeepEqual(applied, []string{"0001_core.sql", "0002_totp_enrolment.sql"}) {
 		t.Fatalf("applied = %v", applied)
 	}
 	applied, err = db.Migrate(ctx, d)
@@ -50,7 +50,7 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 		}
 		have[n] = true
 	}
-	for _, n := range []string{"users", "recovery_codes", "groups", "memberships", "applications", "application_groups", "sessions", "auth_codes", "refresh_tokens", "password_reset_tokens", "signing_keys", "audit_events", "schema_migrations"} {
+	for _, n := range []string{"users", "recovery_codes", "groups", "memberships", "applications", "application_groups", "sessions", "auth_codes", "refresh_tokens", "password_reset_tokens", "signing_keys", "audit_events", "totp_enrolments", "schema_migrations"} {
 		if !have[n] {
 			t.Errorf("missing table %s", n)
 		}

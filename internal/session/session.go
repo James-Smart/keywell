@@ -127,7 +127,9 @@ func (m *Manager) load(w http.ResponseWriter, r *http.Request, id string) (*mode
 	if now.Sub(sess.LastSeenAt) >= touchEvery {
 		sess.LastSeenAt = now
 		sess.ExpiresAt = m.expiry(sess.CreatedAt, now)
-		if err := m.store.UpdateSession(ctx, sess); err != nil {
+		// Times only: a full update could undo TOTPPassed being set by a
+		// concurrent request at the second step.
+		if err := m.store.TouchSession(ctx, sess.ID, sess.LastSeenAt, sess.ExpiresAt); err != nil {
 			slog.ErrorContext(ctx, "session: touch", "error", err)
 		}
 	}
@@ -191,21 +193,24 @@ func FromContext(ctx context.Context) (*model.Session, *model.User, bool) {
 }
 
 // RequireUser lets the request through only when it has a session that has
-// passed every login step, with the current URL as next on any redirect:
-// without a session to the login page, and with a session still waiting for
-// its second factor to the second step, except on the pages AllowIncomplete
-// names.
+// passed every login step, or one still waiting for its second step on a
+// page AllowIncomplete names. Otherwise it redirects with the current URL as
+// next: without a session to the login page; waiting for a code (the user
+// is enrolled) to the TOTP step; waiting for enrolment (a group requires
+// TOTP and the user has none) to enrolment.
 func RequireUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sess, _, ok := FromContext(r.Context())
+		sess, user, ok := FromContext(r.Context())
 		back := url.QueryEscape(r.URL.RequestURI())
 		switch {
 		case !ok:
 			http.Redirect(w, r, "/login?next="+back, http.StatusSeeOther)
-		case !sess.TOTPPassed && !AllowIncomplete(r.URL.Path):
+		case sess.TOTPPassed || AllowIncomplete(r.URL.Path):
+			next.ServeHTTP(w, r)
+		case user.TOTPEnrolled():
 			http.Redirect(w, r, "/login/totp?next="+back, http.StatusSeeOther)
 		default:
-			next.ServeHTTP(w, r)
+			http.Redirect(w, r, "/account/totp?required=1&next="+back, http.StatusSeeOther)
 		}
 	})
 }

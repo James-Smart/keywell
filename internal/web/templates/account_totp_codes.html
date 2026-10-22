@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>Save your recovery codes</h1>
+<p>Two-step sign in is on. If you lose your phone, sign in with one of these codes instead of a code from the app. Each code works once.</p>
+<p>Keep them somewhere safe, such as a password manager, or print them. You won't see them again.</p>
+<ul class="codes">
+{{- range .Data.Codes}}
+  <li><code>{{.}}</code></li>
+{{- end}}
+</ul>
+<a class="button" href="{{.Data.Next}}">I've saved these</a>
+{{end}}

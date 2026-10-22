@@ -96,6 +96,18 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /logout", s.logoutPage)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /logout/done", s.signedOut)
+
+	// The TOTP step checks its own session state; the account TOTP pages
+	// are also open to a session waiting for enrolment (AllowIncomplete).
+	mux.HandleFunc("GET /login/totp", s.loginTOTPPage)
+	mux.HandleFunc("POST /login/totp", s.loginTOTP)
+	signedIn := func(h http.HandlerFunc) http.Handler { return session.RequireUser(h) }
+	mux.Handle("GET /account/totp", signedIn(s.accountTOTPPage))
+	mux.Handle("POST /account/totp/begin", signedIn(s.beginTOTP))
+	mux.Handle("GET /account/totp/qr.png", signedIn(s.totpQR))
+	mux.Handle("POST /account/totp/confirm", signedIn(s.confirmTOTP))
+	mux.Handle("GET /account/totp/codes", signedIn(s.totpCodes))
+	mux.Handle("POST /account/totp/disable", signedIn(s.disableTOTP))
 }
 
 // homePlaceholder is where sign-in lands until the member home replaces it.

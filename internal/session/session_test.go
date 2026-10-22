@@ -231,7 +231,15 @@ func TestRequireUser(t *testing.T) {
 	h := newHarness(t, time.Hour, 24*time.Hour)
 	u := h.user(t, "require@example.org")
 	_, full := h.start(t, u, true)
-	_, partial := h.start(t, u, false)
+	// u is not enrolled, so this session is waiting for enrolment (a group
+	// requires it).
+	_, enrolling := h.start(t, u, false)
+	enrolled := h.user(t, "enrolled@example.org")
+	confirmed := h.now
+	if err := h.st.SetTOTP(context.Background(), enrolled.ID, []byte("sealed"), &confirmed); err != nil {
+		t.Fatal(err)
+	}
+	_, awaitingCode := h.start(t, enrolled, false)
 
 	protected := h.m.Middleware(session.RequireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -245,8 +253,10 @@ func TestRequireUser(t *testing.T) {
 	}{
 		{"no session", nil, "/account?x=1", http.StatusSeeOther, "/login?next=%2Faccount%3Fx%3D1"},
 		{"complete session", full, "/account", http.StatusOK, ""},
-		{"incomplete session", partial, "/account?x=1", http.StatusSeeOther, "/login/totp?next=%2Faccount%3Fx%3D1"},
-		{"incomplete session on an allowed page", partial, "/account/totp", http.StatusOK, ""},
+		{"awaiting code", awaitingCode, "/account?x=1", http.StatusSeeOther, "/login/totp?next=%2Faccount%3Fx%3D1"},
+		{"awaiting enrolment", enrolling, "/account?x=1", http.StatusSeeOther, "/account/totp?required=1&next=%2Faccount%3Fx%3D1"},
+		{"awaiting code on an allowed page", awaitingCode, "/account/totp", http.StatusOK, ""},
+		{"awaiting enrolment on an allowed page", enrolling, "/account/totp", http.StatusOK, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

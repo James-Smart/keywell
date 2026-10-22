@@ -67,6 +67,29 @@ func (s *Store) UpdateSession(ctx context.Context, sess *model.Session) error {
 	return nil
 }
 
+// TouchSession writes only LastSeenAt and ExpiresAt, so it cannot undo a
+// concurrent change to TOTPPassed.
+func (s *Store) TouchSession(ctx context.Context, id string, lastSeen, expires time.Time) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?, expires_at=? WHERE id=?`,
+		formatTime(lastSeen), formatTime(expires), id)
+	return oneRow("store: touch session", res, err)
+}
+
+// IncrementTOTPFailures counts one more wrong code at the session's TOTP
+// step and returns the new total, or ErrNotFound.
+func (s *Store) IncrementTOTPFailures(ctx context.Context, sessionID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `UPDATE sessions SET totp_failures = totp_failures + 1 WHERE id=?
+		RETURNING totp_failures`, sessionID).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: count totp failure: %w", err)
+	}
+	return n, nil
+}
+
 // DeleteSession removes one session; a missing session is a no-op.
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id=?`, id); err != nil {
