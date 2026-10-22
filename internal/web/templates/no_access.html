@@ -1,0 +1,7 @@
+{{define "content"}}
+<h1>No access</h1>
+<p>You don't have access to {{.Data.AppName}}. Ask an admin if you think you should.</p>
+<form method="post" action="/logout">
+  <button type="submit" class="button-secondary">Sign out</button>
+</form>
+{{end}}

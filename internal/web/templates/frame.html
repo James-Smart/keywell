@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}{{.Brand.Name}}</title>
+<link rel="stylesheet" href="/static/latch.css">
+<style>:root{--primary: {{.Brand.PrimaryColor}}}</style>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="/">{{if .Brand.LogoURL}}<img src="{{.Brand.LogoURL}}" alt="">{{end}}<span>{{.Brand.Name}}</span></a>
+</header>
+<main class="{{block "layout" .}}narrow{{end}}">
+{{- if .Error}}
+  <p class="alert alert-error" role="alert">{{.Error}}</p>
+{{- end}}
+{{- if .Notice}}
+  <p class="alert alert-notice" role="status">{{.Notice}}</p>
+{{- end}}
+{{template "content" .}}
+</main>
+{{- if .Brand.SupportText}}
+<footer class="footer"><p>{{.Brand.SupportText}}</p></footer>
+{{- end}}
+</body>
+</html>
