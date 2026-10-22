@@ -104,9 +104,6 @@ func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
 		s.d.Log.ErrorContext(ctx, "totp step: record last login", "user_id", user.ID, "error", err)
 	}
 	s.auditUser(ctx, audit.LoginSuccess, user.ID, "Signed in", map[string]any{"second_factor": factor})
-	if factor == "recovery" {
-		s.noteLastRecoveryCode(ctx, user.ID)
-	}
 	http.Redirect(w, r, safeNext(next), http.StatusSeeOther)
 }
 
@@ -194,18 +191,6 @@ func (s *Server) endSecondStep(w http.ResponseWriter, r *http.Request, user *mod
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// noteLastRecoveryCode logs when a member has used their last recovery code.
-func (s *Server) noteLastRecoveryCode(ctx context.Context, userID string) {
-	n, err := s.d.Store.CountUnusedRecoveryCodes(ctx, userID)
-	if err != nil {
-		s.d.Log.ErrorContext(ctx, "totp step: count recovery codes", "user_id", userID, "error", err)
-		return
-	}
-	if n == 0 {
-		s.d.Log.InfoContext(ctx, "totp step: last recovery code used", "user_id", userID)
-	}
-}
-
 // openSecret unseals a stored TOTP secret.
 func (s *Server) openSecret(sealed []byte) (string, error) {
 	plain, err := s.d.Enc.Open(sealed)
@@ -239,11 +224,42 @@ func withNext(path, next string) string {
 // accountTOTPPage shows whether TOTP is on, with the form to turn it off;
 // otherwise the pending enrolment (QR code, key, confirm form) or the form
 // to start one.
+//
+// Recovery codes from this session's confirmation that have not been shown
+// yet come first. That happens when the browser showed another response
+// than the confirm's, e.g. to a double-submitted confirm form.
 func (s *Server) accountTOTPPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	sess, user, ok := s.enrolmentSession(w, r)
-	if ok {
-		s.renderAccountTOTP(w, r, sess, user, "", r.URL.Query().Get("next"))
+	if !ok {
+		return
 	}
+	next := r.URL.Query().Get("next")
+	if user.TOTPEnrolled() {
+		_, codesJSON, err := s.d.Store.GetTOTPEnrolment(ctx, sess.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			s.serverError(w, r, "totp page: load enrolment", err)
+			return
+		}
+		if codesJSON != "" {
+			http.Redirect(w, r, withNext("/account/totp/codes", next), http.StatusSeeOther)
+			return
+		}
+	}
+	s.renderAccountTOTP(w, r, sess, user, "", next)
+}
+
+// pendingSecret returns the sealed secret of the session's enrolment while
+// it is unconfirmed; ok is false when there is none.
+func (s *Server) pendingSecret(ctx context.Context, sessionID string) (sealed []byte, ok bool, err error) {
+	sealed, codesJSON, err := s.d.Store.GetTOTPEnrolment(ctx, sessionID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return sealed, codesJSON == "", nil // with codes, it is confirmed
 }
 
 func (s *Server) renderAccountTOTP(w http.ResponseWriter, r *http.Request, sess *model.Session, user *model.User, message, next string) {
@@ -258,13 +274,12 @@ func (s *Server) renderAccountTOTP(w http.ResponseWriter, r *http.Request, sess 
 		}
 		d.GroupRequires = required
 	} else {
-		sealed, _, err := s.d.Store.GetTOTPEnrolment(ctx, sess.ID)
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-		case err != nil:
+		sealed, pending, err := s.pendingSecret(ctx, sess.ID)
+		if err != nil {
 			s.serverError(w, r, "totp page: load enrolment", err)
 			return
-		default:
+		}
+		if pending {
 			secret, err := s.openSecret(sealed)
 			if err != nil {
 				s.serverError(w, r, "totp page: open pending secret", err)
@@ -334,13 +349,13 @@ func (s *Server) totpQR(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	sealed, _, err := s.d.Store.GetTOTPEnrolment(ctx, sess.ID)
-	if errors.Is(err, store.ErrNotFound) {
-		http.NotFound(w, r)
-		return
-	}
+	sealed, pending, err := s.pendingSecret(ctx, sess.ID)
 	if err != nil {
 		s.serverError(w, r, "totp qr: load enrolment", err)
+		return
+	}
+	if !pending {
+		http.NotFound(w, r)
 		return
 	}
 	secret, err := s.openSecret(sealed)
@@ -358,9 +373,12 @@ func (s *Server) totpQR(w http.ResponseWriter, r *http.Request) {
 	w.Write(png)
 }
 
-// confirmTOTP turns TOTP on when code matches the pending secret: it stores
-// the secret, replaces the recovery codes, completes a session that was
-// waiting for this enrolment, and sends the member to see the codes once.
+// confirmTOTP turns TOTP on when code matches the pending secret: in one
+// transaction it stores the secret, replaces the recovery codes and keeps
+// them to show; then it completes a session that was waiting for this
+// enrolment and sends the member to see the codes once. A confirm that
+// finds the user already enrolled (a double-submitted form) goes to the TOTP
+// page, which shows any codes still waiting.
 func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, user, ok := s.enrolmentSession(w, r)
@@ -368,17 +386,18 @@ func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := r.PostFormValue("next")
+	already := func() { http.Redirect(w, r, withNext("/account/totp", next), http.StatusSeeOther) }
 	if user.TOTPEnrolled() {
-		http.Redirect(w, r, withNext("/account/totp", next), http.StatusSeeOther)
+		already()
 		return
 	}
-	sealed, _, err := s.d.Store.GetTOTPEnrolment(ctx, sess.ID)
-	if errors.Is(err, store.ErrNotFound) {
-		http.Redirect(w, r, withNext("/account/totp", next), http.StatusSeeOther)
-		return
-	}
+	sealed, pending, err := s.pendingSecret(ctx, sess.ID)
 	if err != nil {
 		s.serverError(w, r, "totp confirm: load enrolment", err)
+		return
+	}
+	if !pending {
+		already()
 		return
 	}
 	secret, err := s.openSecret(sealed)
@@ -405,17 +424,14 @@ func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 	for i, c := range codes {
 		hashes[i] = secrets.HashToken(c)
 	}
-	now := time.Now().UTC()
-	if err := s.d.Store.SetTOTP(ctx, user.ID, sealed, &now); err != nil {
-		s.serverError(w, r, "totp confirm: store secret", err)
+	err = s.d.Store.CompleteTOTPEnrolment(ctx, user.ID, sess.ID, sealed, time.Now().UTC(), hashes, string(codesJSON))
+	if errors.Is(err, store.ErrConflict) || errors.Is(err, store.ErrNotFound) {
+		// Another confirm got there first, or the enrolment is gone.
+		already()
 		return
 	}
-	if err := s.d.Store.ReplaceRecoveryCodes(ctx, user.ID, hashes); err != nil {
-		s.serverError(w, r, "totp confirm: store recovery codes", err)
-		return
-	}
-	if err := s.d.Store.SetTOTPEnrolmentCodes(ctx, sess.ID, string(codesJSON)); err != nil {
-		s.serverError(w, r, "totp confirm: keep codes to show", err)
+	if err != nil {
+		s.serverError(w, r, "totp confirm: complete enrolment", err)
 		return
 	}
 	if !sess.TOTPPassed {
@@ -430,15 +446,16 @@ func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // totpCodes shows the recovery codes made at confirmation, once: the
-// enrolment holding them is deleted before the page is written.
+// enrolment holding them is deleted before the page is written. Codes left
+// from an enrolment that has since been cleared are not shown.
 func (s *Server) totpCodes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sess, _, ok := s.enrolmentSession(w, r)
+	sess, user, ok := s.enrolmentSession(w, r)
 	if !ok {
 		return
 	}
 	_, codesJSON, err := s.d.Store.GetTOTPEnrolment(ctx, sess.ID)
-	if errors.Is(err, store.ErrNotFound) || (err == nil && codesJSON == "") {
+	if errors.Is(err, store.ErrNotFound) || (err == nil && (codesJSON == "" || !user.TOTPEnrolled())) {
 		http.Redirect(w, r, "/account/totp", http.StatusSeeOther)
 		return
 	}

@@ -192,6 +192,14 @@ func (s *Store) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHas
 		return fmt.Errorf("store: replace recovery codes: %w", err)
 	}
 	defer tx.Rollback()
+	if err := replaceRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// replaceRecoveryCodes swaps the user's recovery codes within tx.
+func replaceRecoveryCodes(ctx context.Context, tx *sql.Tx, userID string, codeHashes []string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id=?`, userID); err != nil {
 		return fmt.Errorf("store: replace recovery codes: %w", err)
 	}
@@ -201,7 +209,7 @@ func (s *Store) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHas
 			return wrapWrite("store: replace recovery codes", err)
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // ConsumeRecoveryCode marks an unused code as used; it reports whether one was consumed.

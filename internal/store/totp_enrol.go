@@ -18,8 +18,9 @@ func (s *Store) PutTOTPEnrolment(ctx context.Context, sessionID string, secretEn
 	return wrapWrite("store: put totp enrolment", err)
 }
 
-// GetTOTPEnrolment returns the session's sealed pending secret and the
-// recovery codes JSON ("" until confirmed), or ErrNotFound.
+// GetTOTPEnrolment returns the session's enrolment, or ErrNotFound. Until
+// it is confirmed that is the sealed pending secret and codesJSON "";
+// afterwards an empty secret and the recovery codes still to show.
 func (s *Store) GetTOTPEnrolment(ctx context.Context, sessionID string) (secretEnc []byte, codesJSON string, err error) {
 	err = s.db.QueryRowContext(ctx, `SELECT secret_enc, COALESCE(codes_json,'') FROM totp_enrolments WHERE session_id=?`,
 		sessionID).Scan(&secretEnc, &codesJSON)
@@ -32,11 +33,39 @@ func (s *Store) GetTOTPEnrolment(ctx context.Context, sessionID string) (secretE
 	return secretEnc, codesJSON, nil
 }
 
-// SetTOTPEnrolmentCodes stores the recovery codes to show once, or returns
-// ErrNotFound when the session has no enrolment.
-func (s *Store) SetTOTPEnrolmentCodes(ctx context.Context, sessionID, codesJSON string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE totp_enrolments SET codes_json=? WHERE session_id=?`, codesJSON, sessionID)
-	return oneRow("store: set totp enrolment codes", res, err)
+// CompleteTOTPEnrolment confirms the session's enrolment in one
+// transaction: secretEnc becomes the user's TOTP secret, confirmed at
+// confirmedAt; codeHashes replace their recovery codes; and the enrolment
+// keeps codesJSON, the codes to show once, while its copy of the secret is
+// cleared. It returns ErrConflict when the user is already enrolled (or does
+// not exist) and ErrNotFound when the session has no enrolment; either way
+// nothing is written.
+func (s *Store) CompleteTOTPEnrolment(ctx context.Context, userID, sessionID string, secretEnc []byte,
+	confirmedAt time.Time, codeHashes []string, codesJSON string) error {
+	const op = "store: complete totp enrolment"
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=?, totp_confirmed_at=?, updated_at=?
+		WHERE id=? AND totp_confirmed_at IS NULL`,
+		secretEnc, formatTime(confirmedAt), formatTime(time.Now()), userID)
+	if err := oneRow(op, res, err); errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("%s: %w", op, ErrConflict)
+	} else if err != nil {
+		return err
+	}
+	// secret_enc is NOT NULL; an empty blob is "no secret".
+	res, err = tx.ExecContext(ctx, `UPDATE totp_enrolments SET secret_enc=X'', codes_json=? WHERE session_id=?`,
+		codesJSON, sessionID)
+	if err := oneRow(op, res, err); err != nil {
+		return err
+	}
+	if err := replaceRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DeleteTOTPEnrolment removes the session's enrolment; none is a no-op.

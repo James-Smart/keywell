@@ -238,6 +238,108 @@ func TestEnrolConfirmShowsCodesOnce(t *testing.T) {
 	}
 }
 
+// recoveryCodeRows counts every recovery code stored for userID, used or not.
+func recoveryCodeRows(t *testing.T, env *testenv.Env, userID string) int {
+	t.Helper()
+	var n int
+	if err := env.DB.QueryRow(`SELECT COUNT(*) FROM recovery_codes WHERE user_id=?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// assertCodesShownOnce follows location (where the browser was sent after
+// confirming) to the codes page and checks it shows the 10 stored codes
+// with a button to wantNext, and that they are then gone.
+func assertCodesShownOnce(t *testing.T, env *testenv.Env, c *http.Client, u *model.User, location, wantNext string) {
+	t.Helper()
+	ctx := context.Background()
+	for range 2 {
+		if !strings.HasPrefix(location, "/account/totp/codes") {
+			resp, _ := get(t, c, env.TS.URL+location)
+			if resp.StatusCode != http.StatusSeeOther {
+				t.Fatalf("GET %s: status %d, want a redirect to the codes", location, resp.StatusCode)
+			}
+			location = resp.Header.Get("Location")
+		}
+	}
+	resp, body := get(t, c, env.TS.URL+location)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s: status %d", location, resp.StatusCode)
+	}
+	if want := `<a class="button" href="` + html.EscapeString(wantNext) + `">`; !strings.Contains(body, want) {
+		t.Errorf("codes page missing %q", want)
+	}
+	shown := recoveryCodeRE.FindAllStringSubmatch(body, -1)
+	if len(shown) != 10 {
+		t.Fatalf("codes page shows %d codes", len(shown))
+	}
+	if n := recoveryCodeRows(t, env, u.ID); n != 10 {
+		t.Fatalf("%d recovery codes stored, want 10", n)
+	}
+	for _, m := range shown {
+		if ok, err := env.Store.ConsumeRecoveryCode(ctx, u.ID, secrets.HashToken(m[1])); !ok || err != nil {
+			t.Fatalf("shown code %q is not stored: %v", m[1], err)
+		}
+	}
+	if events := auditEvents(t, env, audit.TOTPEnrolled); len(events) != 1 {
+		t.Fatalf("totp enrol events: %d, want 1", len(events))
+	}
+	resp, _ = get(t, c, env.TS.URL+"/account/totp/codes")
+	assertRedirect(t, resp, "/account/totp")
+}
+
+// A double-clicked confirm: the browser shows the second response, which
+// must still lead to the codes from the first.
+func TestConfirmTwiceStillShowsCodes(t *testing.T) {
+	env := testenv.New(t)
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	const next = "/oauth/authorize?client_id=wiki&state=x"
+
+	key := beginEnrolment(t, env, c, url.Values{"next": {next}})
+	form := url.Values{"code": {validCode(t, key)}, "next": {next}}
+	first, _ := post(t, env, c, "/account/totp/confirm", form)
+	assertRedirect(t, first, "/account/totp/codes?next="+url.QueryEscape(next))
+	second, _ := post(t, env, c, "/account/totp/confirm", form)
+	if second.StatusCode != http.StatusSeeOther {
+		t.Fatalf("second confirm: status %d", second.StatusCode)
+	}
+	assertCodesShownOnce(t, env, c, u, second.Header.Get("Location"), next)
+}
+
+// Two confirms at once: whichever way they interleave, one set of codes is
+// stored and that set is the one shown.
+func TestConfirmConcurrentStoresOneSetOfCodes(t *testing.T) {
+	env := testenv.New(t)
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	key := beginEnrolment(t, env, c, nil)
+	form := url.Values{"code": {validCode(t, key)}}
+
+	locations := make(chan string, 2)
+	for range 2 {
+		go func() {
+			resp, err := c.PostForm(env.TS.URL+"/account/totp/confirm", form)
+			if err != nil {
+				locations <- "error: " + err.Error()
+				return
+			}
+			resp.Body.Close()
+			locations <- fmt.Sprint(resp.StatusCode, " ", resp.Header.Get("Location"))
+		}()
+	}
+	got := []string{<-locations, <-locations}
+	for _, l := range got {
+		if l != "303 /account/totp/codes" && l != "303 /account/totp" {
+			t.Fatalf("confirm responses %q", got)
+		}
+	}
+	assertCodesShownOnce(t, env, c, u, "/account/totp", "/")
+}
+
 func TestLoginTOTPCodeAndRecovery(t *testing.T) {
 	env := testenv.New(t)
 	ctx := context.Background()
