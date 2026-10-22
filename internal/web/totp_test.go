@@ -353,6 +353,136 @@ func TestLoginTOTPFiveFailuresEndsSession(t *testing.T) {
 	}
 }
 
+// wrongGuesses posts n wrong codes at the TOTP step, each of which must be
+// refused with the form shown again.
+func wrongGuesses(t *testing.T, env *testenv.Env, c *http.Client, path string, form url.Values, secret string, n int) {
+	t.Helper()
+	for i := range n {
+		f := url.Values{}
+		for k, v := range form {
+			f[k] = v
+		}
+		f.Set("code", wrongCode(t, secret))
+		resp, body := post(t, env, c, path, f)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("wrong code %d at %s: status %d location %q", i+1, path, resp.StatusCode, resp.Header.Get("Location"))
+		}
+		if !strings.Contains(body, codeMismatch) && !strings.Contains(body, disableMismatch) {
+			t.Fatalf("wrong code %d at %s: no mismatch message", i+1, path)
+		}
+	}
+}
+
+// accountThrottled reports the login.totp_failure events recorded because
+// the account's budget of wrong codes was spent.
+func accountThrottled(t *testing.T, env *testenv.Env) int {
+	t.Helper()
+	n := 0
+	for _, e := range auditEvents(t, env, audit.LoginTOTPFailure) {
+		if e.Detail["reason"] == "account_throttled" {
+			n++
+		}
+	}
+	return n
+}
+
+// Signing in again starts a fresh per-session count, so wrong codes are
+// also capped per account: 10 per 15 minutes, after which no code is
+// checked at all until the window passes.
+func TestLoginTOTPAccountThrottle(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+
+	// 10 wrong codes over three sessions, none reaching the per-session cap.
+	var last *http.Client
+	for _, n := range []int{4, 4, 2} {
+		last = env.Client(t)
+		env.Login(t, last, "alex@example.org", testPW)
+		wrongGuesses(t, env, last, "/login/totp", nil, secret, n)
+	}
+	sid := jarSession(t, env, last)
+
+	// The budget is spent: even the right code is refused, unchecked.
+	resp, _ := post(t, env, last, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/login")
+	if jarSession(t, env, last) != "" {
+		t.Fatal("session cookie not cleared")
+	}
+	if _, err := env.Store.GetSession(ctx, sid); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("session still stored: %v", err)
+	}
+	if n := accountThrottled(t, env); n != 1 {
+		t.Fatalf("account_throttled events: %d, want 1", n)
+	}
+
+	// A fresh sign-in does not buy another guess.
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/login")
+	if got := secondFactors(t, env); len(got) != 0 {
+		t.Fatalf("sign-in completed while throttled: %v", got)
+	}
+
+	env.Clock.Advance(16 * time.Minute)
+	c = env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/")
+}
+
+// A correct code clears the account's count of wrong ones.
+func TestLoginTOTPCorrectCodeResetsAccountThrottle(t *testing.T) {
+	env := testenv.New(t)
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	wrongGuesses(t, env, c, "/login/totp", nil, secret, 4)
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/")
+
+	for range 2 {
+		c := env.Client(t)
+		env.Login(t, c, "alex@example.org", testPW)
+		wrongGuesses(t, env, c, "/login/totp", nil, secret, 4)
+	}
+	c = env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/")
+}
+
+// Wrong codes when turning TOTP off use the same account budget.
+func TestDisableCountsTowardTOTPThrottle(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	c := env.Client(t)
+	signInWithCode(t, env, c, "alex@example.org", secret)
+	sid := jarSession(t, env, c)
+
+	// A wrong password does not get as far as the code, so it costs nothing.
+	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}}, secret, 3)
+	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}}, secret, 10)
+
+	resp, _ := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	assertRedirect(t, resp, "/login")
+	if _, err := env.Store.GetSession(ctx, sid); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("session still stored: %v", err)
+	}
+	if !getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("TOTP turned off while throttled")
+	}
+	if n := accountThrottled(t, env); n != 1 {
+		t.Fatalf("account_throttled events: %d, want 1", n)
+	}
+}
+
 func TestRequiredByGroupForcesEnrolment(t *testing.T) {
 	env := testenv.New(t)
 	ctx := context.Background()

@@ -81,6 +81,9 @@ func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !s.codeBudget(w, r, user) {
+		return
+	}
 	factor, passed, err := s.checkCode(ctx, user, r.PostFormValue("code"))
 	if err != nil {
 		s.serverError(w, r, "totp step: check code", err)
@@ -90,6 +93,7 @@ func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
 		s.codeFailed(w, r, sess, user, next)
 		return
 	}
+	s.d.Limits.TOTPAccount.Reset(totpLimitKey(user.ID))
 
 	sess.TOTPPassed = true
 	if err := s.d.Sessions.Update(ctx, sess); err != nil {
@@ -141,12 +145,28 @@ func (s *Server) checkCode(ctx context.Context, user *model.User, code string) (
 	return "totp", totp.Validate(secret, code), nil
 }
 
+func totpLimitKey(userID string) string { return "totp:" + userID }
+
+// codeBudget takes a place for one more code in the account's limit
+// (Limiters.TOTPAccount) before the code is checked, so once the limit is
+// reached no code is checked at all, however many fresh sessions a
+// password buys. A correct code resets the limit, so only wrong codes use
+// it up. When the limit is reached the session ends and codeBudget returns
+// false.
+func (s *Server) codeBudget(w http.ResponseWriter, r *http.Request, user *model.User) bool {
+	if s.d.Limits.TOTPAccount.Allow(totpLimitKey(user.ID)) {
+		return true
+	}
+	s.endSecondStep(w, r, user, "Signed out: too many wrong codes for this account",
+		map[string]any{"reason": "account_throttled"})
+	return false
+}
+
 // codeFailed counts a wrong code against the session. Below the limit the
 // form is shown again; at it the session ends. Only that last failure is
 // audited, so guessing cannot grow the audit log.
 func (s *Server) codeFailed(w http.ResponseWriter, r *http.Request, sess *model.Session, user *model.User, next string) {
-	ctx := r.Context()
-	n, err := s.d.Store.IncrementTOTPFailures(ctx, sess.ID)
+	n, err := s.d.Store.IncrementTOTPFailures(r.Context(), sess.ID)
 	if errors.Is(err, store.ErrNotFound) { // ended by a concurrent request
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
@@ -159,12 +179,18 @@ func (s *Server) codeFailed(w http.ResponseWriter, r *http.Request, sess *model.
 		s.renderLoginTOTP(w, r, msgCodeMismatch, next)
 		return
 	}
+	s.endSecondStep(w, r, user, "Signed out after too many wrong codes", map[string]any{"failures": n})
+}
+
+// endSecondStep ends the session after too many wrong codes, audits it as
+// LoginTOTPFailure, and sends the browser to sign in again.
+func (s *Server) endSecondStep(w http.ResponseWriter, r *http.Request, user *model.User, summary string, detail map[string]any) {
+	ctx := r.Context()
 	if err := s.d.Sessions.End(ctx, w, r); err != nil {
-		s.serverError(w, r, "totp step: end session", err)
+		s.serverError(w, r, "totp: end session", err)
 		return
 	}
-	s.auditUser(ctx, audit.LoginTOTPFailure, user.ID, "Signed out after too many wrong codes",
-		map[string]any{"failures": n})
+	s.auditUser(ctx, audit.LoginTOTPFailure, user.ID, summary, detail)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
@@ -457,15 +483,27 @@ func (s *Server) disableTOTP(w http.ResponseWriter, r *http.Request) {
 		s.renderAccountTOTP(w, r, sess, user, msgGroupRequires, "")
 		return
 	}
-	match, err := s.passwordAndCodeMatch(ctx, user, r.PostFormValue("password"), r.PostFormValue("code"))
+	// The password is always checked and the code only after it matches
+	// (so a recovery code is used up, and the account's code limit spent,
+	// only then); the one failure message tells a guesser nothing about
+	// either.
+	if !s.passwordMatches(ctx, user, r.PostFormValue("password")) {
+		s.renderAccountTOTP(w, r, sess, user, msgDisableMismatch, "")
+		return
+	}
+	if !s.codeBudget(w, r, user) {
+		return
+	}
+	_, match, err := s.checkCode(ctx, user, r.PostFormValue("code"))
 	if err != nil {
-		s.serverError(w, r, "totp disable: check password and code", err)
+		s.serverError(w, r, "totp disable: check code", err)
 		return
 	}
 	if !match {
 		s.renderAccountTOTP(w, r, sess, user, msgDisableMismatch, "")
 		return
 	}
+	s.d.Limits.TOTPAccount.Reset(totpLimitKey(user.ID))
 	if err := s.d.Store.ClearTOTP(ctx, user.ID); err != nil {
 		s.serverError(w, r, "totp disable: clear", err)
 		return
@@ -478,18 +516,12 @@ func (s *Server) disableTOTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/account/totp", http.StatusSeeOther)
 }
 
-// passwordAndCodeMatch reports whether pw is the user's password and code
-// one of their codes. The password is always checked, and the code only
-// after it matches (a recovery code is used up only then), so the one
-// failure message tells a guesser nothing about either.
-func (s *Server) passwordAndCodeMatch(ctx context.Context, user *model.User, pw, code string) (bool, error) {
+// passwordMatches reports whether pw is the user's password. A hash that
+// cannot be checked counts as no match.
+func (s *Server) passwordMatches(ctx context.Context, user *model.User, pw string) bool {
 	match, err := password.Verify(pw, storedHash(user))
 	if err != nil && !errors.Is(err, password.ErrUnusable) {
 		s.d.Log.ErrorContext(ctx, "totp disable: stored password hash cannot be checked", "user_id", user.ID, "error", err)
 	}
-	if !match {
-		return false, nil
-	}
-	_, ok, err := s.checkCode(ctx, user, code)
-	return ok, err
+	return match
 }
