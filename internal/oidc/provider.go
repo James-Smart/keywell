@@ -52,11 +52,16 @@ func (p *Provider) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/jwks.json", p.jwks)
 	mux.HandleFunc("GET /oauth/authorize", p.authorize)
 	mux.HandleFunc("POST /oauth/authorize", p.authorize)
-	// Endpoints not yet implemented answer, so every address in the
+	// The token, introspection and revocation endpoints take every method
+	// so that a wrong one gets a JSON error, not the mux's plain text.
+	mux.HandleFunc("/oauth/token", p.token)
+	mux.HandleFunc("/oauth/introspect", p.introspect)
+	mux.HandleFunc("/oauth/revoke", p.revoke)
+	mux.HandleFunc("GET /oauth/userinfo", p.userinfo)
+	mux.HandleFunc("POST /oauth/userinfo", p.userinfo)
+	// Not implemented yet, but it answers, so every address in the
 	// discovery document resolves.
-	for _, path := range []string{"/oauth/token", "/oauth/userinfo", "/oauth/revoke", "/oauth/introspect", "/oauth/logout"} {
-		mux.HandleFunc(path, unavailable)
-	}
+	mux.HandleFunc("/oauth/logout", unavailable)
 }
 
 func (p *Provider) now() time.Time { return p.d.Now().UTC() }

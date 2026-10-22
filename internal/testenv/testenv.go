@@ -8,8 +8,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -332,14 +335,21 @@ func (e *Env) AuthorizeRaw(t *testing.T, c *http.Client, params url.Values) *htt
 // returns the code, the PKCE verifier ("" without PKCE) and the state.
 func (e *Env) Authorize(t *testing.T, c *http.Client, app *model.Application, pkce bool) (code, verifier, state string) {
 	t.Helper()
-	state = secrets.RandomToken(16)
+	code, verifier, state, _ = e.AuthorizeWithNonce(t, c, app, pkce)
+	return code, verifier, state
+}
+
+// AuthorizeWithNonce is Authorize that also returns the nonce it sent.
+func (e *Env) AuthorizeWithNonce(t *testing.T, c *http.Client, app *model.Application, pkce bool) (code, verifier, state, nonce string) {
+	t.Helper()
+	state, nonce = secrets.RandomToken(16), secrets.RandomToken(16)
 	params := url.Values{
 		"response_type": {"code"},
 		"client_id":     {app.ClientID},
 		"redirect_uri":  {app.RedirectURIs[0]},
 		"scope":         {"openid profile email groups"},
 		"state":         {state},
-		"nonce":         {secrets.RandomToken(16)},
+		"nonce":         {nonce},
 	}
 	if pkce {
 		verifier = secrets.RandomToken(32)
@@ -364,5 +374,63 @@ func (e *Env) Authorize(t *testing.T, c *http.Client, app *model.Application, pk
 	if q.Get("state") != state {
 		t.Fatalf("testenv: authorize %s: state %q, want %q", app.Slug, q.Get("state"), state)
 	}
-	return code, verifier, state
+	return code, verifier, state, nonce
+}
+
+// PostAsClient posts form to path as app: with HTTP Basic credentials when
+// secret is non-empty (each part form-urlencoded, RFC 6749 §2.3.1), else
+// with client_id in the form. It returns the body decoded as a JSON object
+// (nil when empty) and the response, whose body is already closed.
+func (e *Env) PostAsClient(t *testing.T, path string, app *model.Application, secret string, form url.Values) (map[string]any, *http.Response) {
+	t.Helper()
+	form = maps.Clone(form)
+	if form == nil {
+		form = url.Values{}
+	}
+	if secret == "" {
+		form.Set("client_id", app.ClientID)
+	}
+	req, err := http.NewRequest(http.MethodPost, e.TS.URL+path, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("testenv: %s request: %v", path, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if secret != "" {
+		req.SetBasicAuth(url.QueryEscape(app.ClientID), url.QueryEscape(secret))
+	}
+	resp, err := e.TS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("testenv: post %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("testenv: read %s response: %v", path, err)
+	}
+	if len(raw) == 0 {
+		return nil, resp
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("testenv: %s: status %d, body is not a JSON object: %v\n%s", path, resp.StatusCode, err, raw)
+	}
+	return body, resp
+}
+
+// Exchange trades an authorization code for tokens as app (see
+// PostAsClient), sending verifier as code_verifier when non-empty.
+func (e *Env) Exchange(t *testing.T, app *model.Application, secret, code, verifier, redirectURI string) (map[string]any, *http.Response) {
+	t.Helper()
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirectURI}}
+	if verifier != "" {
+		form.Set("code_verifier", verifier)
+	}
+	return e.PostAsClient(t, "/oauth/token", app, secret, form)
+}
+
+// Refresh redeems refreshToken for new tokens as app (see PostAsClient).
+func (e *Env) Refresh(t *testing.T, app *model.Application, secret, refreshToken string) (map[string]any, *http.Response) {
+	t.Helper()
+	return e.PostAsClient(t, "/oauth/token", app, secret,
+		url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}})
 }
