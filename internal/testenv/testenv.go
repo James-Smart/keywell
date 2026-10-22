@@ -22,6 +22,7 @@ import (
 	"latch/internal/config"
 	"latch/internal/mail"
 	"latch/internal/model"
+	"latch/internal/oidc"
 	"latch/internal/password"
 	"latch/internal/secrets"
 	"latch/internal/session"
@@ -67,6 +68,8 @@ type Env struct {
 	Clock  *Clock
 	// Enc is the server's encryptor, for sealing and opening TOTP secrets.
 	Enc *secrets.Encryptor
+	// Keys holds the token signing keys, stored in Store and sealed by Enc.
+	Keys *oidc.KeyManager
 
 	// background counts the server's work after responding (reset emails).
 	background *sync.WaitGroup
@@ -162,13 +165,19 @@ func New(t *testing.T, opts ...Option) *Env {
 
 	sessions := session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies())
 	sessions.SetClock(clock.Now)
+	rec := audit.New(st, log)
+	keys, err := oidc.NewKeyManager(context.Background(), st, enc)
+	if err != nil {
+		t.Fatalf("testenv: signing keys: %v", err)
+	}
+	keys.WithAudit(rec)
 
 	h := web.New(web.Deps{
 		Cfg:        cfg,
 		Store:      st,
 		Sessions:   sessions,
 		Mailer:     serverMailer,
-		Audit:      audit.New(st, log),
+		Audit:      rec,
 		Enc:        enc,
 		Log:        log,
 		Renderer:   rend,
@@ -178,7 +187,7 @@ func New(t *testing.T, opts ...Option) *Env {
 	})
 	handler.Store(&h)
 
-	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc, background: background}
+	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc, Keys: keys, background: background}
 }
 
 // EnrolTOTP enrols u in TOTP directly through the store, as if they had
