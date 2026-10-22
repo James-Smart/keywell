@@ -42,7 +42,9 @@ func Subject(u *model.User, app *model.Application) string {
 	var sub string
 	switch app.SubjectMode {
 	case model.SubjectModeEmail:
-		sub = strings.ToLower(u.Email)
+		// Verbatim, as stored: Authentik's user_email mode put user.email in
+		// sub unchanged, and apps keyed accounts on that value.
+		sub = u.Email
 	case model.SubjectModeUsername:
 		sub = u.Username
 	case model.SubjectModeAuthentikUUID:

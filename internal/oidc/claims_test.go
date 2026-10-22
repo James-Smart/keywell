@@ -21,7 +21,9 @@ func TestSubjectModes(t *testing.T) {
 	}{
 		{"", imported, "u-imported"},
 		{model.SubjectModeID, imported, "u-imported"},
-		{model.SubjectModeEmail, imported, "alex@example.org"},
+		// As stored, never case-folded: it must match the sub Authentik's
+		// user_email mode issued, which apps have keyed accounts on.
+		{model.SubjectModeEmail, imported, "Alex@Example.ORG"},
 		{model.SubjectModeUsername, imported, "alex"},
 		{model.SubjectModeUsername, fresh, "u-fresh"},
 		{model.SubjectModeAuthentikUUID, imported, "8d1f6a8e-uuid"},
