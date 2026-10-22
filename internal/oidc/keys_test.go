@@ -332,3 +332,57 @@ func TestPrivateKeyEncryptedAtRest(t *testing.T) {
 		t.Fatalf("%d signing keys after a failed start, want 1", len(rows))
 	}
 }
+
+func TestRetiredKeyStopsVerifyingAfterGrace(t *testing.T) {
+	ctx := context.Background()
+	s := store.OpenTest(t)
+	enc := newEncryptor(t)
+	var offset time.Duration
+	clock := func() time.Time { return time.Now().Add(offset) }
+
+	k := newKeyManager(t, s, enc)
+	k.SetClock(clock)
+	kidA := k.ActiveKID()
+	tokenA, err := k.Sign(map[string]any{"sub": "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kidB, err := k.Rotate(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := k.RetireOlderThan(ctx, 0); err != nil || n != 1 {
+		t.Fatalf("RetireOlderThan(0) = %d, %v; want 1", n, err)
+	}
+	// A fresh manager reads the retirement time from the store.
+	fresh := newKeyManager(t, s, enc)
+	fresh.SetClock(clock)
+	managers := map[string]*oidc.KeyManager{"rotating": k, "fresh": fresh}
+
+	check := func(when string, wantA bool) {
+		t.Helper()
+		for name, m := range managers {
+			set := m.JWKS()
+			if len(set.Key(kidA)) != 0 {
+				t.Fatalf("%s, %s manager: JWKS lists the retired key", when, name)
+			}
+			if _, ok := m.PublicKey(kidB); !ok {
+				t.Fatalf("%s, %s manager: active key does not verify", when, name)
+			}
+			pub, ok := m.PublicKey(kidA)
+			if ok != wantA {
+				t.Fatalf("%s, %s manager: retired key found=%v, want %v", when, name, ok, wantA)
+			}
+			if ok {
+				verifyJWT(t, tokenA, kidA, "JWT", pub)
+			} else if pub != nil {
+				t.Fatalf("%s, %s manager: PublicKey returned a key with ok=false", when, name)
+			}
+		}
+	}
+	check("just retired", true)
+	offset = 23 * time.Hour
+	check("23h after retiring", true)
+	offset = 25 * time.Hour
+	check("25h after retiring", false)
+}
