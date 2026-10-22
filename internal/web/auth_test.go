@@ -298,6 +298,48 @@ func TestLoginSuccessesNotThrottled(t *testing.T) {
 	}
 }
 
+// A successful sign-in clears the account's earlier failures.
+func TestLoginSuccessResetsAccountFailures(t *testing.T) {
+	env := testenv.New(t)
+	env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+
+	for range 9 {
+		postLogin(t, env, c, creds("alex@example.org", "wrong"))
+	}
+	resp, _ := postLogin(t, env, c, creds("alex@example.org", testPW))
+	assertRedirect(t, resp, "/")
+	for i := range 10 {
+		resp, body := postLogin(t, env, env.Client(t), creds("alex@example.org", "wrong"))
+		if resp.StatusCode != http.StatusOK || !strings.Contains(body, noMatch) {
+			t.Fatalf("failure %d after a success: status %d, throttled %v", i+1, resp.StatusCode, strings.Contains(body, throttled))
+		}
+	}
+}
+
+// A request turned away by the account limit does not use up the IP's.
+func TestLoginThrottledAttemptsNotCountedPerIP(t *testing.T) {
+	env := testenv.New(t)
+	env.CreateUser(t, "alex@example.org", testPW)
+	env.CreateUser(t, "sam@example.org", testPW)
+	c := env.Client(t)
+
+	for range 10 {
+		postLogin(t, env, c, creds("alex@example.org", "wrong"))
+	}
+	for range 5 {
+		resp, body := postLogin(t, env, c, creds("alex@example.org", "wrong"))
+		assertFailed(t, env, c, resp, body, throttled)
+	}
+	for i := range 39 {
+		resp, body := postLogin(t, env, c, creds(fmt.Sprintf("guess%d@example.org", i), "wrong"))
+		assertFailed(t, env, c, resp, body, noMatch)
+	}
+	// 49 failures counted against the IP: one more sign-in is allowed.
+	resp, _ := postLogin(t, env, c, creds("sam@example.org", testPW))
+	assertRedirect(t, resp, "/")
+}
+
 func TestLoginRedirectsToNext(t *testing.T) {
 	env := testenv.New(t)
 	env.CreateUser(t, "alex@example.org", testPW)

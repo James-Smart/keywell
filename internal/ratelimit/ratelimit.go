@@ -42,7 +42,12 @@ func (l *Limiter) Allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := l.tick()
+	now := l.now()
+	l.calls++
+	if l.calls%sweepEvery == 0 {
+		l.sweep(now)
+	}
+
 	kept := l.prune(l.events[key], now)
 	if len(kept) >= l.limit {
 		l.store(key, kept)
@@ -52,42 +57,17 @@ func (l *Limiter) Allow(key string) bool {
 	return true
 }
 
-// Peek reports whether key is under the limit, without recording an
-// attempt. Use it with Record when only some attempts (e.g. failed sign-ins)
-// should count.
-func (l *Limiter) Peek(key string) bool {
+// Forgive removes key's newest recorded attempt, e.g. to give back the
+// attempt Allow counted once it turns out to have succeeded. It does
+// nothing when key has no attempts.
+func (l *Limiter) Forgive(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	now := l.tick()
-	kept := l.prune(l.events[key], now)
-	l.store(key, kept)
-	return len(kept) < l.limit
-}
-
-// Record counts an attempt by key whether or not it is over the limit. Only
-// the newest limit attempts are kept: they decide when key is next under it.
-func (l *Limiter) Record(key string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := l.tick()
-	kept := append(l.prune(l.events[key], now), now)
-	if len(kept) > l.limit {
-		kept = kept[len(kept)-l.limit:]
+	ts := l.events[key]
+	if len(ts) == 0 {
+		return
 	}
-	l.store(key, kept)
-}
-
-// tick returns the current time and sweeps idle keys every sweepEvery
-// calls. l.mu must be held.
-func (l *Limiter) tick() time.Time {
-	now := l.now()
-	l.calls++
-	if l.calls%sweepEvery == 0 {
-		l.sweep(now)
-	}
-	return now
+	l.store(key, ts[:len(ts)-1])
 }
 
 // Reset forgets all attempts for key, e.g. after a successful login.

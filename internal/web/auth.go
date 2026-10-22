@@ -58,10 +58,17 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	pw := r.PostFormValue("password")
 	form := loginData{Email: typed, Next: r.PostFormValue("next"), App: r.PostFormValue("app")}
 
-	// Only failed attempts count toward the limits, so members sharing one
-	// address (the space's NAT) can all sign in.
+	// Each attempt reserves a place in both limits before the password is
+	// checked, so a concurrent burst cannot exceed them; a successful
+	// sign-in gives its places back, so only failures use up the budget and
+	// members sharing one address (the space's NAT) can all sign in.
 	ipKey, acctKey := "ip:"+ClientIP(r), "acct:"+email
-	if !s.d.Limits.LoginIP.Peek(ipKey) || !s.d.Limits.LoginAccount.Peek(acctKey) {
+	if !s.d.Limits.LoginIP.Allow(ipKey) {
+		s.renderLogin(w, r, msgThrottled, form)
+		return
+	}
+	if !s.d.Limits.LoginAccount.Allow(acctKey) {
+		s.d.Limits.LoginIP.Forgive(ipKey) // turned away unchecked: not a guess
 		s.renderLogin(w, r, msgThrottled, form)
 		return
 	}
@@ -72,8 +79,6 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		s.d.Limits.LoginIP.Record(ipKey)
-		s.d.Limits.LoginAccount.Record(acctKey)
 		if user != nil {
 			s.auditUser(ctx, audit.LoginFailure, user.ID, "Sign-in failed", nil)
 		} else {
@@ -84,10 +89,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Give back the IP's place; the account's failures are over, so Reset
+	// (which also drops this attempt's place) rather than Forgive.
+	s.d.Limits.LoginIP.Forgive(ipKey)
+	s.d.Limits.LoginAccount.Reset(acctKey)
 	if password.IsLegacy(storedHash(user)) {
 		s.upgradeHash(ctx, user, pw)
 	}
-	s.d.Limits.LoginAccount.Reset(acctKey)
 	due, err := s.secondFactorDue(ctx, user)
 	if err != nil {
 		s.serverError(w, r, "login: list groups", err)
