@@ -20,6 +20,7 @@ import (
 	"latch/internal/config"
 	"latch/internal/db"
 	"latch/internal/mail"
+	"latch/internal/oidc"
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
@@ -145,6 +146,13 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	rec := audit.New(st, log)
+	keys, err := oidc.NewKeyManager(ctx, st, enc)
+	if err != nil {
+		return err
+	}
+	keys.WithAudit(rec)
+	prov := oidc.NewProvider(oidc.Deps{Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend})
 	// Emails already under way (each bounded by its own timeout) finish
 	// before the database closes, however serve returns.
 	var background sync.WaitGroup
@@ -154,11 +162,12 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Store:      st,
 		Sessions:   session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
 		Mailer:     mailer,
-		Audit:      audit.New(st, log),
+		Audit:      rec,
 		Enc:        enc,
 		Log:        log,
 		Renderer:   rend,
 		Limits:     web.NewLimiters(time.Now),
+		OIDC:       prov,
 		Background: &background,
 		Version:    Version,
 	})

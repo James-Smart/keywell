@@ -24,6 +24,7 @@ const (
 	TOTPEnrolled           = "user.totp.enrol"
 	TOTPDisabled           = "user.totp.disable"
 	TokenIssued            = "oidc.token.issued"
+	AuthorizeDenied        = "oidc.authorize.denied"
 	KeyRotated             = "oidc.key.rotate"
 )
 

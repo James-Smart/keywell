@@ -1,0 +1,127 @@
+package oidc
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"latch/internal/audit"
+	"latch/internal/config"
+	"latch/internal/store"
+)
+
+// Renderer shows the branded pages the OpenID Connect endpoints need. It is
+// satisfied by *web.Renderer, which oidc cannot import.
+type Renderer interface {
+	RenderError(w http.ResponseWriter, r *http.Request, status int, title, msg string)
+	RenderNoAccess(w http.ResponseWriter, r *http.Request, appName string)
+}
+
+// Deps are the collaborators the OpenID Connect endpoints use.
+type Deps struct {
+	Cfg      *config.Config
+	Store    *store.Store
+	Keys     *KeyManager
+	Audit    *audit.Recorder
+	Log      *slog.Logger
+	Renderer Renderer
+	Now      func() time.Time // nil means time.Now
+}
+
+// Provider serves the OpenID Connect endpoints.
+type Provider struct {
+	d      Deps
+	issuer string
+}
+
+// NewProvider returns a Provider whose issuer is the configured public URL.
+func NewProvider(d Deps) *Provider {
+	if d.Log == nil {
+		d.Log = slog.Default()
+	}
+	if d.Now == nil {
+		d.Now = time.Now
+	}
+	return &Provider{d: d, issuer: d.Cfg.Issuer()}
+}
+
+// Mount registers the OpenID Connect routes on mux.
+func (p *Provider) Mount(mux *http.ServeMux) {
+	mux.HandleFunc("GET /.well-known/openid-configuration", p.discovery)
+	mux.HandleFunc("GET /.well-known/jwks.json", p.jwks)
+	mux.HandleFunc("GET /oauth/authorize", p.authorize)
+	mux.HandleFunc("POST /oauth/authorize", p.authorize)
+	// Endpoints not yet implemented answer, so every address in the
+	// discovery document resolves.
+	for _, path := range []string{"/oauth/token", "/oauth/userinfo", "/oauth/revoke", "/oauth/introspect", "/oauth/logout"} {
+		mux.HandleFunc(path, unavailable)
+	}
+}
+
+func (p *Provider) now() time.Time { return p.d.Now().UTC() }
+
+// discoveryDocument is the OpenID Provider metadata (OpenID Connect
+// Discovery 1.0 §3).
+type discoveryDocument struct {
+	Issuer                            string   `json:"issuer"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
+	TokenEndpoint                     string   `json:"token_endpoint"`
+	UserinfoEndpoint                  string   `json:"userinfo_endpoint"`
+	JWKSURI                           string   `json:"jwks_uri"`
+	EndSessionEndpoint                string   `json:"end_session_endpoint"`
+	RevocationEndpoint                string   `json:"revocation_endpoint"`
+	IntrospectionEndpoint             string   `json:"introspection_endpoint"`
+	ResponseTypesSupported            []string `json:"response_types_supported"`
+	GrantTypesSupported               []string `json:"grant_types_supported"`
+	SubjectTypesSupported             []string `json:"subject_types_supported"`
+	IDTokenSigningAlgValuesSupported  []string `json:"id_token_signing_alg_values_supported"`
+	ScopesSupported                   []string `json:"scopes_supported"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+	ClaimsSupported                   []string `json:"claims_supported"`
+	// RFC 9207: authorization responses carry iss.
+	AuthorizationResponseISSParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+}
+
+func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, "public, max-age=3600", discoveryDocument{
+		Issuer:                            p.issuer,
+		AuthorizationEndpoint:             p.issuer + "/oauth/authorize",
+		TokenEndpoint:                     p.issuer + "/oauth/token",
+		UserinfoEndpoint:                  p.issuer + "/oauth/userinfo",
+		JWKSURI:                           p.issuer + "/.well-known/jwks.json",
+		EndSessionEndpoint:                p.issuer + "/oauth/logout",
+		RevocationEndpoint:                p.issuer + "/oauth/revoke",
+		IntrospectionEndpoint:             p.issuer + "/oauth/introspect",
+		ResponseTypesSupported:            []string{"code"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", "client_credentials"},
+		SubjectTypesSupported:             []string{"public"},
+		IDTokenSigningAlgValuesSupported:  []string{signingAlg},
+		ScopesSupported:                   knownScopes,
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
+		CodeChallengeMethodsSupported:     []string{pkceS256},
+		ClaimsSupported: []string{"sub", "email", "email_verified", "name", "preferred_username",
+			"groups", "metadata", "group_metadata", "is_admin", "updated_at"},
+		AuthorizationResponseISSParameterSupported: true,
+	})
+}
+
+func (p *Provider) jwks(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, "public, max-age=3600", p.d.Keys.JWKS())
+}
+
+// unavailable answers an endpoint that is not implemented yet.
+func unavailable(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusNotImplemented, "no-store", map[string]string{"error": "temporarily_unavailable"})
+}
+
+// writeJSON writes v as a JSON response with the given status and
+// Cache-Control.
+func writeJSON(w http.ResponseWriter, status int, cacheControl string, v any) {
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("Cache-Control", cacheControl)
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}

@@ -5,7 +5,9 @@ package testenv
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -70,6 +72,8 @@ type Env struct {
 	Enc *secrets.Encryptor
 	// Keys holds the token signing keys, stored in Store and sealed by Enc.
 	Keys *oidc.KeyManager
+	// Provider serves the OpenID Connect endpoints, on Clock's time.
+	Provider *oidc.Provider
 
 	// background counts the server's work after responding (reset emails).
 	background *sync.WaitGroup
@@ -171,6 +175,9 @@ func New(t *testing.T, opts ...Option) *Env {
 		t.Fatalf("testenv: signing keys: %v", err)
 	}
 	keys.WithAudit(rec)
+	prov := oidc.NewProvider(oidc.Deps{
+		Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend, Now: clock.Now,
+	})
 
 	h := web.New(web.Deps{
 		Cfg:        cfg,
@@ -182,12 +189,14 @@ func New(t *testing.T, opts ...Option) *Env {
 		Log:        log,
 		Renderer:   rend,
 		Limits:     web.NewLimiters(clock.Now),
+		OIDC:       prov,
 		Background: background,
 		Version:    Version,
 	})
 	handler.Store(&h)
 
-	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc, Keys: keys, background: background}
+	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc, Keys: keys,
+		Provider: prov, background: background}
 }
 
 // EnrolTOTP enrols u in TOTP directly through the store, as if they had
@@ -303,4 +312,57 @@ func (e *Env) Login(t *testing.T, c *http.Client, email, pw string) {
 		}
 	}
 	t.Fatalf("testenv: login %s: no %s cookie", email, session.CookieName)
+}
+
+// AuthorizeRaw sends an authorization request with params from c and
+// returns the response unread; the caller closes its body.
+func (e *Env) AuthorizeRaw(t *testing.T, c *http.Client, params url.Values) *http.Response {
+	t.Helper()
+	resp, err := c.Get(e.TS.URL + "/oauth/authorize?" + params.Encode())
+	if err != nil {
+		t.Fatalf("testenv: authorize: %v", err)
+	}
+	return resp
+}
+
+// Authorize asks for a code for app with c, which must be signed in, at
+// app's first redirect URI with scope "openid profile email groups" and a
+// random state and nonce, using PKCE (S256) when pkce is set. It fails the
+// test unless the server redirects back with a code and the same state, and
+// returns the code, the PKCE verifier ("" without PKCE) and the state.
+func (e *Env) Authorize(t *testing.T, c *http.Client, app *model.Application, pkce bool) (code, verifier, state string) {
+	t.Helper()
+	state = secrets.RandomToken(16)
+	params := url.Values{
+		"response_type": {"code"},
+		"client_id":     {app.ClientID},
+		"redirect_uri":  {app.RedirectURIs[0]},
+		"scope":         {"openid profile email groups"},
+		"state":         {state},
+		"nonce":         {secrets.RandomToken(16)},
+	}
+	if pkce {
+		verifier = secrets.RandomToken(32)
+		sum := sha256.Sum256([]byte(verifier))
+		params.Set("code_challenge", base64.RawURLEncoding.EncodeToString(sum[:]))
+		params.Set("code_challenge_method", "S256")
+	}
+	resp := e.AuthorizeRaw(t, c, params)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("testenv: authorize %s: status %d (Location %q), want 302",
+			app.Slug, resp.StatusCode, resp.Header.Get("Location"))
+	}
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("testenv: authorize %s: Location: %v", app.Slug, err)
+	}
+	q := loc.Query()
+	if code = q.Get("code"); code == "" {
+		t.Fatalf("testenv: authorize %s: no code (error %q: %s)", app.Slug, q.Get("error"), q.Get("error_description"))
+	}
+	if q.Get("state") != state {
+		t.Fatalf("testenv: authorize %s: state %q, want %q", app.Slug, q.Get("state"), state)
+	}
+	return code, verifier, state
 }
