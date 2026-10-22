@@ -9,11 +9,13 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"latch/internal/audit"
 	"latch/internal/config"
+	"latch/internal/mail"
 	"latch/internal/model"
 	"latch/internal/secrets"
 	"latch/internal/store"
@@ -33,10 +35,11 @@ var (
 	resetLinkRE = regexp.MustCompile(`/reset/([A-Za-z0-9_-]{43})\b`)
 )
 
-// mailedLink returns the path of the reset link in the last email sent,
-// checking the full link starts with the public URL.
+// mailedLink waits for emails being sent and returns the path of the reset
+// link in the last one, checking the full link starts with the public URL.
 func mailedLink(t *testing.T, env *testenv.Env) string {
 	t.Helper()
+	env.WaitMail(t)
 	msg, ok := env.Mailer.Last()
 	if !ok {
 		t.Fatal("no email sent")
@@ -143,6 +146,7 @@ func TestResetRequestSendsMailOnlyForActiveUsers(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || body != unknown {
 		t.Fatalf("inactive user: status %d, page differs from unknown email:\n%s", resp.StatusCode, body)
 	}
+	env.WaitMail(t)
 	if n := len(env.Mailer.Sent); n != 0 {
 		t.Fatalf("sent %d emails for unknown and inactive users", n)
 	}
@@ -151,6 +155,7 @@ func TestResetRequestSendsMailOnlyForActiveUsers(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || body != unknown {
 		t.Fatalf("active user: status %d, page differs from unknown email:\n%s", resp.StatusCode, body)
 	}
+	env.WaitMail(t)
 	if n := len(env.Mailer.Sent); n != 1 {
 		t.Fatalf("sent %d emails, want 1", n)
 	}
@@ -365,6 +370,7 @@ func TestResetThrottled(t *testing.T) {
 	}
 	sent := func(want int) {
 		t.Helper()
+		env.WaitMail(t)
 		if n := len(env.Mailer.Sent); n != want {
 			t.Fatalf("sent %d emails, want %d", n, want)
 		}
@@ -385,6 +391,61 @@ func TestResetThrottled(t *testing.T) {
 	}
 	request("sam@example.org") // the IP's 21st request this hour
 	sent(4)
+}
+
+// gatedMailer holds every Send until release is closed, then passes the
+// message on.
+type gatedMailer struct {
+	next    mail.Mailer
+	sending chan struct{} // receives once per Send that has started
+	release chan struct{}
+}
+
+func (g *gatedMailer) Send(ctx context.Context, m mail.Message) error {
+	g.sending <- struct{}{}
+	select {
+	case <-g.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return g.next.Send(ctx, m)
+}
+
+// A request for an address with an account must not wait for the email:
+// the time the SMTP exchange takes would tell that the account exists.
+func TestResetRespondsBeforeMailIsSent(t *testing.T) {
+	gate := &gatedMailer{sending: make(chan struct{}, 1), release: make(chan struct{})}
+	env := testenv.New(t, testenv.WithMailer(func(m *mail.Memory) mail.Mailer {
+		gate.next = m
+		return gate
+	}))
+	release := sync.OnceFunc(func() { close(gate.release) })
+	t.Cleanup(release)
+	env.CreateUser(t, "alex@example.org", testPW)
+	c := env.Client(t)
+	c.Timeout = 2 * time.Second // a response held up by the mail fails here
+
+	resp, body := post(t, env, c, "/reset", url.Values{"email": {"alex@example.org"}})
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, resetSent) {
+		t.Fatalf("status %d\n%s", resp.StatusCode, body)
+	}
+	select {
+	case <-gate.sending:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the email was never sent")
+	}
+	if n := len(env.Mailer.Sent); n != 0 {
+		t.Fatalf("%d emails delivered while the mailer was held", n)
+	}
+
+	release()
+	path := mailedLink(t, env)
+	if _, err := env.Store.PeekResetToken(context.Background(), tokenHash(path)); err != nil {
+		t.Fatalf("mailed token: %v", err)
+	}
+	if n := len(auditEvents(t, env, audit.PasswordResetRequested)); n != 1 {
+		t.Fatalf("reset requested events: %d, want 1", n)
+	}
 }
 
 func TestChangePassword(t *testing.T) {

@@ -94,10 +94,11 @@ func (s *Server) resetRequestPage(w http.ResponseWriter, r *http.Request) {
 	s.d.Renderer.Render(w, r, http.StatusOK, "reset_request", Page{Title: "Reset your password"})
 }
 
-// resetRequest emails a reset link when the address belongs to an active
-// user. The page that follows is the same whatever happened (no account,
-// an inactive one, throttled, or the email failed), so it does not reveal
-// which addresses have accounts.
+// resetRequest emails a reset link, in the background, when the address
+// belongs to an active user. The page that follows is the same, and comes
+// as quickly, whatever happened (no account, an inactive one, throttled,
+// or the email failed), so it does not reveal which addresses have
+// accounts.
 func (s *Server) resetRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
@@ -121,11 +122,30 @@ func (s *Server) resetRequest(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, "reset request: look up user", err)
 		return
 	case user.IsActive:
-		if err := s.SendReset(ctx, user, model.ResetPurposeReset); err != nil {
-			s.d.Log.ErrorContext(ctx, "reset request: send link", "user_id", user.ID, "error", err)
-		}
+		s.sendResetInBackground(ctx, user, model.ResetPurposeReset)
 	}
 	sent()
+}
+
+// mailTimeout bounds an email sent in the background, token and all.
+const mailTimeout = 30 * time.Second
+
+// sendResetInBackground runs SendReset (the token insert, the email and the
+// audit event) alongside the response rather than before it. Otherwise a
+// request for an address with an account would take longer, by the time
+// of a database write and an SMTP exchange, and so reveal the account. A
+// failure is logged with the user ID and purpose only: mail errors can
+// echo the recipient's address.
+func (s *Server) sendResetInBackground(ctx context.Context, user *model.User, purpose model.ResetPurpose) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mailTimeout)
+	s.d.Background.Add(1)
+	go func() {
+		defer s.d.Background.Done()
+		defer cancel()
+		if err := s.SendReset(ctx, user, purpose); err != nil {
+			s.d.Log.ErrorContext(ctx, "send reset email failed", "user_id", user.ID, "purpose", string(purpose))
+		}
+	}()
 }
 
 // resetTarget returns the hash of the request's {token} and, when the token

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -144,17 +145,22 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// Emails already under way (each bounded by its own timeout) finish
+	// before the database closes, however serve returns.
+	var background sync.WaitGroup
+	defer background.Wait()
 	handler := web.New(web.Deps{
-		Cfg:      cfg,
-		Store:    st,
-		Sessions: session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
-		Mailer:   mailer,
-		Audit:    audit.New(st, log),
-		Enc:      enc,
-		Log:      log,
-		Renderer: rend,
-		Limits:   web.NewLimiters(time.Now),
-		Version:  Version,
+		Cfg:        cfg,
+		Store:      st,
+		Sessions:   session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
+		Mailer:     mailer,
+		Audit:      audit.New(st, log),
+		Enc:        enc,
+		Log:        log,
+		Renderer:   rend,
+		Limits:     web.NewLimiters(time.Now),
+		Background: &background,
+		Version:    Version,
 	})
 
 	srv := &http.Server{

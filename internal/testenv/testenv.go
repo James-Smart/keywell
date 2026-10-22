@@ -67,16 +67,48 @@ type Env struct {
 	Clock  *Clock
 	// Enc is the server's encryptor, for sealing and opening TOTP secrets.
 	Enc *secrets.Encryptor
+
+	// background counts the server's work after responding (reset emails).
+	background *sync.WaitGroup
+}
+
+// mailWait bounds WaitMail, so a stuck send fails the test instead of
+// hanging it.
+const mailWait = 10 * time.Second
+
+// WaitMail waits for the emails the server is sending in the background,
+// so a test can then assert on Mailer.Sent.
+func (e *Env) WaitMail(t *testing.T) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		e.background.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(mailWait):
+		t.Fatalf("testenv: emails still sending after %v", mailWait)
+	}
 }
 
 // Option adjusts how New builds the stack.
 type Option func(*options)
 
-type options struct{ config []func(*config.Config) }
+type options struct {
+	config []func(*config.Config)
+	mailer func(*mail.Memory) mail.Mailer
+}
 
 // WithConfig edits the config after the defaults (and PublicURL) are set.
 func WithConfig(f func(*config.Config)) Option {
 	return func(o *options) { o.config = append(o.config, f) }
+}
+
+// WithMailer gives the server wrap(Env.Mailer) as its mailer, e.g. to hold
+// or fail sends. Env.Mailer records what the wrapper passes on.
+func WithMailer(wrap func(*mail.Memory) mail.Mailer) Option {
+	return func(o *options) { o.mailer = wrap }
 }
 
 // New builds the full stack: test store, memory mailer, fake clock, the
@@ -118,26 +150,35 @@ func New(t *testing.T, opts ...Option) *Env {
 	}
 	st, db := store.OpenTestDB(t)
 	mailer := &mail.Memory{}
+	var serverMailer mail.Mailer = mailer
+	if o.mailer != nil {
+		serverMailer = o.mailer(mailer)
+	}
 	clock := &Clock{t: time.Now().UTC()}
+	// Registered after the database's cleanup, so it runs first: background
+	// work finishes before the database closes.
+	background := new(sync.WaitGroup)
+	t.Cleanup(background.Wait)
 
 	sessions := session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies())
 	sessions.SetClock(clock.Now)
 
 	h := web.New(web.Deps{
-		Cfg:      cfg,
-		Store:    st,
-		Sessions: sessions,
-		Mailer:   mailer,
-		Audit:    audit.New(st, log),
-		Enc:      enc,
-		Log:      log,
-		Renderer: rend,
-		Limits:   web.NewLimiters(clock.Now),
-		Version:  Version,
+		Cfg:        cfg,
+		Store:      st,
+		Sessions:   sessions,
+		Mailer:     serverMailer,
+		Audit:      audit.New(st, log),
+		Enc:        enc,
+		Log:        log,
+		Renderer:   rend,
+		Limits:     web.NewLimiters(clock.Now),
+		Background: background,
+		Version:    Version,
 	})
 	handler.Store(&h)
 
-	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc}
+	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock, Enc: enc, background: background}
 }
 
 // EnrolTOTP enrols u in TOTP directly through the store, as if they had

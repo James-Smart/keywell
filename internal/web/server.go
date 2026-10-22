@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"latch/internal/audit"
 	"latch/internal/config"
@@ -35,6 +36,11 @@ type Deps struct {
 	// OIDC mounts the OpenID Connect endpoints; nil leaves them out.
 	OIDC interface{ Mount(*http.ServeMux) }
 
+	// Background counts work handlers carry on with after responding
+	// (emailing reset links), so the caller can wait for it, e.g. before
+	// exiting. nil when nobody waits.
+	Background *sync.WaitGroup
+
 	Version string
 }
 
@@ -54,6 +60,9 @@ func newServer(d Deps) *Server {
 	dummy, err := password.Hash(dummyPassword)
 	if err != nil {
 		panic(fmt.Sprintf("web: hash dummy password: %v", err)) // crypto/rand failed
+	}
+	if d.Background == nil {
+		d.Background = new(sync.WaitGroup)
 	}
 	return &Server{d: d, dummyHash: dummy}
 }
