@@ -49,7 +49,11 @@ func wrapWrite(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+// timeLayout is fixed-width UTC (always 9 fractional digits) so that string
+// comparison of stored timestamps orders chronologically.
+const timeLayout = "2006-01-02T15:04:05.000000000Z"
+
+func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
 
 func parseTime(s string) (time.Time, error) {
 	t, err := time.Parse(time.RFC3339Nano, s)
