@@ -63,6 +63,7 @@ func (e *oauthError) Error() string { return e.code + ": " + e.description }
 
 var (
 	errClientAuth = &oauthError{"invalid_client", "client authentication failed"}
+	errBadCode    = &oauthError{"invalid_grant", "the code is invalid, expired or already used"}
 	errNoAccess   = &oauthError{"invalid_grant", "the account is disabled or no longer has access to this application"}
 	errBadRefresh = &oauthError{"invalid_grant", "the refresh token is invalid, expired or revoked"}
 )
@@ -234,14 +235,16 @@ func (p *Provider) codeGrant(ctx context.Context, app *model.Application, form u
 	}
 	ac, err := p.d.Store.ConsumeAuthCode(ctx, secrets.HashToken(code))
 	if errors.Is(err, store.ErrNotFound) {
-		return tokenResponse{}, nil, &oauthError{"invalid_grant", "the code is invalid, expired or already used"}
+		return tokenResponse{}, nil, errBadCode
 	}
 	if err != nil {
 		return tokenResponse{}, nil, fmt.Errorf("code grant: consume code: %w", err)
 	}
 	switch {
 	case ac.ApplicationID != app.ID:
-		return tokenResponse{}, nil, &oauthError{"invalid_grant", "the code was issued to another application"}
+		// The same answer as for a code that does not exist, so another
+		// application cannot use this endpoint to learn a code is genuine.
+		return tokenResponse{}, nil, errBadCode
 	case ac.RedirectURI != form.Get("redirect_uri"):
 		return tokenResponse{}, nil, &oauthError{"invalid_grant", "redirect_uri does not match the authorization request"}
 	case !verifierMatches(ac.CodeChallenge, form.Get("code_verifier")):

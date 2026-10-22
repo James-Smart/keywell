@@ -369,6 +369,13 @@ func TestCodeBoundToClientAndRedirectURI(t *testing.T) {
 	code, _, _ := env.Authorize(t, c, wiki, false)
 	body, resp := env.Exchange(t, tools, toolsSecret, code, "", wikiRedirect)
 	tokenFails(t, resp, body, 400, "invalid_grant")
+	// Another client learns nothing, not even that the code is real: its
+	// answer is the one for a code that never existed.
+	unknown, resp := env.Exchange(t, tools, toolsSecret, secrets.RandomToken(32), "", wikiRedirect)
+	tokenFails(t, resp, unknown, 400, "invalid_grant")
+	if !reflect.DeepEqual(body, unknown) {
+		t.Errorf("another client's code: %v\nunknown code: %v\nwant the same answer", body, unknown)
+	}
 	// The attempt used the code up.
 	body, resp = env.Exchange(t, wiki, wikiSecret, code, "", wikiRedirect)
 	tokenFails(t, resp, body, 400, "invalid_grant")
