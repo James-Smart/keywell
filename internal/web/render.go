@@ -41,8 +41,7 @@ type Page struct {
 type view struct {
 	Page
 	Brand Brand
-	User  *model.User // nil when signed out
-	CSRF  string      // always empty: CSRF is handled by http.CrossOriginProtection
+	User  *model.User // nil unless signed in with every login step passed
 }
 
 // NewRenderer parses the embedded templates once. Each page file is parsed
@@ -88,7 +87,7 @@ func (rd *Renderer) Render(w http.ResponseWriter, r *http.Request, status int, n
 		return
 	}
 	v := view{Page: p, Brand: rd.brand}
-	if _, u, ok := session.FromContext(r.Context()); ok {
+	if sess, u, ok := session.FromContext(r.Context()); ok && sess.TOTPPassed {
 		v.User = u
 	}
 	var buf bytes.Buffer

@@ -190,18 +190,23 @@ func FromContext(ctx context.Context) (*model.Session, *model.User, bool) {
 	return l.sess, l.user, true
 }
 
-// RequireUser redirects to the login page, with the current URL as next,
-// unless the request has a session that has passed every login step. A
-// session still waiting for its second factor counts only on the pages
-// AllowIncomplete names.
+// RequireUser lets the request through only when it has a session that has
+// passed every login step, with the current URL as next on any redirect:
+// without a session to the login page, and with a session still waiting for
+// its second factor to the second step, except on the pages AllowIncomplete
+// names.
 func RequireUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, _, ok := FromContext(r.Context())
-		if !ok || (!sess.TOTPPassed && !AllowIncomplete(r.URL.Path)) {
-			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
-			return
+		back := url.QueryEscape(r.URL.RequestURI())
+		switch {
+		case !ok:
+			http.Redirect(w, r, "/login?next="+back, http.StatusSeeOther)
+		case !sess.TOTPPassed && !AllowIncomplete(r.URL.Path):
+			http.Redirect(w, r, "/login/totp?next="+back, http.StatusSeeOther)
+		default:
+			next.ServeHTTP(w, r)
 		}
-		next.ServeHTTP(w, r)
 	})
 }
 

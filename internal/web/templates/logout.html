@@ -1,0 +1,9 @@
+{{define "content"}}
+<h1>Sign out</h1>
+{{- with .User}}
+<p>You're signed in as {{.Email}}.</p>
+{{- end}}
+<form method="post" action="/logout" class="form">
+  <button type="submit">Sign out</button>
+</form>
+{{end}}

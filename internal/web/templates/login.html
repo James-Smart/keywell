@@ -1,10 +1,20 @@
 {{define "content"}}
 <h1>Sign in</h1>
+{{- with .Data.AppName}}
+<p>to continue to <strong>{{.}}</strong></p>
+{{- end}}
 <form method="post" action="/login" class="form">
+  {{- with .Data.Next}}
+  <input type="hidden" name="next" value="{{.}}">
+  {{- end}}
+  {{- with .Data.App}}
+  <input type="hidden" name="app" value="{{.}}">
+  {{- end}}
   <label for="email">Email</label>
-  <input id="email" name="email" type="email" autocomplete="username" required autofocus>
+  <input id="email" name="email" type="email" autocomplete="username" value="{{.Data.Email}}" required autofocus>
   <label for="password">Password</label>
   <input id="password" name="password" type="password" autocomplete="current-password" required>
   <button type="submit">Sign in</button>
 </form>
+<p><a href="/reset">Forgot your password?</a></p>
 {{end}}

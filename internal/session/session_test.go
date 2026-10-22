@@ -245,7 +245,7 @@ func TestRequireUser(t *testing.T) {
 	}{
 		{"no session", nil, "/account?x=1", http.StatusSeeOther, "/login?next=%2Faccount%3Fx%3D1"},
 		{"complete session", full, "/account", http.StatusOK, ""},
-		{"incomplete session", partial, "/account", http.StatusSeeOther, "/login?next=%2Faccount"},
+		{"incomplete session", partial, "/account?x=1", http.StatusSeeOther, "/login/totp?next=%2Faccount%3Fx%3D1"},
 		{"incomplete session on an allowed page", partial, "/account/totp", http.StatusOK, ""},
 	}
 	for _, tc := range cases {

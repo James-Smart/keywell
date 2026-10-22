@@ -5,6 +5,7 @@ package testenv
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -22,7 +23,6 @@ import (
 	"latch/internal/mail"
 	"latch/internal/model"
 	"latch/internal/password"
-	"latch/internal/ratelimit"
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
@@ -56,8 +56,11 @@ func (c *Clock) Advance(d time.Duration) {
 
 // Env is a running test stack.
 type Env struct {
-	TS     *httptest.Server
-	Store  *store.Store
+	TS    *httptest.Server
+	Store *store.Store
+	// DB is the store's database, for reading tables the store has no
+	// reader for, such as audit_events.
+	DB     *sql.DB
 	Mailer *mail.Memory
 	Cfg    *config.Config
 	Clock  *Clock
@@ -110,36 +113,28 @@ func New(t *testing.T, opts ...Option) *Env {
 	if err != nil {
 		t.Fatalf("testenv: renderer: %v", err)
 	}
-	st := store.OpenTest(t)
+	st, db := store.OpenTestDB(t)
 	mailer := &mail.Memory{}
 	clock := &Clock{t: time.Now().UTC()}
 
 	sessions := session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies())
 	sessions.SetClock(clock.Now)
-	limiter := func(limit int, window time.Duration) *ratelimit.Limiter {
-		l := ratelimit.New(limit, window)
-		l.SetClock(clock.Now)
-		return l
-	}
 
 	h := web.New(web.Deps{
-		Cfg:                 cfg,
-		Store:               st,
-		Sessions:            sessions,
-		Mailer:              mailer,
-		Audit:               audit.New(st, log),
-		Enc:                 enc,
-		Log:                 log,
-		Renderer:            rend,
-		LoginLimiterAccount: limiter(10, 15*time.Minute),
-		LoginLimiterIP:      limiter(50, 15*time.Minute),
-		ResetLimiterAccount: limiter(3, time.Hour),
-		ResetLimiterIP:      limiter(20, time.Hour),
-		Version:             Version,
+		Cfg:      cfg,
+		Store:    st,
+		Sessions: sessions,
+		Mailer:   mailer,
+		Audit:    audit.New(st, log),
+		Enc:      enc,
+		Log:      log,
+		Renderer: rend,
+		Limits:   web.NewLimiters(clock.Now),
+		Version:  Version,
 	})
 	handler.Store(&h)
 
-	return &Env{TS: ts, Store: st, Mailer: mailer, Cfg: cfg, Clock: clock}
+	return &Env{TS: ts, Store: st, DB: db, Mailer: mailer, Cfg: cfg, Clock: clock}
 }
 
 // CreateUser creates an active member with the given password (none if
@@ -212,7 +207,8 @@ func (e *Env) Client(t *testing.T) *http.Client {
 	}
 }
 
-// Login posts the sign-in form with c, which keeps the session cookie.
+// Login posts the sign-in form with c and fails the test unless the
+// password is accepted: a 303 and a session cookie in c's jar.
 func (e *Env) Login(t *testing.T, c *http.Client, email, pw string) {
 	t.Helper()
 	resp, err := c.PostForm(e.TS.URL+"/login", url.Values{"email": {email}, "password": {pw}})
@@ -220,7 +216,17 @@ func (e *Env) Login(t *testing.T, c *http.Client, email, pw string) {
 		t.Fatalf("testenv: login: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		t.Fatalf("testenv: login %s: status %d", email, resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("testenv: login %s: status %d, want 303", email, resp.StatusCode)
 	}
+	u, err := url.Parse(e.TS.URL)
+	if err != nil {
+		t.Fatalf("testenv: parse server URL: %v", err)
+	}
+	for _, ck := range c.Jar.Cookies(u) {
+		if ck.Name == session.CookieName {
+			return
+		}
+	}
+	t.Fatalf("testenv: login %s: no %s cookie", email, session.CookieName)
 }

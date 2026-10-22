@@ -19,7 +19,6 @@ import (
 	"latch/internal/config"
 	"latch/internal/db"
 	"latch/internal/mail"
-	"latch/internal/ratelimit"
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
@@ -146,19 +145,16 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		return err
 	}
 	handler := web.New(web.Deps{
-		Cfg:                 cfg,
-		Store:               st,
-		Sessions:            session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
-		Mailer:              mailer,
-		Audit:               audit.New(st, log),
-		Enc:                 enc,
-		Log:                 log,
-		Renderer:            rend,
-		LoginLimiterAccount: ratelimit.New(10, 15*time.Minute),
-		LoginLimiterIP:      ratelimit.New(50, 15*time.Minute),
-		ResetLimiterAccount: ratelimit.New(3, time.Hour),
-		ResetLimiterIP:      ratelimit.New(20, time.Hour),
-		Version:             Version,
+		Cfg:      cfg,
+		Store:    st,
+		Sessions: session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
+		Mailer:   mailer,
+		Audit:    audit.New(st, log),
+		Enc:      enc,
+		Log:      log,
+		Renderer: rend,
+		Limits:   web.NewLimiters(time.Now),
+		Version:  Version,
 	})
 
 	srv := &http.Server{

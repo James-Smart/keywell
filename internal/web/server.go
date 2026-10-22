@@ -4,6 +4,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 	"latch/internal/audit"
 	"latch/internal/config"
 	"latch/internal/mail"
-	"latch/internal/ratelimit"
+	"latch/internal/password"
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
@@ -29,8 +30,7 @@ type Deps struct {
 	Enc      *secrets.Encryptor
 	Log      *slog.Logger
 	Renderer *Renderer
-
-	LoginLimiterAccount, LoginLimiterIP, ResetLimiterAccount, ResetLimiterIP *ratelimit.Limiter
+	Limits   Limiters
 
 	// OIDC mounts the OpenID Connect endpoints; nil leaves them out.
 	OIDC interface{ Mount(*http.ServeMux) }
@@ -39,7 +39,24 @@ type Deps struct {
 }
 
 // Server holds the dependencies of the page handlers.
-type Server struct{ d Deps }
+type Server struct {
+	d Deps
+	// dummyHash is verified against when a sign-in names no usable
+	// password, so the response time does not reveal whether it exists.
+	dummyHash string
+}
+
+// dummyPassword is what dummyHash hashes. Knowing it gains nothing: a
+// sign-in that matches no user fails whatever the password.
+const dummyPassword = "latch dummy password"
+
+func newServer(d Deps) *Server {
+	dummy, err := password.Hash(dummyPassword)
+	if err != nil {
+		panic(fmt.Sprintf("web: hash dummy password: %v", err)) // crypto/rand failed
+	}
+	return &Server{d: d, dummyHash: dummy}
+}
 
 // New returns the complete HTTP handler: routes wrapped in the middleware
 // chain (outermost first) recover, real IP, request log, security headers,
@@ -49,7 +66,7 @@ func New(d Deps) http.Handler {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	s := &Server{d: d}
+	s := newServer(d)
 
 	pages := http.NewServeMux()
 	s.routes(pages)
@@ -73,14 +90,25 @@ func New(d Deps) http.Handler {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /login", s.loginPlaceholder)
-	mux.HandleFunc("POST /login", s.loginPlaceholder)
+	mux.Handle("GET /{$}", session.RequireUser(http.HandlerFunc(s.homePlaceholder)))
+	mux.HandleFunc("GET /login", s.loginPage)
+	mux.HandleFunc("POST /login", s.login)
+	mux.HandleFunc("GET /logout", s.logoutPage)
+	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("GET /logout/done", s.signedOut)
 }
 
-// loginPlaceholder shows the sign-in form for both GET and POST until the
-// real sign-in handlers replace it.
-func (s *Server) loginPlaceholder(w http.ResponseWriter, r *http.Request) {
-	s.d.Renderer.Render(w, r, http.StatusOK, "login", Page{Title: "Sign in"})
+// homePlaceholder is where sign-in lands until the member home replaces it.
+func (s *Server) homePlaceholder(w http.ResponseWriter, r *http.Request) {
+	s.d.Renderer.Render(w, r, http.StatusOK, "home", Page{Title: "Home"})
+}
+
+// serverError logs err and shows the generic error page. what names the
+// failed step for the log; the visitor never sees it.
+func (s *Server) serverError(w http.ResponseWriter, r *http.Request, what string, err error) {
+	s.d.Log.ErrorContext(r.Context(), what, "error", err)
+	s.d.Renderer.RenderError(w, r, http.StatusInternalServerError, "Something went wrong",
+		"Something went wrong on our side. Please try again in a moment.")
 }
 
 func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
