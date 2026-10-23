@@ -314,6 +314,13 @@ func noteChange[T comparable](c changeSet, field string, old, new T) {
 	}
 }
 
+// noteSliceChange records field in c when the slices old and new differ.
+func noteSliceChange[T comparable](c changeSet, field string, old, new []T) {
+	if !slices.Equal(old, new) {
+		c[field] = map[string]any{"from": old, "to": new}
+	}
+}
+
 // noteMetadata records metadata in c, without its values, when old and new
 // differ as JSON.
 func (c changeSet) noteMetadata(old, new map[string]any) {

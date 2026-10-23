@@ -18,6 +18,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 
 	"latch/internal/audit"
+	"latch/internal/model"
 	"latch/internal/oidc"
 	"latch/internal/secrets"
 	"latch/internal/store"
@@ -480,5 +481,38 @@ func TestReloadPicksUpAnotherManagersChanges(t *testing.T) {
 	}
 	if rows, _ := s.ListSigningKeys(ctx); len(rows) != 2 {
 		t.Fatalf("%d signing keys after reloads, want 2", len(rows))
+	}
+}
+
+func TestRotateAsRecordsActor(t *testing.T) {
+	ctx := context.Background()
+	s, _ := storetest.OpenTestDB(t)
+	k := newKeyManager(t, s, newEncryptor(t)).WithAudit(audit.New(s, slog.New(slog.NewTextHandler(io.Discard, nil))))
+
+	kid, err := k.RotateAs(ctx, model.ActorUser, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Rotate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.ListAuditEvents(ctx, store.AuditFilter{Actions: []string{audit.KeyRotated}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Rows) != 2 {
+		t.Fatalf("%d rotate events, want 2", len(page.Rows))
+	}
+	var sawUser, sawSystem bool
+	for _, r := range page.Rows { // newest first
+		switch {
+		case r.ActorType == model.ActorUser && r.ActorID == "u1" && r.TargetID == kid:
+			sawUser = true
+		case r.ActorType == audit.ActorSystem && r.ActorID == "":
+			sawSystem = true
+		}
+	}
+	if !sawUser || !sawSystem {
+		t.Fatalf("events %+v: want one by user u1 for %s and one by system", page.Rows, kid)
 	}
 }

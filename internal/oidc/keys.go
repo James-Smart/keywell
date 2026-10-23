@@ -152,9 +152,15 @@ func (k *KeyManager) EnsureKey(ctx context.Context) error {
 	return k.add(ctx, nk)
 }
 
-// Rotate generates a new key and makes it active. Earlier keys stay
-// published until RetireOlderThan retires them.
+// Rotate generates a new key and makes it active, recording the rotation as
+// made by the system. Earlier keys stay published until RetireOlderThan
+// retires them.
 func (k *KeyManager) Rotate(ctx context.Context) (newKID string, err error) {
+	return k.RotateAs(ctx, audit.ActorSystem, "")
+}
+
+// RotateAs is Rotate with the rotation recorded as made by this actor.
+func (k *KeyManager) RotateAs(ctx context.Context, actorType model.ActorType, actorID string) (newKID string, err error) {
 	nk, err := k.generate()
 	if err != nil {
 		return "", err
@@ -167,7 +173,7 @@ func (k *KeyManager) Rotate(ctx context.Context) (newKID string, err error) {
 		return "", err
 	}
 	if rec != nil {
-		rec.Record(ctx, model.AuditEvent{ActorType: audit.ActorSystem, Action: audit.KeyRotated,
+		rec.Record(ctx, model.AuditEvent{ActorType: actorType, ActorID: actorID, Action: audit.KeyRotated,
 			TargetType: "signing_key", TargetID: nk.kid, Summary: "Signing key rotated"})
 	}
 	return nk.kid, nil

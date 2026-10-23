@@ -188,3 +188,19 @@ func TestSMTPSendsViaLocalServer(t *testing.T) {
 		}
 	}
 }
+
+func TestTestEmail(t *testing.T) {
+	b := Brand{Name: "Make<Space>", PublicURL: "https://id.example.org"}
+	m := TestEmail(b)
+	if m.Subject != "Test email from Make<Space>" {
+		t.Errorf("subject %q", m.Subject)
+	}
+	for _, body := range []string{m.Text, m.HTML} {
+		if !strings.Contains(body, "https://id.example.org") || !strings.Contains(body, "works") {
+			t.Errorf("body missing URL or confirmation: %q", body)
+		}
+	}
+	if strings.Contains(m.HTML, "<Space>") || !strings.Contains(m.HTML, "Make&lt;Space&gt;") {
+		t.Errorf("html not escaped: %q", m.HTML)
+	}
+}

@@ -33,6 +33,15 @@ func InviteEmail(b Brand, link string, expires time.Duration) Message {
 	return Message{Subject: "Set up your " + b.Name + " account", Text: text, HTML: htmlBody}
 }
 
+// TestEmail builds the message an admin sends to check that email works.
+func TestEmail(b Brand) Message {
+	text := fmt.Sprintf("This is a test email from %s. If you can read it, email sending works.\n\n%s\n",
+		b.Name, b.PublicURL)
+	htmlBody := fmt.Sprintf("<p>This is a test email from %s. If you can read it, email sending works.</p>\n<p>%s</p>\n",
+		esc(b.Name), esc(b.PublicURL))
+	return Message{Subject: "Test email from " + b.Name, Text: text, HTML: htmlBody}
+}
+
 func esc(s string) string { return html.EscapeString(s) }
 
 // humanDuration renders d as whole days when divisible by 24 hours, otherwise
