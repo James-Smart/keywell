@@ -134,8 +134,8 @@ const mailTimeout = 30 * time.Second
 // audit event) alongside the response rather than before it. Otherwise a
 // request for an address with an account would take longer, by the time
 // of a database write and an SMTP exchange, and so reveal the account. A
-// failure is logged with the user ID and purpose only: mail errors can
-// echo the recipient's address.
+// failure is logged with the user ID, purpose and cause, the recipient's
+// address removed from the cause: mail errors often echo it.
 func (s *Server) sendResetInBackground(ctx context.Context, user *model.User, purpose model.ResetPurpose) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mailTimeout)
 	s.d.Background.Add(1)
@@ -143,9 +143,20 @@ func (s *Server) sendResetInBackground(ctx context.Context, user *model.User, pu
 		defer s.d.Background.Done()
 		defer cancel()
 		if err := s.SendReset(ctx, user, purpose); err != nil {
-			s.d.Log.ErrorContext(ctx, "send reset email failed", "user_id", user.ID, "purpose", string(purpose))
+			s.d.Log.ErrorContext(ctx, "send reset email failed", "user_id", user.ID, "purpose", string(purpose),
+				"error", redactAddress(err.Error(), user.Email))
 		}
 	}()
+}
+
+// redactAddress replaces address in msg, as given or in lower case, with
+// "[recipient]".
+func redactAddress(msg, address string) string {
+	if address == "" {
+		return msg
+	}
+	msg = strings.ReplaceAll(msg, address, "[recipient]")
+	return strings.ReplaceAll(msg, strings.ToLower(address), "[recipient]")
 }
 
 // resetTarget returns the hash of the request's {token} and, when the token

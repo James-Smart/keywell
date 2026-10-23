@@ -67,7 +67,7 @@ func cmdCreateAdmin(args []string, stdin io.Reader, stdout, stderr io.Writer) in
 // makeAdmin adds the user with email to the Admin group, creating the group
 // if it is missing and the account, with the password getPassword returns,
 // if there is none. It reports whether it created the account. A service
-// account is refused.
+// account or a deactivated account is refused: neither could sign in.
 func makeAdmin(ctx context.Context, st *store.Store, email string, getPassword func() (string, error)) (created bool, err error) {
 	user, err := st.GetUserByEmail(ctx, email)
 	switch {
@@ -77,6 +77,8 @@ func makeAdmin(ctx context.Context, st *store.Store, email string, getPassword f
 		return false, err
 	case user.Type != model.UserTypeMember:
 		return false, errServiceAccount
+	case !user.IsActive:
+		return false, errors.New("that account is deactivated")
 	}
 	group, err := ensureAdminGroup(ctx, st)
 	if err != nil {

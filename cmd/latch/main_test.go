@@ -466,6 +466,25 @@ func TestAdminCommandsRefuseServiceAccounts(t *testing.T) {
 	}
 }
 
+// An admin whose account is deactivated could not sign in, so create-admin
+// refuses rather than reporting success.
+func TestCreateAdminRefusesDeactivatedAccount(t *testing.T) {
+	ctx := context.Background()
+	cfgPath := initInstall(t)
+	_, st := openInstallation(t, cfgPath)
+	gone := &model.User{Name: "Gone", Email: "gone@example.org", IsActive: false}
+	if err := st.CreateUser(ctx, gone); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := latch("", "create-admin", "--config", cfgPath, "--email", "gone@example.org")
+	if code != 1 || stdout != "" || stderr != "latch: that account is deactivated\n" {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if names := groupNames(t, st, gone); len(names) != 0 {
+		t.Errorf("deactivated account's groups %v, want none", names)
+	}
+}
+
 func TestRotateKeys(t *testing.T) {
 	ctx := context.Background()
 	cfgPath := initInstall(t)
