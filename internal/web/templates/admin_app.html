@@ -1,0 +1,158 @@
+{{define "content"}}
+{{- with .Data}}
+{{- $app := .App}}
+{{- $form := .Form}}
+{{- $accounts := .Accounts}}
+<p class="back"><a href="/admin/apps">All applications</a></p>
+<h1>{{.Heading}}</h1>
+<div{{if $app}} class="split"{{end}}>
+  <form method="post" action="{{if $app}}/admin/apps/{{$app.ID}}{{else}}/admin/apps{{end}}" class="panel fields">
+    <h2>Basics</h2>
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" value="{{.Form.Name}}" autocomplete="off" required{{if .Errors.name}} aria-invalid="true" aria-describedby="name-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "name"}}
+    <label for="slug">Short name (used in links; leave blank to make one from the name)</label>
+    <input id="slug" name="slug" type="text" value="{{.Form.Slug}}" autocomplete="off" autocapitalize="none" spellcheck="false"{{if .Errors.slug}} aria-invalid="true" aria-describedby="slug-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "slug"}}
+    <fieldset class="checks"{{if .Errors.client_type}} aria-describedby="client_type-error"{{end}}>
+      <legend>Does the app keep a secret?</legend>
+      <label><input type="radio" name="client_type" value="confidential"{{if ne .Form.ClientType "public"}} checked{{end}}>Yes: it runs on a server, like MediaWiki</label>
+      <label><input type="radio" name="client_type" value="public"{{if eq .Form.ClientType "public"}} checked{{end}}>No: it runs in the browser or on a phone</label>
+      {{- template "admin-field-error" .Errors.For "client_type"}}
+    </fieldset>
+
+    <h2>Addresses</h2>
+    <label for="redirect_uris">Sign-in return addresses, one per line</label>
+    <textarea id="redirect_uris" name="redirect_uris" rows="3" spellcheck="false" autocapitalize="none"{{if .Errors.redirect_uris}} aria-invalid="true" aria-describedby="redirect_uris-error"{{end}}>{{.Form.RedirectURIs}}</textarea>
+    {{- template "admin-field-error" .Errors.For "redirect_uris"}}
+    <label for="post_logout_redirect_uris">Addresses to return to after signing out (optional)</label>
+    <textarea id="post_logout_redirect_uris" name="post_logout_redirect_uris" rows="2" spellcheck="false" autocapitalize="none"{{if .Errors.post_logout_redirect_uris}} aria-invalid="true" aria-describedby="post_logout_redirect_uris-error"{{end}}>{{.Form.PostLogoutRedirectURIs}}</textarea>
+    {{- template "admin-field-error" .Errors.For "post_logout_redirect_uris"}}
+
+    <h2>Who can sign in</h2>
+    <fieldset class="checks"{{if .Groups.Error}} aria-describedby="allowed_groups-error"{{end}}>
+      <legend>Groups</legend>
+      {{- $checked := .Groups.Checked}}
+      {{- range .Groups.Groups}}
+      <label><input type="checkbox" name="allowed_groups" value="{{.ID}}"{{if index $checked .ID}} checked{{end}}>{{.Name}}</label>
+      {{- else}}
+      <p class="hint">There are no groups yet.</p>
+      {{- end}}
+      {{- template "admin-field-error" .Errors.For "allowed_groups"}}
+    </fieldset>
+    <p class="hint">Leave all unticked to let every active member in.</p>
+
+    <h2>How the app recognises people</h2>
+    <label for="subject_mode">Identify people by</label>
+    <select id="subject_mode" name="subject_mode"{{if .Errors.subject_mode}} aria-invalid="true" aria-describedby="subject_mode-error"{{end}}>
+      <option value="id"{{if or (eq .Form.SubjectMode "id") (eq .Form.SubjectMode "")}} selected{{end}}>Latch ID (recommended)</option>
+      <option value="email"{{if eq .Form.SubjectMode "email"}} selected{{end}}>Email address</option>
+      <option value="username"{{if eq .Form.SubjectMode "username"}} selected{{end}}>Username</option>
+      <option value="authentik_uid"{{if eq .Form.SubjectMode "authentik_uid"}} selected{{end}}>Authentik ID (Authentik's default)</option>
+      <option value="authentik_uuid"{{if eq .Form.SubjectMode "authentik_uuid"}} selected{{end}}>Authentik UUID</option>
+      <option value="authentik_pk"{{if eq .Form.SubjectMode "authentik_pk"}} selected{{end}}>Authentik number</option>
+    </select>
+    {{- template "admin-field-error" .Errors.For "subject_mode"}}
+    <ul class="hint">
+      <li>Latch ID: A permanent ID that never changes, even if their email does.</li>
+      <li>Email address: Changes when their email changes.</li>
+      <li>Username: People without a username get their Latch ID.</li>
+    </ul>
+    <p class="hint">Changing this changes how the app recognises people, so existing accounts in the app may stop matching.</p>
+    {{- if or (eq .Form.SubjectMode "authentik_uid") (eq .Form.SubjectMode "authentik_uuid") (eq .Form.SubjectMode "authentik_pk")}}
+    <p class="note">⚠ This uses the identifier Authentik gave this app, so people's existing accounts in it keep working. People added after the move get their Latch ID instead. Switch to Latch ID once the app no longer needs Authentik's identifiers.</p>
+    {{- end}}
+
+    <h2>Home page tile</h2>
+    <fieldset class="checks">
+      <legend>Tile</legend>
+      <label><input type="checkbox" name="show_tile"{{if .Form.ShowTile}} checked{{end}}>Show on members' home page</label>
+    </fieldset>
+    <label for="launch_url">Link to open the app</label>
+    <input id="launch_url" name="launch_url" type="url" value="{{.Form.LaunchURL}}" autocomplete="off" placeholder="https://"{{if .Errors.launch_url}} aria-invalid="true" aria-describedby="launch_url-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "launch_url"}}
+    <label for="description">Description</label>
+    <input id="description" name="description" type="text" value="{{.Form.Description}}" autocomplete="off"{{if .Errors.description}} aria-invalid="true" aria-describedby="description-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "description"}}
+    <label for="icon_url">Icon address (https)</label>
+    <input id="icon_url" name="icon_url" type="text" value="{{.Form.IconURL}}" autocomplete="off" placeholder="https://"{{if .Errors.icon_url}} aria-invalid="true" aria-describedby="icon_url-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "icon_url"}}
+
+    <h2>Machine to machine</h2>
+    {{- if $accounts}}
+    <fieldset class="checks">
+      <legend>Machine to machine</legend>
+      <label><input type="checkbox" name="machine"{{if .Form.Machine}} checked{{end}}>Allow this app to sign in by itself (machine to machine)</label>
+    </fieldset>
+    <label for="service_account_id">Service account it signs in as</label>
+    <select id="service_account_id" name="service_account_id"{{if .Errors.service_account_id}} aria-invalid="true" aria-describedby="service_account_id-error"{{end}}>
+      <option value="">Choose a service account</option>
+      {{- range $accounts}}
+      <option value="{{.ID}}"{{if eq .ID $form.ServiceAccountID}} selected{{end}}>{{.Name}}</option>
+      {{- end}}
+    </select>
+    {{- template "admin-field-error" .Errors.For "service_account_id"}}
+    {{- else}}
+    <p>Allow this app to sign in by itself (machine to machine)? It needs a service account first. <a href="/admin/service-accounts/new">Add a service account</a>.</p>
+    {{- template "admin-field-error" .Errors.For "service_account_id"}}
+    {{- end}}
+
+    <details class="lifetimes"{{if .LifetimesOpen}} open{{end}}>
+      <summary>Token lifetimes (advanced)</summary>
+      <p class="hint">Leave a box blank to use the default shown in it. Use a time like 1h or 30d.</p>
+      <label for="access_token_ttl">Access token lifetime</label>
+      <input id="access_token_ttl" name="access_token_ttl" type="text" value="{{.Form.AccessTokenTTL}}" placeholder="{{.DefaultAccess}}" autocomplete="off"{{if .Errors.access_token_ttl}} aria-invalid="true" aria-describedby="access_token_ttl-error"{{end}}>
+      {{- template "admin-field-error" .Errors.For "access_token_ttl"}}
+      <label for="id_token_ttl">ID token lifetime</label>
+      <input id="id_token_ttl" name="id_token_ttl" type="text" value="{{.Form.IDTokenTTL}}" placeholder="{{.DefaultID}}" autocomplete="off"{{if .Errors.id_token_ttl}} aria-invalid="true" aria-describedby="id_token_ttl-error"{{end}}>
+      {{- template "admin-field-error" .Errors.For "id_token_ttl"}}
+      <label for="refresh_token_ttl">Refresh token lifetime</label>
+      <input id="refresh_token_ttl" name="refresh_token_ttl" type="text" value="{{.Form.RefreshTokenTTL}}" placeholder="{{.DefaultRefresh}}" autocomplete="off"{{if .Errors.refresh_token_ttl}} aria-invalid="true" aria-describedby="refresh_token_ttl-error"{{end}}>
+      {{- template "admin-field-error" .Errors.For "refresh_token_ttl"}}
+    </details>
+
+    <button type="submit">{{.Submit}}</button>
+  </form>
+  {{- if $app}}
+  {{- $setup := .Setup}}
+  <div>
+    <section class="panel" aria-labelledby="setup">
+      <h2 id="setup">Setup details</h2>
+      <dl class="facts">
+        <dt>Issuer</dt><dd>{{$setup.Issuer}}</dd>
+        <dt>Discovery address</dt><dd>{{$setup.Discovery}}</dd>
+        <dt>Client ID</dt><dd>{{$setup.ClientID}}</dd>
+        <dt>Sign-in return addresses</dt>
+        <dd>{{range $setup.Redirects}}{{.}}<br>{{else}}None{{end}}</dd>
+        <dt>Client authentication</dt>
+        <dd>{{if $setup.Confidential}}client_secret_basic or client_secret_post{{else}}No secret; use PKCE with S256{{end}}</dd>
+        <dt>Scopes</dt><dd>openid, profile, email, groups</dd>
+      </dl>
+      {{- if $setup.Confidential}}
+      <h3>MediaWiki</h3>
+      <p>Add this to LocalSettings.php, with the secret you copied when you made this app.</p>
+      <pre>$wgPluggableAuth_Config['{{$setup.SnippetName}}'] = [ 'plugin' => 'OpenIDConnect', 'data' => [
+    'providerURL' => '{{$setup.Issuer}}', 'clientID' => '{{$setup.ClientID}}',
+    'clientsecret' => '(the secret you copied when you made this app)',
+    'scope' => [ 'openid', 'profile', 'email', 'groups' ] ] ];</pre>
+      {{- end}}
+      {{- if $setup.Machine}}
+      <h3>Machine to machine</h3>
+      <p>The app can ask for a token for its service account like this.</p>
+      <pre>curl -u '{{$setup.ClientID}}:&lt;secret&gt;' -d grant_type=client_credentials {{$setup.TokenURL}}</pre>
+      {{- end}}
+    </section>
+    <section class="panel" aria-labelledby="danger">
+      <h2 id="danger">Actions</h2>
+      <div class="actions">
+        {{- if $setup.Confidential}}
+        {{- template "admin-confirm" .Rotate}}
+        {{- end}}
+        {{- template "admin-confirm" .Delete}}
+      </div>
+    </section>
+  </div>
+  {{- end}}
+</div>
+{{- end}}
+{{end}}

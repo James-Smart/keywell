@@ -1,0 +1,43 @@
+{{define "content"}}
+{{- with .Data}}
+<h1>Applications</h1>
+<div class="toolbar">
+  <a class="button" href="/admin/apps/new">Add application</a>
+</div>
+{{- if .Rows}}
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th scope="col">Application</th><th scope="col">Who can sign in</th></tr>
+    </thead>
+    <tbody>
+    {{- range .Rows}}
+      {{- $app := .App}}
+      <tr>
+        <td>
+          <div class="app-name">
+            {{- if $app.IconURL}}
+            <img class="tile-icon" src="{{$app.IconURL}}" alt="" width="48" height="48">
+            {{- else}}
+            <span class="tile-icon tile-initial" aria-hidden="true">{{.Initial}}</span>
+            {{- end}}
+            <span>
+              <a href="/admin/apps/{{$app.ID}}">{{$app.Name}}</a><br>
+              <span class="hint">{{if eq (print $app.ClientType) "confidential"}}Keeps a secret{{else}}No secret (browser or phone app){{end}}</span>
+            </span>
+          </div>
+        </td>
+        <td>
+          {{- range .Groups}}<span class="chip">{{.}}</span>{{else}}{{if not $app.AllowedGroupIDs}}Everyone{{end}}{{end}}
+          {{- if $app.ServiceAccountID}}<span class="chip">Machine to machine</span>{{end}}
+        </td>
+      </tr>
+    {{- end}}
+    </tbody>
+  </table>
+</div>
+{{- else}}
+<p>There are no applications yet. Add one so people can sign in to it with their Latch account.</p>
+{{- end}}
+{{- end}}
+{{end}}

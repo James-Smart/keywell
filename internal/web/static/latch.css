@@ -489,3 +489,9 @@ details.reveal[open] {
 @media (min-width: 600px) {
   main { padding-top: 3rem; }
 }
+
+/* An application in the list: its tile preview beside the name */
+.app-name { display: flex; align-items: center; gap: 0.75rem; }
+.app-name .tile-icon { width: 2.25rem; height: 2.25rem; }
+details.lifetimes { margin-top: 0.75rem; }
+details.lifetimes > summary { font-weight: 600; cursor: pointer; }
