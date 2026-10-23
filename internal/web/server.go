@@ -121,6 +121,7 @@ func New(d Deps) http.Handler {
 	root.HandleFunc("GET /healthz", s.healthz)
 	root.Handle("GET /static/", staticFiles())
 	root.HandleFunc("GET /static/logo", s.logo)
+	root.HandleFunc("GET /icons/{name}", s.serveIcon)
 	root.Handle("/", d.Sessions.Middleware(pages))
 
 	var h http.Handler = root

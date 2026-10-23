@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -362,33 +363,84 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	redirectNotice(w, r, "/admin/apps/"+a.ID, "saved")
 }
 
-// saveApp saves the edit form. When it made the app confidential the
-// response is the secret page.
-//
-// The form is read with PostFormValue, which also reads a multipart body.
+// saveApp saves the edit form, which may be url-encoded or multipart. An
+// uploaded icon is part of the same save: a bad icon, or any other
+// refusal, saves nothing and leaves no file behind. When the save made
+// the app confidential the response is the secret page.
 func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 	a := s.loadApp(w, r)
 	if a == nil {
 		return
 	}
+	if err := r.ParseMultipartForm(maxBodyBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{}, nil, fieldErrors{"icon": msgIconRead})
+		return
+	}
 	f := readAppForm(r)
 	in, errs := f.parse()
+	if r.PostFormValue("remove_icon") != "" {
+		in.IconURL, f.IconURL = "", ""
+	}
+	upload, problem := readIconUpload(r)
+	if problem != "" {
+		errs["icon"] = problem
+	}
 	if len(errs) > 0 {
 		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{}, &f, errs)
 		return
 	}
+	newIcon := ""
+	if upload != nil {
+		var err error
+		if newIcon, _, err = s.saveIcon(a.ID, upload); err != nil {
+			s.serverError(w, r, "apps: save icon", err)
+			return
+		}
+		in.IconURL = newIcon
+	}
 	saved, secret, err := s.admin.UpdateApp(r.Context(), adminActor(r), a.ID, patch(in))
 	if err != nil {
+		if newIcon != "" && newIcon != a.IconURL {
+			s.removeIconFile(newIcon)
+		}
 		if fail, ok := s.adminFailed(w, r, "apps: save", err); ok {
 			s.renderApp(w, r, a, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
 		}
 		return
+	}
+	if a.IconURL != saved.IconURL && ownIcon(a.ID, a.IconURL) {
+		s.removeIconFile(a.IconURL)
 	}
 	if secret != "" {
 		s.showNewSecret(w, r, saved, secret)
 		return
 	}
 	redirectNotice(w, r, "/admin/apps/"+a.ID, "saved")
+}
+
+// readIconUpload returns the bytes of the form's icon file, nil when none
+// was chosen, or a message for the upload field when it can't be used.
+// The type and size are checked here, before anything is written.
+func readIconUpload(r *http.Request) (data []byte, problem string) {
+	file, _, err := r.FormFile("icon")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) || errors.Is(err, http.ErrNotMultipart) {
+			return nil, ""
+		}
+		return nil, msgIconRead
+	}
+	defer file.Close()
+	data, err = io.ReadAll(io.LimitReader(file, maxIconBytes+1))
+	if err != nil {
+		return nil, msgIconRead
+	}
+	if len(data) == 0 {
+		return nil, "" // an empty file field: no file chosen
+	}
+	if _, problem := iconExt(data); problem != "" {
+		return nil, problem
+	}
+	return data, ""
 }
 
 // rotateAppSecret replaces a confidential app's secret and shows the new
@@ -425,6 +477,9 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 			s.renderApp(w, r, a, fail.Status, Page{Error: fail.pageError(msgAppNotDeleted)}, nil, fail.Fields)
 		}
 		return
+	}
+	if ownIcon(a.ID, a.IconURL) {
+		s.removeIconFile(a.IconURL)
 	}
 	redirectNotice(w, r, "/admin/apps", "deleted")
 }

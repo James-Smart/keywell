@@ -4,6 +4,7 @@
 package testenv
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -13,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -375,6 +377,37 @@ func (e *Env) Page(t *testing.T, c *http.Client, path string) (*http.Response, s
 func (e *Env) Submit(t *testing.T, c *http.Client, path string, form url.Values) (*http.Response, string) {
 	t.Helper()
 	resp, err := c.PostForm(e.TS.URL+path, form)
+	if err != nil {
+		t.Fatalf("testenv: post %s: %v", path, err)
+	}
+	return resp, readBody(t, resp)
+}
+
+// SubmitMultipart posts form plus one file part (field file, named
+// filename, holding content) to path with c, as a browser submits a
+// multipart form, and returns the response and its body as Submit does.
+func (e *Env) SubmitMultipart(t *testing.T, c *http.Client, path string, form url.Values, file, filename string, content []byte) (*http.Response, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, vs := range form {
+		for _, v := range vs {
+			if err := mw.WriteField(k, v); err != nil {
+				t.Fatalf("testenv: multipart field %s: %v", k, err)
+			}
+		}
+	}
+	fw, err := mw.CreateFormFile(file, filename)
+	if err != nil {
+		t.Fatalf("testenv: multipart file %s: %v", file, err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		t.Fatalf("testenv: multipart file %s: %v", file, err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("testenv: multipart close: %v", err)
+	}
+	resp, err := c.Post(e.TS.URL+path, mw.FormDataContentType(), &buf)
 	if err != nil {
 		t.Fatalf("testenv: post %s: %v", path, err)
 	}

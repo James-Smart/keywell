@@ -6,7 +6,7 @@
 <p class="back"><a href="/admin/apps">All applications</a></p>
 <h1>{{.Heading}}</h1>
 <div{{if $app}} class="split"{{end}}>
-  <form method="post" action="{{if $app}}/admin/apps/{{$app.ID}}{{else}}/admin/apps{{end}}" class="panel fields">
+  <form method="post" enctype="multipart/form-data" action="{{if $app}}/admin/apps/{{$app.ID}}{{else}}/admin/apps{{end}}" class="panel fields">
     <h2>Basics</h2>
     <label for="name">Name</label>
     <input id="name" name="name" type="text" value="{{.Form.Name}}" autocomplete="off" required{{if .Errors.name}} aria-invalid="true" aria-describedby="name-error"{{end}}>
@@ -77,6 +77,14 @@
     <label for="icon_url">Icon address (https)</label>
     <input id="icon_url" name="icon_url" type="text" value="{{.Form.IconURL}}" autocomplete="off" placeholder="https://"{{if .Errors.icon_url}} aria-invalid="true" aria-describedby="icon_url-error"{{end}}>
     {{- template "admin-field-error" .Errors.For "icon_url"}}
+    {{- if $app}}
+    <label for="icon">Upload an icon (PNG, JPEG, GIF or WebP, up to 256 KB)</label>
+    <input id="icon" name="icon" type="file" accept="image/png,image/jpeg,image/gif,image/webp"{{if .Errors.icon}} aria-invalid="true" aria-describedby="icon-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "icon"}}
+    {{- if $app.IconURL}}
+    <label><input type="checkbox" name="remove_icon">Remove the current icon</label>
+    {{- end}}
+    {{- end}}
 
     <h2>Machine to machine</h2>
     {{- if $accounts}}
