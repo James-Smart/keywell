@@ -25,6 +25,21 @@ var adminLinks = []string{
 	`href="/admin/audit"`,
 }
 
+// notSavedAlert is the top alert of an add or edit form refused with
+// messages beside its fields.
+const notSavedAlert = `<p class="alert alert-error" role="alert">Nothing was saved. Check the highlighted fields below.</p>`
+
+// assertNotSaved posts form to path and checks the answer is a 422 that
+// says so at the top.
+func assertNotSaved(t *testing.T, env *testenv.Env, c *http.Client, path string, form url.Values) {
+	t.Helper()
+	resp, body := env.Submit(t, c, path, form)
+	assertStatus(t, resp, http.StatusUnprocessableEntity)
+	if !strings.Contains(body, notSavedAlert) {
+		t.Errorf("POST %s %v: no top alert saying nothing was saved", path, form)
+	}
+}
+
 // between returns the part of body from the first start up to and
 // including the next end, or "" when either is missing.
 func between(body, start, end string) string {

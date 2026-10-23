@@ -14,9 +14,10 @@ import (
 
 // Refusals of member changes.
 const (
-	msgOwnDisable = "You can't disable your own account."
-	msgOwnDelete  = "You can't delete your own account."
-	msgDisabled   = "This account is disabled. Enable it first."
+	msgOwnDisable       = "You can't disable your own account."
+	msgOwnDelete        = "You can't delete your own account."
+	msgDisabled         = "This account is disabled. Enable it first."
+	msgInviteOrPassword = "Choose an invitation or a password, not both."
 )
 
 // msgNoSuchGroupFormat is the "groups" message for a name ResolveGroups
@@ -29,7 +30,7 @@ type NewMember struct {
 	GroupIDs              []string
 	Metadata              map[string]any // nil = {}
 	Invite                bool           // email an invitation
-	Password              string         // used when !Invite; "" leaves the member Needs password
+	Password              string         // only without Invite (both is a "password" field error); "" leaves the member Needs password
 }
 
 // MemberPatch is a change to a member. Nil fields are left alone; a
@@ -49,10 +50,11 @@ func (s *Service) member(ctx context.Context, id string) (*model.User, error) {
 }
 
 // CreateMember adds an active member with a password, with an emailed
-// invitation, or with neither (they then need a password). It records
-// user.create and, for an invitation, user.invite. When the invitation
-// cannot be sent the member is still added: CreateMember returns them
-// together with an *EmailError.
+// invitation, or with neither (they then need a password); asking for both
+// is a *ValidationError for "password". It records user.create, a
+// group.member.add per group joined and, for an invitation, user.invite.
+// When the invitation cannot be sent the member is still added:
+// CreateMember returns them together with an *EmailError.
 func (s *Service) CreateMember(ctx context.Context, a Actor, in NewMember) (*model.User, error) {
 	p := problems{}
 	u := &model.User{
@@ -64,7 +66,10 @@ func (s *Service) CreateMember(ctx context.Context, a Actor, in NewMember) (*mod
 		Metadata: p.metadata(in.Metadata),
 	}
 	withPassword := !in.Invite && in.Password != ""
-	if withPassword {
+	switch {
+	case in.Invite && in.Password != "":
+		p.add("password", msgInviteOrPassword)
+	case withPassword:
 		p.password(in.Password, s.d.Cfg.Password.MinLength)
 	}
 	groups, err := s.groupsByID(ctx, in.GroupIDs, p)

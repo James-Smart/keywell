@@ -134,6 +134,21 @@ func TestCreateConfidentialAppShowsSecretOnce(t *testing.T) {
 	assertContains(t, body, app.ClientID)
 }
 
+// The example on the secret page says what it is, for volunteers whose app
+// isn't MediaWiki.
+func TestSecretPageLabelsExample(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	_, body := env.Submit(t, c, "/admin/apps", appValues("Wiki", "confidential"))
+	assertContains(t, body, "<p>For MediaWiki, add this to LocalSettings.php:</p>\n  <pre>$wgPluggableAuth_Config[")
+
+	// A token's example is labelled too.
+	sa := seedServiceAccount(t, env, "Door controller", "door")
+	_, body = env.Submit(t, c, "/admin/service-accounts/"+sa.ID+"/tokens", url.Values{"label": {"CI"}, "scope": {"read"}})
+	assertContains(t, body, `<code class="secret">latch_`, "<p>To check the token works, run:</p>\n  <pre>curl ")
+	assertLacks(t, body, "MediaWiki")
+}
+
 func TestCreatePublicApp(t *testing.T) {
 	env := testenv.New(t)
 	c, _ := env.AdminClient(t)
@@ -179,6 +194,46 @@ func TestAppFormErrors(t *testing.T) {
 	if err != nil || len(apps) != 0 {
 		t.Errorf("stored apps %v, err %v, want none", apps, err)
 	}
+}
+
+// Ruling 18: a tile needs a link. The add form keeps the tile ticked by
+// default, so leaving the link empty is answered with the message beside
+// it, and nothing is saved.
+func TestTileNeedsLinkInUI(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	_, body := env.Page(t, c, "/admin/apps/new")
+	assertContains(t, body, `<input type="checkbox" name="show_tile" checked>`)
+
+	v := appValues("Wiki", "confidential")
+	v.Set("show_tile", "on")
+	resp, body := env.Submit(t, c, "/admin/apps", v)
+	assertStatus(t, resp, http.StatusUnprocessableEntity)
+	assertContains(t, body, notSavedAlert,
+		html.EscapeString("Add a link to open the app, or untick Show on members' home page."),
+		`aria-invalid="true" aria-describedby="launch_url-error"`)
+	if apps, err := env.Store.ListApplications(context.Background()); err != nil || len(apps) != 0 {
+		t.Errorf("stored apps %v, err %v, want none", apps, err)
+	}
+
+	// Unticked, no link is needed.
+	v.Del("show_tile")
+	resp, _ = env.Submit(t, c, "/admin/apps", v)
+	assertStatus(t, resp, http.StatusOK)
+}
+
+// A refused add or save says so at the top: the field with the message
+// may be far down this long form.
+func TestAppFormsSayNothingSaved(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	app := createApp(t, env, model.Application{Name: "Wiki", Slug: "wiki", ClientType: model.ClientTypePublic}, "")
+	badTTL := appValues("Wiki two", "public")
+	badTTL.Set("access_token_ttl", "soon")
+	assertNotSaved(t, env, c, "/admin/apps", appValues("", "public"))
+	assertNotSaved(t, env, c, "/admin/apps", badTTL)
+	assertNotSaved(t, env, c, "/admin/apps/"+app.ID, appValues("", "public"))
+	assertNotSaved(t, env, c, "/admin/apps/"+app.ID, badTTL)
 }
 
 func TestEditApp(t *testing.T) {

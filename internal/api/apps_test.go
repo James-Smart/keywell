@@ -22,7 +22,7 @@ func TestAPIApps(t *testing.T) {
 	body, resp := env.API(t, raw, http.MethodPost, apiApps, map[string]any{
 		"name": "Members wiki", "slug": "members-wiki", "client_type": "confidential",
 		"redirect_uris": []string{"https://wiki.example.org/cb"}, "allowed_groups": []string{"Staff"},
-		"access_token_ttl": 600, "show_tile": true})
+		"access_token_ttl": 600, "show_tile": true, "launch_url": "https://wiki.example.org/"})
 	if resp.StatusCode != 201 {
 		t.Fatalf("create: %d %v", resp.StatusCode, body)
 	}
@@ -161,6 +161,20 @@ func TestAPIAppValidation(t *testing.T) {
 	assertError(t, body, resp, 422, "invalid")
 	body, resp = env.API(t, raw, http.MethodPost, apiApps, base(map[string]any{"bogus": 1}))
 	assertError(t, body, resp, 400, "invalid_json")
+
+	// Ruling 18: a tile needs a link.
+	body, resp = env.API(t, raw, http.MethodPost, apiApps, base(map[string]any{"show_tile": true}))
+	assertError(t, body, resp, 422, "invalid")
+	if got := fieldsOf(body)["launch_url"]; got != "Add a link to open the app, or untick Show on members' home page." {
+		t.Errorf("fields.launch_url %q (body %v)", got, body)
+	}
+
+	// Return addresses aren't required: an app that only signs in by
+	// itself has none.
+	body, resp = env.API(t, raw, http.MethodPost, apiApps, map[string]any{"name": "Robot", "client_type": "confidential"})
+	if resp.StatusCode != 201 || len(body["redirect_uris"].([]any)) != 0 {
+		t.Errorf("create without redirect_uris: %d %v", resp.StatusCode, body)
+	}
 }
 
 // Ruling 8: API changes never leave an app's icon file behind.

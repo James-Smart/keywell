@@ -188,14 +188,25 @@ func TestCreateMemberValidation(t *testing.T) {
 			}
 		})
 	}
-	// The password is checked only when it will be used.
-	in := valid
-	in.Invite, in.Password = true, "short"
-	if _, err := svc.CreateMember(ctx, actorFor(ada), in); err != nil {
-		t.Errorf("invite with an unused short password: %v", err)
+	// Ruling 17: an invitation and a password together is a mistake, not a
+	// password to drop silently, whatever the password.
+	for _, pw := range []string{"short", "correct horse battery"} {
+		in := valid
+		in.Invite, in.Password = true, pw
+		before := countEvents(t, st)
+		u, err := svc.CreateMember(ctx, actorFor(ada), in)
+		if got := fields(t, err)["password"]; got != "Choose an invitation or a password, not both." || u != nil {
+			t.Errorf("invite with password %q: message %q, user %v", pw, got, u)
+		}
+		if after := countEvents(t, st); after != before {
+			t.Errorf("recorded %d events", after-before)
+		}
 	}
-	if len(n.Calls()) != 1 {
+	if len(n.Calls()) != 0 {
 		t.Errorf("notifier calls %+v", n.Calls())
+	}
+	if _, err := st.GetUserByEmail(ctx, valid.Email); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("member stored: %v", err)
 	}
 }
 

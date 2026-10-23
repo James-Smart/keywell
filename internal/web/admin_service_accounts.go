@@ -21,6 +21,7 @@ const (
 	msgTokenNotRevoked    = "The token wasn't revoked."
 	msgTokenCopyHeading   = "Copy the API token now"
 	msgTokenCopyIntro     = "This is the only time the token is shown. Latch keeps only a fingerprint of it, so if you lose it, make a new one and revoke this one."
+	msgTokenExample       = "To check the token works, run:"
 	deletedAccountName    = "a deleted account"
 )
 
@@ -109,7 +110,7 @@ func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 	f := readServiceAccountForm(r)
 	meta, invalid := admin.ParseMetadata(f.Metadata)
 	if invalid != nil {
-		s.renderServiceAccount(w, r, nil, http.StatusUnprocessableEntity, Page{}, &f, nil, invalid.Fields, nil)
+		s.renderServiceAccount(w, r, nil, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, nil, invalid.Fields, nil)
 		return
 	}
 	u, err := s.admin.CreateServiceAccount(r.Context(), adminActor(r), admin.ServiceAccountInput{
@@ -117,7 +118,7 @@ func (s *Server) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "service accounts: add", err); ok {
-			s.renderServiceAccount(w, r, nil, fail.Status, Page{Error: fail.Message}, &f, nil, fail.Fields, nil)
+			s.renderServiceAccount(w, r, nil, fail.Status, Page{Error: fail.formError()}, &f, nil, fail.Fields, nil)
 		}
 		return
 	}
@@ -289,7 +290,7 @@ func (s *Server) saveServiceAccount(w http.ResponseWriter, r *http.Request) {
 	f := readServiceAccountForm(r)
 	meta, invalid := admin.ParseMetadata(f.Metadata)
 	if invalid != nil {
-		s.renderServiceAccount(w, r, u, http.StatusUnprocessableEntity, Page{}, &f, nil, invalid.Fields, nil)
+		s.renderServiceAccount(w, r, u, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, nil, invalid.Fields, nil)
 		return
 	}
 	_, err := s.admin.UpdateServiceAccount(r.Context(), adminActor(r), u.ID, admin.ServiceAccountPatch{
@@ -297,7 +298,7 @@ func (s *Server) saveServiceAccount(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "service accounts: save", err); ok {
-			s.renderServiceAccount(w, r, u, fail.Status, Page{Error: fail.Message}, &f, nil, fail.Fields, nil)
+			s.renderServiceAccount(w, r, u, fail.Status, Page{Error: fail.formError()}, &f, nil, fail.Fields, nil)
 		}
 		return
 	}
@@ -349,11 +350,12 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderSecret(w, r, "service-accounts", secretPage{
-		Heading: msgTokenCopyHeading,
-		Intro:   msgTokenCopyIntro,
-		Items:   []secretItem{{"Token", raw}},
-		Example: `curl -H "Authorization: Bearer ` + raw + `" ` + s.d.Cfg.Issuer() + `/api/v1/me`,
-		Back:    "/admin/service-accounts/" + u.ID,
+		Heading:      msgTokenCopyHeading,
+		Intro:        msgTokenCopyIntro,
+		Items:        []secretItem{{"Token", raw}},
+		ExampleLabel: msgTokenExample,
+		Example:      `curl -H "Authorization: Bearer ` + raw + `" ` + s.d.Cfg.Issuer() + `/api/v1/me`,
+		Back:         "/admin/service-accounts/" + u.ID,
 	})
 }
 

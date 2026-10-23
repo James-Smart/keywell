@@ -320,6 +320,48 @@ func TestUpdateAppRevalidatesWholeApp(t *testing.T) {
 	}
 }
 
+// Ruling 18: a tile on the members' home page needs a link; without one it
+// would never show, and nobody could tell why.
+func TestTileNeedsLaunchURL(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	ada, _ := mkAdmin(t, st)
+	const msg = "Add a link to open the app, or untick Show on members' home page."
+
+	in := validApp()
+	in.ShowTile = true
+	before := countEvents(t, st)
+	if got := fieldMessages(t, errOf3(svc.CreateApp(ctx, actorFor(ada), in)))["launch_url"]; got != msg {
+		t.Errorf("create: launch_url message %q", got)
+	}
+	in.LaunchURL = "   "
+	if got := fieldMessages(t, errOf3(svc.CreateApp(ctx, actorFor(ada), in)))["launch_url"]; got != msg {
+		t.Errorf("create with a blank link: launch_url message %q", got)
+	}
+	if countEvents(t, st) != before {
+		t.Error("events recorded for a refused create")
+	}
+
+	// Without a tile, no link is needed; ticking it later needs one.
+	app, _, err := svc.CreateApp(ctx, actorFor(ada), validApp())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tile := true
+	if got := fieldMessages(t, errOf3(svc.UpdateApp(ctx, actorFor(ada), app.ID, admin.AppPatch{ShowTile: &tile})))["launch_url"]; got != msg {
+		t.Errorf("update: launch_url message %q", got)
+	}
+	link := "https://wiki.example.org/"
+	if _, _, err := svc.UpdateApp(ctx, actorFor(ada), app.ID, admin.AppPatch{ShowTile: &tile, LaunchURL: &link}); err != nil {
+		t.Errorf("tile with a link: %v", err)
+	}
+	// Taking the link away from a tile is refused too.
+	none := ""
+	if got := fieldMessages(t, errOf3(svc.UpdateApp(ctx, actorFor(ada), app.ID, admin.AppPatch{LaunchURL: &none})))["launch_url"]; got != msg {
+		t.Errorf("remove link: launch_url message %q", got)
+	}
+}
+
 func TestUpdateAppClientTypeSwitch(t *testing.T) {
 	ctx := context.Background()
 	svc, st, _ := newService(t)

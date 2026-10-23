@@ -29,6 +29,7 @@ const (
 	msgTokenTTL        = "Use a time between 1m and 24h, like 1h."
 	msgRefreshTTL      = "Use a time between 1m and %s."
 	msgLaunchURL       = "Enter a full web address starting with https:// or http://."
+	msgTileNeedsLink   = "Add a link to open the app, or untick Show on members' home page."
 	msgIconURL         = "Use an https:// address or a path starting with /icons/."
 	msgSecretlessLogin = "Only apps that keep a secret can sign in by themselves."
 	msgServiceAccount  = "Choose a service account."
@@ -322,8 +323,11 @@ func (s *Service) validateApp(ctx context.Context, p problems, app *model.Applic
 	checkTTL(p, "refresh_token_ttl", app.RefreshTokenTTL, longest, fmt.Sprintf(msgRefreshTTL, FormatDuration(longest)))
 
 	app.LaunchURL = strings.TrimSpace(app.LaunchURL)
-	if app.LaunchURL != "" && !isWebAddress(app.LaunchURL, "http", "https") {
+	switch {
+	case app.LaunchURL != "" && !isWebAddress(app.LaunchURL, "http", "https"):
 		p.add("launch_url", msgLaunchURL)
+	case app.LaunchURL == "" && app.ShowTile: // the home page shows no tile without a link
+		p.add("launch_url", msgTileNeedsLink)
 	}
 	app.IconURL = strings.TrimSpace(app.IconURL)
 	if app.IconURL != "" && !isWebAddress(app.IconURL, "https") && !strings.HasPrefix(app.IconURL, "/icons/") {

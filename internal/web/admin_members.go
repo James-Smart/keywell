@@ -194,7 +194,7 @@ func (s *Server) createMember(w http.ResponseWriter, r *http.Request) {
 		errs["password"] = msgPasswordNeeded
 	}
 	if len(errs) > 0 {
-		s.renderNewMember(w, r, http.StatusUnprocessableEntity, Page{}, f, errs)
+		s.renderNewMember(w, r, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, f, errs)
 		return
 	}
 
@@ -211,7 +211,7 @@ func (s *Server) createMember(w http.ResponseWriter, r *http.Request) {
 		redirectNotice(w, r, "/admin/members/"+u.ID, "added_no_email")
 	case err != nil:
 		if fail, ok := s.adminFailed(w, r, "members: add", err); ok {
-			s.renderNewMember(w, r, fail.Status, Page{Error: fail.Message}, f, fail.Fields)
+			s.renderNewMember(w, r, fail.Status, Page{Error: fail.formError()}, f, fail.Fields)
 		}
 	case invite:
 		redirectNotice(w, r, "/admin/members/"+u.ID, "invited")
@@ -346,7 +346,7 @@ func (s *Server) saveMember(w http.ResponseWriter, r *http.Request) {
 	f := readMemberForm(r)
 	meta, invalid := admin.ParseMetadata(f.Metadata)
 	if invalid != nil {
-		s.showMember(w, r, http.StatusUnprocessableEntity, Page{}, &f, invalid.Fields)
+		s.showMember(w, r, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, invalid.Fields)
 		return
 	}
 	id := r.PathValue("id")
@@ -355,7 +355,7 @@ func (s *Server) saveMember(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "members: save", err); ok {
-			s.showMember(w, r, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
+			s.showMember(w, r, fail.Status, Page{Error: fail.formError()}, &f, fail.Fields)
 		}
 		return
 	}

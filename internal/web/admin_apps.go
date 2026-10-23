@@ -24,6 +24,7 @@ const (
 	msgSecretNotMade     = "The secret wasn't replaced."
 	msgSecretCopyHeading = "Copy the client secret now"
 	msgSecretCopyIntro   = "You won't be able to see it again. If you lose it, regenerate it from the app's page."
+	msgSecretExample     = "For MediaWiki, add this to LocalSettings.php:"
 )
 
 // secretItem is one value on the secret page.
@@ -32,10 +33,12 @@ type secretItem struct{ Label, Value string }
 // secretPage is the data of admin_secret.html: something shown once, in
 // the response to the request that made it. Items are the values to copy
 // (the last is the secret itself), Example is optional text to paste
-// somewhere ("" shows none) and Back is the link to go to afterwards.
+// somewhere ("" shows none) under ExampleLabel, which says what it is,
+// and Back is the link to go to afterwards.
 type secretPage struct {
 	Heading, Intro string
 	Items          []secretItem
+	ExampleLabel   string // says what Example is and where it goes
 	Example        string
 	Back           string
 }
@@ -333,11 +336,12 @@ func mediaWikiExample(sd setupDetails, secret string) string {
 func (s *Server) showNewSecret(w http.ResponseWriter, r *http.Request, a *model.Application, secret string) {
 	sd := setupFor(s.d.Cfg.Issuer(), a)
 	s.renderSecret(w, r, "apps", secretPage{
-		Heading: msgSecretCopyHeading,
-		Intro:   msgSecretCopyIntro,
-		Items:   []secretItem{{"Client ID", a.ClientID}, {"Client secret", secret}},
-		Example: mediaWikiExample(sd, secret),
-		Back:    "/admin/apps/" + a.ID,
+		Heading:      msgSecretCopyHeading,
+		Intro:        msgSecretCopyIntro,
+		Items:        []secretItem{{"Client ID", a.ClientID}, {"Client secret", secret}},
+		ExampleLabel: msgSecretExample,
+		Example:      mediaWikiExample(sd, secret),
+		Back:         "/admin/apps/" + a.ID,
 	})
 }
 
@@ -347,13 +351,13 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	f := readAppForm(r)
 	in, errs := f.parse()
 	if len(errs) > 0 {
-		s.renderApp(w, r, nil, http.StatusUnprocessableEntity, Page{}, &f, errs)
+		s.renderApp(w, r, nil, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, errs)
 		return
 	}
 	a, secret, err := s.admin.CreateApp(r.Context(), adminActor(r), in)
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "apps: add", err); ok {
-			s.renderApp(w, r, nil, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
+			s.renderApp(w, r, nil, fail.Status, Page{Error: fail.formError()}, &f, fail.Fields)
 		}
 		return
 	}
@@ -374,7 +378,7 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseMultipartForm(maxBodyBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
-		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{}, nil, fieldErrors{"icon": msgIconRead})
+		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, nil, fieldErrors{"icon": msgIconRead})
 		return
 	}
 	f := readAppForm(r)
@@ -387,7 +391,7 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 		errs["icon"] = problem
 	}
 	if len(errs) > 0 {
-		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{}, &f, errs)
+		s.renderApp(w, r, a, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, errs)
 		return
 	}
 	newIcon := ""
@@ -405,7 +409,7 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 			s.removeIconFile(a.ID, newIcon)
 		}
 		if fail, ok := s.adminFailed(w, r, "apps: save", err); ok {
-			s.renderApp(w, r, a, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
+			s.renderApp(w, r, a, fail.Status, Page{Error: fail.formError()}, &f, fail.Fields)
 		}
 		return
 	}

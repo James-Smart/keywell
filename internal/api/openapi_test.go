@@ -57,6 +57,30 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 	}
 }
 
+// Adding an app needs only what the admin service needs: a name and
+// whether it keeps a secret. An app that only signs in by itself has no
+// return addresses.
+func TestOpenAPICreateAppRequired(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]struct {
+					Schema struct {
+						Required []string `json:"required"`
+					} `json:"schema"`
+				} `json:"content"`
+			} `json:"requestBody"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(openAPIDoc, &doc); err != nil {
+		t.Fatalf("openapi.json: %v", err)
+	}
+	got := doc.Paths["/apps"]["post"].RequestBody.Content["application/json"].Schema.Required
+	if strings.Join(got, ",") != "name,client_type" {
+		t.Errorf("createApp requires %v, want [name client_type]", got)
+	}
+}
+
 // TestOpenAPIRefsResolve checks that every $ref in openapi.json points at
 // something in the document.
 func TestOpenAPIRefsResolve(t *testing.T) {

@@ -167,7 +167,7 @@
                   },
                   "password": {
                     "type": "string",
-                    "description": "Used when invite is false. Without one the member must be sent a link."
+                    "description": "The member's password. Can't be sent with invite true (that is a 422 on password). With neither, the member must be sent a link later."
                   }
                 },
                 "additionalProperties": false,
@@ -1274,24 +1274,25 @@
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 to 86400. Leave out, or send 0, for the global default."
                   },
                   "id_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 to 86400. Leave out, or send 0, for the global default."
                   },
                   "refresh_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 up to the longest a refresh token may last (tokens.refresh_absolute in the settings). Leave out, or send 0, for the global default."
                   },
                   "launch_url": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Where the members' home page tile links to. Required when show_tile is true."
                   },
                   "icon_url": {
                     "type": "string"
@@ -1313,8 +1314,7 @@
                 "additionalProperties": false,
                 "required": [
                   "name",
-                  "client_type",
-                  "redirect_uris"
+                  "client_type"
                 ]
               }
             }
@@ -1479,24 +1479,25 @@
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 to 86400. Leave out to keep it; send null or 0 to go back to the global default."
                   },
                   "id_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 to 86400. Leave out to keep it; send null or 0 to go back to the global default."
                   },
                   "refresh_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
+                    "description": "Seconds, from 60 up to the longest a refresh token may last (tokens.refresh_absolute in the settings). Leave out to keep it; send null or 0 to go back to the global default."
                   },
                   "launch_url": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Where the members' home page tile links to. Can't be empty while show_tile is true."
                   },
                   "icon_url": {
                     "type": "string"

@@ -251,6 +251,19 @@ func TestDeleteGroupConfirm(t *testing.T) {
 	}
 }
 
+// A refused add or save says so at the top.
+func TestGroupFormsSayNothingSaved(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	g := env.CreateGroup(t, "Laser", false, false)
+	badMeta := groupValues("Woodshop", false, false)
+	badMeta.Set("metadata", "[1]")
+	assertNotSaved(t, env, c, "/admin/groups", groupValues("", false, false))
+	assertNotSaved(t, env, c, "/admin/groups", badMeta)
+	assertNotSaved(t, env, c, "/admin/groups/"+g.ID, groupValues("", false, false))
+	assertNotSaved(t, env, c, "/admin/groups/"+g.ID, badMeta)
+}
+
 // Ruling 14: the only group an app lets in can't be deleted, as the app
 // would then let in every member. The page says which app, at the top,
 // and the confirmation says so before the admin tries.

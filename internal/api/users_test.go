@@ -209,6 +209,21 @@ func TestAPICreateUserErrors(t *testing.T) {
 	if _, ok := fieldsOf(body)["groups"]; !ok {
 		t.Errorf("no fields.groups: %v", body)
 	}
+
+	// Ruling 17: an invitation and a password together is refused, not
+	// half done.
+	body, resp = env.API(t, raw, http.MethodPost, apiUsers, map[string]any{"name": "B", "email": "b@example.org",
+		"invite": true, "password": "correct horse battery"})
+	assertError(t, body, resp, 422, "invalid")
+	if got := fieldsOf(body)["password"]; got != "Choose an invitation or a password, not both." {
+		t.Errorf("fields.password %q (body %v)", got, body)
+	}
+	if _, err := env.Store.GetUserByEmail(context.Background(), "b@example.org"); err == nil {
+		t.Error("member saved with both an invitation and a password")
+	}
+	if n := len(env.Mailer.Sent); n != 0 {
+		t.Errorf("sent %d emails", n)
+	}
 }
 
 type failingMailer struct{}

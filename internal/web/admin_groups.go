@@ -83,7 +83,7 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 	f := readGroupForm(r)
 	meta, invalid := admin.ParseMetadata(f.Metadata)
 	if invalid != nil {
-		s.renderGroup(w, r, nil, http.StatusUnprocessableEntity, Page{}, &f, invalid.Fields)
+		s.renderGroup(w, r, nil, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, invalid.Fields)
 		return
 	}
 	g, err := s.admin.CreateGroup(r.Context(), adminActor(r), admin.GroupInput{
@@ -91,7 +91,7 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "groups: add", err); ok {
-			s.renderGroup(w, r, nil, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
+			s.renderGroup(w, r, nil, fail.Status, Page{Error: fail.formError()}, &f, fail.Fields)
 		}
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request) {
 	f := readGroupForm(r)
 	meta, invalid := admin.ParseMetadata(f.Metadata)
 	if invalid != nil {
-		s.renderGroup(w, r, g, http.StatusUnprocessableEntity, Page{}, &f, invalid.Fields)
+		s.renderGroup(w, r, g, http.StatusUnprocessableEntity, Page{Error: msgNotSaved}, &f, invalid.Fields)
 		return
 	}
 	_, err := s.admin.UpdateGroup(r.Context(), adminActor(r), g.ID, admin.GroupPatch{
@@ -204,7 +204,7 @@ func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if fail, ok := s.adminFailed(w, r, "groups: save", err); ok {
-			s.renderGroup(w, r, g, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
+			s.renderGroup(w, r, g, fail.Status, Page{Error: fail.formError()}, &f, fail.Fields)
 		}
 		return
 	}

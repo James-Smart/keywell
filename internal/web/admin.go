@@ -35,6 +35,9 @@ import (
 //     pageError, with a summary of its own for a validation error, and
 //     the action's own check that fails (such as a mistyped confirmation)
 //     uses such a summary too.
+//   - So does an add or edit form: Page.Error is the adminFailure's
+//     formError, and the handler's own checks of the form (such as
+//     metadata that isn't JSON) use msgNotSaved.
 //   - An *admin.EmailError is a failure only when sending the email was
 //     the whole action, such as a "Send password reset email" button.
 //     When the change itself was made and only its email failed (as when
@@ -101,6 +104,15 @@ type adminFailure struct {
 // manually below.": the field's message may sit far down the page,
 // inside the action's disclosure, where nobody sees it after the reload.
 func (f adminFailure) pageError(summary string) string { return cmp.Or(f.Message, summary) }
+
+// msgNotSaved is Page.Error when an add or edit form is shown again with
+// messages beside its fields, which may be far down the page.
+const msgNotSaved = "Nothing was saved. Check the highlighted fields below."
+
+// formError is Page.Error for an add or edit form shown again after its
+// save failed: f's own message (a refusal) or, for a validation error,
+// msgNotSaved.
+func (f adminFailure) formError() string { return f.pageError(msgNotSaved) }
 
 // adminFailureFor maps an error from the admin service to what the page
 // shows: 422 and Fields for an *admin.ValidationError, 409 and its message

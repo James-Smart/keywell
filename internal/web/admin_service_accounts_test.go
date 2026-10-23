@@ -124,6 +124,19 @@ func TestCreateServiceAccount(t *testing.T) {
 	assertContains(t, body, "Enter a username.", `value="Typed name"`)
 }
 
+// A refused add or save says so at the top.
+func TestServiceAccountFormsSayNothingSaved(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	sa := seedServiceAccount(t, env, "Door controller", "door")
+	badMeta := serviceAccountValues("Gate controller", "gate")
+	badMeta.Set("metadata", "[1]")
+	assertNotSaved(t, env, c, "/admin/service-accounts", serviceAccountValues("Other", ""))
+	assertNotSaved(t, env, c, "/admin/service-accounts", badMeta)
+	assertNotSaved(t, env, c, "/admin/service-accounts/"+sa.ID, serviceAccountValues("Door controller", ""))
+	assertNotSaved(t, env, c, "/admin/service-accounts/"+sa.ID, badMeta)
+}
+
 var tokenRE = regexp.MustCompile(`<code class="secret">(latch_[A-Za-z0-9_-]+)</code>`)
 
 func TestCreateTokenShowsOnce(t *testing.T) {

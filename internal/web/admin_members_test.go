@@ -302,6 +302,26 @@ func TestAddMemberInvite(t *testing.T) {
 	assertContains(t, body, html.EscapeString("Member added. We've emailed them an invitation."), "Invited, not set up")
 }
 
+// Ruling 17: the add form never sends both an invitation and a password.
+// A password typed before choosing the invitation is dropped, and the
+// invitation goes out.
+func TestAddMemberInviteDropsTypedPassword(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	form := memberValues("Sam Okafor", "sam@example.org")
+	form.Set("setup", "invite")
+	form.Set("password", "correct horse battery")
+	resp, _ := env.Submit(t, c, "/admin/members", form)
+	sam := memberByEmail(t, env, "sam@example.org")
+	assertRedirect(t, resp, "/admin/members/"+sam.ID+"?notice=invited")
+	if sam.HasPassword() {
+		t.Error("the typed password was set")
+	}
+	if n := len(env.Mailer.Sent); n != 1 {
+		t.Errorf("sent %d emails, want the invitation", n)
+	}
+}
+
 func TestAddMemberSetPassword(t *testing.T) {
 	env := testenv.New(t)
 	c, _ := env.AdminClient(t)
@@ -368,6 +388,23 @@ func TestAddMemberErrorsKeepInput(t *testing.T) {
 	if n := len(env.Mailer.Sent); n != 0 {
 		t.Errorf("sent %d emails", n)
 	}
+}
+
+// A refused add or save says so at the top: the messages beside the fields
+// may be far down the page. Both the service's checks and the page's own
+// (metadata that isn't an object) do.
+func TestMemberFormsSayNothingSaved(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	alex := addMember(t, env, "Alex Rivera", "alex@example.org")
+	badMeta := func(f url.Values) url.Values { f.Set("metadata", "[1]"); return f }
+	assertNotSaved(t, env, c, "/admin/members", memberValues("Sam Okafor", "not an email"))
+	assertNotSaved(t, env, c, "/admin/members", badMeta(memberValues("Sam Okafor", "sam@example.org")))
+	setPassword := memberValues("Sam Okafor", "sam@example.org")
+	setPassword.Set("setup", "password")
+	assertNotSaved(t, env, c, "/admin/members", setPassword)
+	assertNotSaved(t, env, c, "/admin/members/"+alex.ID, memberValues("Alex Rivera", "not an email"))
+	assertNotSaved(t, env, c, "/admin/members/"+alex.ID, badMeta(memberValues("Alex Rivera", "alex@example.org")))
 }
 
 func TestAddMemberInviteEmailFails(t *testing.T) {
