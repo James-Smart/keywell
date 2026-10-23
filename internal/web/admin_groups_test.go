@@ -187,6 +187,42 @@ func TestLastAdminGroupRefusedInUI(t *testing.T) {
 	}
 }
 
+// Review Focus 3, Ruling 5: with another admin group around, an admin still
+// cannot take their own admin access away through the groups pages.
+func TestOwnAdminAccessRefusedInGroupsUI(t *testing.T) {
+	env := testenv.New(t)
+	c, admin := env.AdminClient(t)
+	ctx := context.Background()
+	first, err := env.Store.GetGroupByName(ctx, "Admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.CreateGroup(t, "Other admins", true, false)
+	base := "/admin/groups/" + first.ID
+	own := `<p class="alert alert-error" role="alert">` +
+		html.EscapeString("You can't remove your own admin access. Ask another admin to do it.") + "</p>"
+
+	resp, body := env.Submit(t, c, base, groupValues("Admin", false, false))
+	assertStatus(t, resp, http.StatusConflict)
+	assertContains(t, body, own)
+
+	resp, body = env.Submit(t, c, base+"/delete", url.Values{"confirm": {"Admin"}})
+	assertStatus(t, resp, http.StatusConflict)
+	assertContains(t, body, own)
+
+	resp, body = env.Submit(t, c, base+"/members/"+admin.ID+"/remove", nil)
+	assertStatus(t, resp, http.StatusConflict)
+	assertContains(t, body, own)
+
+	got, err := env.Store.GetGroup(ctx, first.ID)
+	if err != nil || !got.IsAdmin {
+		t.Errorf("group %+v, %v: want it kept as an admin group", got, err)
+	}
+	if names := groupNamesOf(t, env, admin); len(names) != 1 || names[0] != "Admin" {
+		t.Errorf("admin's groups %v, want [Admin]", names)
+	}
+}
+
 func TestDeleteGroupConfirm(t *testing.T) {
 	env := testenv.New(t)
 	c, admin := env.AdminClient(t)
