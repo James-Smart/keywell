@@ -192,8 +192,25 @@ func TestReplaceAndRemoveIcon(t *testing.T) {
 
 func TestIconRouteRejectsBadNames(t *testing.T) {
 	env := testenv.New(t)
+	// Files the guard must refuse to serve: one a traversal reaches, and
+	// ones in the icons folder with names saveIcon never makes.
+	const svgName = "00000000-0000-0000-0000-000000000000-0123456789ab.svg"
+	dir := filepath.Join(env.Cfg.DataDir, "icons")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		filepath.Join(env.Cfg.DataDir, "latch.db"): "SQLite format 3 secret",
+		filepath.Join(dir, "x.svg"):                `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+		filepath.Join(dir, svgName):                `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, name := range []string{
 		"..%2Flatch.db",
+		"%2e%2e%2flatch.db",
 		"x.svg",
 		"00000000-0000-0000-0000-000000000000-0123456789ab.png",
 		"00000000-0000-0000-0000-000000000000-0123456789ab.svg",

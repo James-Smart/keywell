@@ -9,6 +9,7 @@ import (
 
 	"latch/internal/admin"
 	"latch/internal/config"
+	"latch/internal/icons"
 	"latch/internal/model"
 	"latch/internal/store"
 )
@@ -392,7 +393,7 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 	newIcon := ""
 	if upload != nil {
 		var err error
-		if newIcon, _, err = s.saveIcon(a.ID, upload); err != nil {
+		if newIcon, _, err = icons.Save(s.d.Cfg.DataDir, a.ID, upload); err != nil {
 			s.serverError(w, r, "apps: save icon", err)
 			return
 		}
@@ -401,15 +402,15 @@ func (s *Server) saveApp(w http.ResponseWriter, r *http.Request) {
 	saved, secret, err := s.admin.UpdateApp(r.Context(), adminActor(r), a.ID, patch(in))
 	if err != nil {
 		if newIcon != "" && newIcon != a.IconURL {
-			s.removeIconFile(newIcon)
+			s.removeIconFile(a.ID, newIcon)
 		}
 		if fail, ok := s.adminFailed(w, r, "apps: save", err); ok {
 			s.renderApp(w, r, a, fail.Status, Page{Error: fail.Message}, &f, fail.Fields)
 		}
 		return
 	}
-	if a.IconURL != saved.IconURL && ownIcon(a.ID, a.IconURL) {
-		s.removeIconFile(a.IconURL)
+	if a.IconURL != saved.IconURL {
+		s.removeIconFile(a.ID, a.IconURL)
 	}
 	if secret != "" {
 		s.showNewSecret(w, r, saved, secret)
@@ -430,14 +431,14 @@ func readIconUpload(r *http.Request) (data []byte, problem string) {
 		return nil, msgIconRead
 	}
 	defer file.Close()
-	data, err = io.ReadAll(io.LimitReader(file, maxIconBytes+1))
+	data, err = io.ReadAll(io.LimitReader(file, icons.MaxBytes+1))
 	if err != nil {
 		return nil, msgIconRead
 	}
 	if len(data) == 0 {
 		return nil, "" // an empty file field: no file chosen
 	}
-	if _, problem := iconExt(data); problem != "" {
+	if _, problem := icons.Check(data); problem != "" {
 		return nil, problem
 	}
 	return data, ""
@@ -478,8 +479,6 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if ownIcon(a.ID, a.IconURL) {
-		s.removeIconFile(a.IconURL)
-	}
+	s.removeIconFile(a.ID, a.IconURL)
 	redirectNotice(w, r, "/admin/apps", "deleted")
 }
