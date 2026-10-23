@@ -28,6 +28,40 @@ const (
 	KeyRotated             = "oidc.key.rotate"
 )
 
+// Action names of changes made through the admin pages and API.
+const (
+	UserCreate         = "user.create"
+	UserInvite         = "user.invite"
+	UserUpdate         = "user.update"
+	UserDisable        = "user.disable"
+	UserEnable         = "user.enable"
+	UserDelete         = "user.delete"
+	UserPasswordSet    = "user.password.set"
+	UserResetSent      = "user.password.reset_sent"
+	UserTOTPClear      = "user.totp.clear"
+	UserSessionsRevoke = "user.sessions.revoke"
+
+	GroupCreate       = "group.create"
+	GroupUpdate       = "group.update"
+	GroupDelete       = "group.delete"
+	GroupMemberAdd    = "group.member.add"
+	GroupMemberRemove = "group.member.remove"
+
+	AppCreate       = "app.create"
+	AppUpdate       = "app.update"
+	AppDelete       = "app.delete"
+	AppSecretRotate = "app.secret.rotate"
+
+	ServiceAccountCreate = "service_account.create"
+	ServiceAccountUpdate = "service_account.update"
+	ServiceAccountDelete = "service_account.delete"
+
+	APITokenCreate = "api_token.create"
+	APITokenRevoke = "api_token.revoke"
+
+	SMTPTest = "settings.smtp_test"
+)
+
 // UserActor returns the actor type and ID for an event caused by a user.
 func UserActor(userID string) (model.ActorType, string) { return model.ActorUser, userID }
 
