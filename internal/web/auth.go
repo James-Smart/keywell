@@ -74,6 +74,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, ok, err := s.authenticate(ctx, email, pw)
+	if errors.Is(err, password.ErrBusy) {
+		// Too busy to check the password: not a guess, so neither limit
+		// keeps this attempt's place.
+		s.d.Limits.LoginIP.Forgive(ipKey)
+		s.d.Limits.LoginAccount.Forgive(acctKey)
+		s.renderLogin(w, r, msgThrottled, form)
+		return
+	}
 	if err != nil {
 		s.serverError(w, r, "login: look up user", err)
 		return
@@ -124,7 +132,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 // the (normalised) email. It returns the user the email names even when ok
 // is false, and nil when it names none. A password is always verified, the
 // dummy hash standing in for a missing one, so timing does not reveal
-// whether the account exists. err is reserved for store failures.
+// whether the account exists. err is reserved for store failures and
+// password.ErrBusy (no hashing slot came free).
 func (s *Server) authenticate(ctx context.Context, email, pw string) (user *model.User, ok bool, err error) {
 	hash := s.dummyHash
 	user, err = s.d.Store.GetUserByEmail(ctx, email)
@@ -136,11 +145,16 @@ func (s *Server) authenticate(ctx context.Context, email, pw string) (user *mode
 	default:
 		hash = storedHash(user)
 	}
-	match, err := password.Verify(pw, hash)
+	match, err := s.verifyPassword(ctx, pw, hash)
+	if errors.Is(err, password.ErrBusy) {
+		return nil, false, err
+	}
 	if err != nil {
 		// The user has no hash that can be checked (the dummy hash always
 		// can): spend the time a real check takes.
-		password.Verify(pw, s.dummyHash)
+		if _, err := s.verifyPassword(ctx, pw, s.dummyHash); errors.Is(err, password.ErrBusy) {
+			return nil, false, err
+		}
 		if !errors.Is(err, password.ErrUnusable) {
 			s.d.Log.ErrorContext(ctx, "login: stored password hash cannot be checked", "user_id", user.ID, "error", err)
 		}
@@ -162,13 +176,19 @@ func loginAccountKey(email string) string {
 // sign-in budget (Limiters.LoginAccount, shared with the sign-in form) as a
 // sign-in does: a wrong password uses up a place, a right one clears the
 // count. Once the budget is spent the password is not checked and
-// throttled is true.
+// throttled is true; so it is, without using up a place, when the server
+// is too busy to check it.
 func (s *Server) checkCurrentPassword(ctx context.Context, user *model.User, pw string) (ok, throttled bool) {
 	key := loginAccountKey(user.Email)
 	if !s.d.Limits.LoginAccount.Allow(key) {
 		return false, true
 	}
-	if !s.passwordMatches(ctx, user, pw) {
+	match, err := s.passwordMatches(ctx, user, pw)
+	if err != nil { // password.ErrBusy
+		s.d.Limits.LoginAccount.Forgive(key)
+		return false, true
+	}
+	if !match {
 		return false, false
 	}
 	s.d.Limits.LoginAccount.Reset(key)
@@ -176,13 +196,17 @@ func (s *Server) checkCurrentPassword(ctx context.Context, user *model.User, pw 
 }
 
 // passwordMatches reports whether pw is the user's password. A hash that
-// cannot be checked counts as no match.
-func (s *Server) passwordMatches(ctx context.Context, user *model.User, pw string) bool {
-	match, err := password.Verify(pw, storedHash(user))
-	if err != nil && !errors.Is(err, password.ErrUnusable) {
+// cannot be checked counts as no match. err is password.ErrBusy when no
+// hashing slot came free, and otherwise nil.
+func (s *Server) passwordMatches(ctx context.Context, user *model.User, pw string) (bool, error) {
+	match, err := s.verifyPassword(ctx, pw, storedHash(user))
+	switch {
+	case errors.Is(err, password.ErrBusy):
+		return false, err
+	case err != nil && !errors.Is(err, password.ErrUnusable):
 		s.d.Log.ErrorContext(ctx, "stored password hash cannot be checked", "user_id", user.ID, "error", err)
 	}
-	return match
+	return match, nil
 }
 
 // storedHash is the hash a user's password is checked against: the native
@@ -198,7 +222,7 @@ func storedHash(u *model.User) string {
 // is known. A failure is only logged: the legacy hash still works and the
 // upgrade is tried again at the next sign-in.
 func (s *Server) upgradeHash(ctx context.Context, u *model.User, pw string) {
-	hash, err := password.Hash(pw)
+	hash, err := s.hashPassword(ctx, pw)
 	if err == nil {
 		err = s.d.Store.SetPassword(ctx, u.ID, hash)
 	}

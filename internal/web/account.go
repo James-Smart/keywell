@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 
 	"latch/internal/audit"
@@ -46,7 +47,11 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		s.renderAccountPassword(w, r, msg, "")
 		return
 	}
-	phc, err := password.Hash(pw)
+	phc, err := s.hashPassword(ctx, pw)
+	if errors.Is(err, password.ErrBusy) {
+		s.renderAccountPassword(w, r, msgThrottled, "")
+		return
+	}
 	if err != nil {
 		s.serverError(w, r, "change password: hash", err)
 		return

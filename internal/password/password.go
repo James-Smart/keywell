@@ -7,12 +7,14 @@
 package password
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -44,6 +46,17 @@ const (
 
 const nativePrefix = "$argon2id$"
 
+// Ceilings on the cost a stored hash may ask for. A hash above them is
+// refused as malformed, never checked: one sign-in against it could take a
+// gigabyte or more of memory, or many seconds of CPU. Native hashes cost
+// 64 MiB and 3 passes; the legacy formats' defaults are far below these.
+const (
+	maxArgonMemory = 1 << 20 // KiB: 1 GiB
+	maxArgonTime   = 16
+	maxPBKDF2Iter  = 10_000_000
+	maxScryptBytes = 1 << 30 // 128·N·r: 1 GiB
+)
+
 var (
 	// ErrUnusable means the account has no password set ("" or "!...").
 	ErrUnusable = errors.New("password: unusable hash")
@@ -51,7 +64,59 @@ var (
 	ErrUnsupported = errors.New("password: unsupported hash format")
 	// ErrCommon means the password is on the common-passwords list.
 	ErrCommon = errors.New("password: too common")
+	// ErrBusy means VerifyCtx or HashCtx gave up waiting for a hashing
+	// slot because its context ended.
+	ErrBusy = errors.New("password: too busy to hash")
 )
+
+// slots bounds how many hashes VerifyCtx and HashCtx run at once, and so
+// the memory they take (64 MiB each at the native cost): a burst of
+// requests waits its turn instead of growing the process by gigabytes.
+var slots = make(chan struct{}, max(2, min(4, runtime.NumCPU())))
+
+// testHookInSlot, when set, runs at the start of each hash while its slot
+// is held, so tests can watch how many run at once.
+var testHookInSlot func()
+
+// withSlot runs fn holding a slot, waiting for one until ctx ends; then
+// it returns ErrBusy without running fn.
+func withSlot(ctx context.Context, fn func()) error {
+	if ctx.Err() != nil {
+		return ErrBusy
+	}
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		return ErrBusy
+	}
+	defer func() { <-slots }()
+	if testHookInSlot != nil {
+		testHookInSlot()
+	}
+	fn()
+	return nil
+}
+
+// VerifyCtx is Verify for request handlers: the check waits for one of a
+// few process-wide hashing slots, and fails with ErrBusy if ctx ends first.
+func VerifyCtx(ctx context.Context, password, encoded string) (ok bool, err error) {
+	if encoded == "" || strings.HasPrefix(encoded, "!") {
+		return false, ErrUnusable // nothing to hash
+	}
+	if busy := withSlot(ctx, func() { ok, err = Verify(password, encoded) }); busy != nil {
+		return false, busy
+	}
+	return ok, err
+}
+
+// HashCtx is Hash for request handlers: hashing waits for one of a few
+// process-wide hashing slots, and fails with ErrBusy if ctx ends first.
+func HashCtx(ctx context.Context, password string) (hash string, err error) {
+	if busy := withSlot(ctx, func() { hash, err = Hash(password) }); busy != nil {
+		return "", busy
+	}
+	return hash, err
+}
 
 // ErrTooShort reports a password with fewer than Min characters.
 type ErrTooShort struct{ Min int }
@@ -145,7 +210,8 @@ func verifyArgon2(password string, f []string, variants ...string) (bool, error)
 	p, okP := param(params[2], "p=", 8)
 	salt, errS := b64.DecodeString(f[3])
 	want, errH := b64.DecodeString(f[4])
-	if !okM || !okT || !okP || t == 0 || p == 0 || errS != nil || errH != nil || len(want) == 0 {
+	if !okM || !okT || !okP || t == 0 || p == 0 || errS != nil || errH != nil || len(want) == 0 ||
+		m > maxArgonMemory || t > maxArgonTime {
 		return false, malformed(variant)
 	}
 	got := key([]byte(password), salt, uint32(t), uint32(m), uint8(p), uint32(len(want)))

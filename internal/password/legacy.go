@@ -45,7 +45,7 @@ func verifyPBKDF2(password, fields string, h func() hash.Hash) (bool, error) {
 	}
 	iter, errI := strconv.Atoi(f[0])
 	want, errH := base64.StdEncoding.DecodeString(f[2])
-	if errI != nil || errH != nil || iter < 1 || len(want) == 0 {
+	if errI != nil || errH != nil || iter < 1 || iter > maxPBKDF2Iter || len(want) == 0 {
 		return false, malformed("pbkdf2")
 	}
 	got, err := pbkdf2.Key(h, password, []byte(f[1]), iter, len(want))
@@ -67,6 +67,11 @@ func verifyScrypt(password, fields string) (bool, error) {
 	p, errP := strconv.Atoi(f[3])
 	want, errH := base64.StdEncoding.DecodeString(f[4])
 	if errors.Join(errN, errR, errP, errH) != nil || len(want) == 0 {
+		return false, malformed("scrypt")
+	}
+	// 128·N·r bytes, compared without overflowing; scrypt.Key itself
+	// refuses N or r below 1.
+	if n > 0 && r > 0 && n > maxScryptBytes/128/r {
 		return false, malformed("scrypt")
 	}
 	got, err := scrypt.Key([]byte(password), []byte(f[1]), n, r, p, len(want))

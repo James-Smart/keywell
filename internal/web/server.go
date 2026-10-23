@@ -3,6 +3,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -54,6 +55,12 @@ type Server struct {
 	// dummyHash is verified against when a sign-in names no usable
 	// password, so the response time does not reveal whether it exists.
 	dummyHash string
+	// verifyPassword and hashPassword are password.VerifyCtx and
+	// password.HashCtx, which share a few hashing slots and fail with
+	// password.ErrBusy when the request ends before one comes free. Tests
+	// replace them to make the server busy.
+	verifyPassword func(ctx context.Context, pw, encoded string) (bool, error)
+	hashPassword   func(ctx context.Context, pw string) (string, error)
 	// skippedTiles remembers the app tiles already logged as hidden for a
 	// bad launch URL (keyed by app ID and URL), so each is logged once.
 	skippedTiles sync.Map
@@ -74,7 +81,7 @@ func newServer(d Deps) *Server {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &Server{d: d, dummyHash: dummy}
+	return &Server{d: d, dummyHash: dummy, verifyPassword: password.VerifyCtx, hashPassword: password.HashCtx}
 }
 
 // New returns the complete HTTP handler: routes wrapped in the middleware

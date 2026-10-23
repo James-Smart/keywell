@@ -136,6 +136,35 @@ func TestMalformedHashesFail(t *testing.T) {
 	}
 }
 
+// A stored hash whose cost would take over a gigabyte of memory, or an
+// unreasonable time, to check is refused as malformed without hashing.
+func TestCostCeilings(t *testing.T) {
+	const salt, sum = "c2FsdHNhbHRzYWx0c2FsdA", "aGFzaGhhc2hoYXNoaGFzaA"
+	for _, c := range []struct{ name, enc string }{
+		{"argon2_m", "$argon2id$v=19$m=1048577,t=1,p=1$" + salt + "$" + sum},
+		{"argon2_m_django", "argon2$argon2id$v=19$m=1048577,t=1,p=1$" + salt + "$" + sum},
+		{"argon2_t", "$argon2id$v=19$m=8,t=17,p=1$" + salt + "$" + sum},
+		{"pbkdf2_iter", "pbkdf2_sha256$10000001$salt$aGFzaA=="},
+		{"scrypt_mem", "scrypt$2097152$salt$8$1$aGFzaA=="},   // 128·N·r = 2 GiB
+		{"scrypt_mem_r", "scrypt$2$salt$8388608$1$aGFzaA=="}, // 128·N·r = 2 GiB
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ok, err := password.Verify(pw, c.enc)
+			if ok || err == nil || !strings.Contains(err.Error(), "malformed") {
+				t.Fatalf("Verify = %v, %v; want false and a malformed-hash error", ok, err)
+			}
+		})
+	}
+	// At the time ceiling (and a tiny memory cost) a hash still verifies.
+	salt16 := []byte("0123456789abcdef")
+	key := argon2.IDKey([]byte(pw), salt16, 16, 8, 1, 32)
+	h := "$argon2id$v=19$m=8,t=16,p=1$" + base64.RawStdEncoding.EncodeToString(salt16) + "$" +
+		base64.RawStdEncoding.EncodeToString(key)
+	if ok, err := password.Verify(pw, h); !ok || err != nil {
+		t.Errorf("Verify(t=16) = %v, %v; want true, nil", ok, err)
+	}
+}
+
 func TestCheckPolicy(t *testing.T) {
 	const minLen = 10
 	var short password.ErrTooShort

@@ -207,7 +207,11 @@ func (s *Server) resetSet(w http.ResponseWriter, r *http.Request) {
 		s.renderResetSet(w, r, tok.Purpose, msg)
 		return
 	}
-	phc, err := password.Hash(pw)
+	phc, err := s.hashPassword(ctx, pw)
+	if errors.Is(err, password.ErrBusy) { // the link is not used up
+		s.renderResetSet(w, r, tok.Purpose, msgThrottled)
+		return
+	}
 	if err != nil {
 		s.serverError(w, r, "reset: hash password", err)
 		return
