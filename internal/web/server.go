@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"latch/internal/admin"
+	"latch/internal/api"
 	"latch/internal/audit"
 	"latch/internal/config"
 	"latch/internal/mail"
@@ -93,8 +94,9 @@ func newServer(d Deps) *Server {
 
 // New returns the complete HTTP handler: routes wrapped in the middleware
 // chain (outermost first) recover, real IP, request log, security headers,
-// cross-origin protection, body limit, sessions. Health checks and static
-// files are served without a session lookup.
+// cross-origin protection, body limit, sessions. Health checks, static
+// files and the admin API (under /api/, which authenticates with bearer
+// tokens and answers in JSON) are served without a session lookup.
 func New(d Deps) http.Handler {
 	if d.Log == nil {
 		d.Log = slog.Default()
@@ -122,6 +124,7 @@ func New(d Deps) http.Handler {
 	root.Handle("GET /static/", staticFiles())
 	root.HandleFunc("GET /static/logo", s.logo)
 	root.HandleFunc("GET /icons/{name}", s.serveIcon)
+	root.Handle("/api/", api.New(api.Deps{Admin: s.admin, Store: d.Store, Log: d.Log, Now: s.d.Now}))
 	root.Handle("/", d.Sessions.Middleware(pages))
 
 	var h http.Handler = root

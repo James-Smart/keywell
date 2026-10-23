@@ -369,9 +369,12 @@ func TestRequestBodyLimit(t *testing.T) {
 		t.Errorf("the oversized sign-in was checked: %d login failures", n)
 	}
 
-	// The API limits its own bodies, answering in JSON.
-	if resp, _ := send("/api/v1/me"); resp.StatusCode == http.StatusRequestEntityTooLarge {
-		t.Errorf("POST /api/ with 2 MiB was refused by the page limit")
+	// The API limits its own bodies, answering in JSON, not with the page.
+	resp, body = send("/api/v1/me")
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || resp.Header.Get("Content-Type") != "application/json" ||
+		!strings.Contains(body, `"too_large"`) || strings.Contains(body, "Too much data") {
+		t.Errorf("POST /api/ with 2 MiB: status %d, Content-Type %q, want the API's JSON 413:\n%s",
+			resp.StatusCode, resp.Header.Get("Content-Type"), body)
 	}
 
 	// A body within the limit still reaches the handler.

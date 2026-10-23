@@ -1,0 +1,259 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Latch admin API",
+    "version": "1",
+    "description": "Manage Latch's members, groups, applications and service accounts, and read the audit log. Send an API token, made on the admin Service accounts page, as \"Authorization: Bearer <token>\". A read-only token can only use GET. Each token can make 600 requests a minute. Bodies are JSON objects of at most 1 MiB; unknown fields are refused. Times are RFC 3339 in UTC, and unset times are null. Every error is {\"error\": \"code\", \"message\": \"...\"}."
+  },
+  "servers": [{ "url": "/api/v1" }],
+  "security": [{ "apiToken": [] }],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "The calling service account and token",
+        "description": "The service account the token belongs to, and the token itself. Handy to check a token works.",
+        "responses": {
+          "200": {
+            "description": "The service account and the token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["service_account", "token"],
+                  "properties": {
+                    "service_account": { "$ref": "#/components/schemas/ServiceAccount" },
+                    "token": { "$ref": "#/components/schemas/Token" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenAPI",
+        "summary": "This document",
+        "description": "The OpenAPI description of the API. It needs no token.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The OpenAPI document.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API token from the admin Service accounts page. It starts latch_."
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "description": "A member.",
+        "required": ["id", "email", "username", "name", "status", "is_active", "is_admin", "groups", "metadata", "totp_enrolled", "imported_from_authentik", "last_login_at", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string" },
+          "username": { "type": "string", "description": "Empty when the member has none." },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "invited", "needs_password", "disabled"] },
+          "is_active": { "type": "boolean", "description": "False when the member is disabled." },
+          "is_admin": { "type": "boolean", "description": "In any group with is_admin." },
+          "groups": { "type": "array", "items": { "type": "string" }, "description": "Group names." },
+          "metadata": { "type": "object" },
+          "totp_enrolled": { "type": "boolean", "description": "Has set up an authenticator app." },
+          "imported_from_authentik": { "type": "boolean" },
+          "last_login_at": { "type": ["string", "null"], "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Group": {
+        "type": "object",
+        "required": ["id", "name", "description", "is_admin", "require_totp", "metadata", "member_count", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "is_admin": { "type": "boolean", "description": "Members can use the admin pages." },
+          "require_totp": { "type": "boolean", "description": "Members need a second sign-in step." },
+          "metadata": { "type": "object" },
+          "member_count": { "type": "integer", "minimum": 0 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "App": {
+        "type": "object",
+        "description": "An application members sign in to.",
+        "required": ["id", "name", "slug", "client_id", "client_type", "redirect_uris", "post_logout_redirect_uris", "allowed_groups", "subject_mode", "access_token_ttl", "id_token_ttl", "refresh_token_ttl", "launch_url", "icon_url", "description", "show_tile", "service_account_id", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "client_id": { "type": "string" },
+          "client_type": { "type": "string", "enum": ["confidential", "public"] },
+          "redirect_uris": { "type": "array", "items": { "type": "string" } },
+          "post_logout_redirect_uris": { "type": "array", "items": { "type": "string" } },
+          "allowed_groups": { "type": "array", "items": { "type": "string" }, "description": "Group names. Empty means any active member." },
+          "subject_mode": { "type": "string", "enum": ["id", "email", "username", "authentik_uuid", "authentik_uid", "authentik_pk"] },
+          "access_token_ttl": { "type": ["integer", "null"], "description": "Seconds. Null means the global default." },
+          "id_token_ttl": { "type": ["integer", "null"], "description": "Seconds. Null means the global default." },
+          "refresh_token_ttl": { "type": ["integer", "null"], "description": "Seconds. Null means the global default." },
+          "launch_url": { "type": "string" },
+          "icon_url": { "type": "string" },
+          "description": { "type": "string" },
+          "show_tile": { "type": "boolean", "description": "Shown on members' home page." },
+          "service_account_id": { "type": "string", "description": "The service account the app signs in as by itself. Empty when it can't." },
+          "client_secret": { "type": "string", "description": "Only in the response that made it. It can't be shown again." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ServiceAccount": {
+        "type": "object",
+        "required": ["id", "name", "username", "description", "groups", "metadata", "token_count", "last_used_at", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "username": { "type": "string" },
+          "description": { "type": "string" },
+          "groups": { "type": "array", "items": { "type": "string" }, "description": "Group names." },
+          "metadata": { "type": "object" },
+          "token_count": { "type": "integer", "minimum": 0 },
+          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "The latest use of any of its tokens." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Token": {
+        "type": "object",
+        "description": "An API token of a service account.",
+        "required": ["id", "label", "scope", "created_by", "created_at", "last_used_at", "expires_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "scope": { "type": "string", "enum": ["admin", "read"], "description": "read tokens can only use GET." },
+          "created_by": { "type": "string", "description": "ID of the admin or service account that made it." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "last_used_at": { "type": ["string", "null"], "format": "date-time" },
+          "expires_at": { "type": ["string", "null"], "format": "date-time", "description": "Null means it never expires." },
+          "token": { "type": "string", "description": "Only in the response that made it. It can't be shown again." }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "at", "actor_type", "actor_id", "action", "target_type", "target_id", "summary", "detail"],
+        "properties": {
+          "id": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "actor_type": { "type": "string", "enum": ["user", "service_account", "system", "importer"] },
+          "actor_id": { "type": "string" },
+          "action": { "type": "string", "description": "Such as user.create or login.failure." },
+          "target_type": { "type": "string" },
+          "target_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "detail": { "type": "object", "description": "Changes made through the API have token_id." }
+        }
+      },
+      "List": {
+        "type": "object",
+        "description": "One page of a list. A list operation's schema narrows items to its kind of record.",
+        "required": ["items", "page", "per_page", "total"],
+        "properties": {
+          "items": { "type": "array", "items": {} },
+          "page": { "type": "integer", "minimum": 1 },
+          "per_page": { "type": "integer", "minimum": 1, "maximum": 200, "description": "50 unless asked; at most 200." },
+          "total": { "type": "integer", "minimum": 0, "description": "Every match, across all pages." }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": ["invalid_json", "unauthorized", "forbidden", "not_found", "method_not_allowed", "refused", "too_large", "invalid", "rate_limited", "email_failed", "internal"]
+          },
+          "message": { "type": "string", "description": "What went wrong, in plain words." },
+          "fields": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Only with invalid: what to change, by field name."
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "description": "The page to return, from 1.",
+        "schema": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "PerPage": {
+        "name": "per_page",
+        "in": "query",
+        "description": "Items per page; more than 200 gives 200.",
+        "schema": { "type": "integer", "minimum": 1, "default": 50 }
+      }
+    },
+    "responses": {
+      "NoContent": { "description": "Done. There is no body." },
+      "InvalidJSON": {
+        "description": "The body is not a JSON object of the documented fields.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unauthorized": {
+        "description": "The token is missing, unknown, expired or revoked.",
+        "headers": { "WWW-Authenticate": { "schema": { "type": "string", "const": "Bearer" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Forbidden": {
+        "description": "A read-only token asked to make a change.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "There is no such record.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Refused": {
+        "description": "The change can't be made as asked. The message says why.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "TooLarge": {
+        "description": "The body is over 1 MiB.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Invalid": {
+        "description": "Some values can't be saved. fields says what to change.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "RateLimited": {
+        "description": "The token made over 600 requests in the last minute.",
+        "headers": { "Retry-After": { "description": "Seconds to wait.", "schema": { "type": "integer", "const": 60 } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "EmailFailed": {
+        "description": "The email couldn't be sent.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Internal": {
+        "description": "Something went wrong on Latch's side.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 // Package testenv starts a complete Latch HTTP stack on an httptest server
-// for tests in the web and oidc packages (which use external test packages
-// so they can import this one without a cycle).
+// for tests in the web, oidc and api packages (which use external test
+// packages so they can import this one without a cycle).
 package testenv
 
 import (
@@ -412,6 +412,84 @@ func (e *Env) SubmitMultipart(t *testing.T, c *http.Client, path string, form ur
 		t.Fatalf("testenv: post %s: %v", path, err)
 	}
 	return resp, readBody(t, resp)
+}
+
+// APIToken stores a new API token with scope for the service account
+// username, creating the account (named after its username, in no groups)
+// when there is none, and returns the raw token and the account. Each call
+// makes another token, so calling it twice with one username gives the
+// same account two tokens.
+func (e *Env) APIToken(t *testing.T, username string, scope model.APITokenScope) (raw string, account *model.User) {
+	t.Helper()
+	ctx := context.Background()
+	account, err := e.Store.GetUserByUsername(ctx, username)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		account = &model.User{Type: model.UserTypeService, Name: username, Username: username, IsActive: true}
+		if err := e.Store.CreateUser(ctx, account); err != nil {
+			t.Fatalf("testenv: create service account %s: %v", username, err)
+		}
+	case err != nil:
+		t.Fatalf("testenv: get user %s: %v", username, err)
+	case account.Type != model.UserTypeService:
+		t.Fatalf("testenv: %s is a member, not a service account", username)
+	}
+	raw = "latch_" + secrets.RandomToken(32)
+	tok := &model.APIToken{ServiceAccountID: account.ID, Label: username + " test token",
+		TokenHash: secrets.HashToken(raw), Scope: scope}
+	if err := e.Store.CreateAPIToken(ctx, tok); err != nil {
+		t.Fatalf("testenv: create API token for %s: %v", username, err)
+	}
+	return raw, account
+}
+
+// API sends a request to the admin API, with token as its bearer token
+// (none when ""). path is from the server root, such as "/api/v1/me". body
+// is sent as JSON unless it is nil (no body) or an io.Reader (sent as is).
+// It returns the response body decoded as a JSON object (nil when empty)
+// and the response, whose body is already closed. A body that is not a
+// JSON object fails the test. Cookies are never sent.
+func (e *Env) API(t *testing.T, token, method, path string, body any) (map[string]any, *http.Response) {
+	t.Helper()
+	var r io.Reader
+	switch b := body.(type) {
+	case nil:
+	case io.Reader:
+		r = b
+	default:
+		buf, err := json.Marshal(b)
+		if err != nil {
+			t.Fatalf("testenv: %s %s: encode body: %v", method, path, err)
+		}
+		r = bytes.NewReader(buf)
+	}
+	req, err := http.NewRequest(method, e.TS.URL+path, r)
+	if err != nil {
+		t.Fatalf("testenv: %s %s request: %v", method, path, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.TS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("testenv: %s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("testenv: read %s %s response: %v", method, path, err)
+	}
+	if len(raw) == 0 {
+		return nil, resp
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("testenv: %s %s: status %d, body is not a JSON object: %v\n%s", method, path, resp.StatusCode, err, raw)
+	}
+	return out, resp
 }
 
 // readBody reads and closes resp's body.
