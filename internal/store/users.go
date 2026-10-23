@@ -161,14 +161,16 @@ func (s *Store) SetTOTP(ctx context.Context, userID string, secretEnc []byte, co
 	return oneRow("store: set totp", res, err)
 }
 
-// ClearTOTP removes TOTP enrolment and the user's recovery codes.
+// ClearTOTP removes TOTP enrolment, the last TOTP step claimed and the
+// user's recovery codes.
 func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: clear totp: %w", err)
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=NULL, totp_confirmed_at=NULL, updated_at=? WHERE id=?`,
+	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=NULL, totp_confirmed_at=NULL, totp_last_step=NULL,
+		updated_at=? WHERE id=?`,
 		formatTime(time.Now()), userID)
 	if err := oneRow("store: clear totp", res, err); err != nil {
 		return err
@@ -177,6 +179,24 @@ func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
 		return fmt.Errorf("store: clear recovery codes: %w", err)
 	}
 	return tx.Commit()
+}
+
+// ClaimTOTPStep records that the user's TOTP code for time step (Unix time
+// / 30) has been used, and reports whether it could be: only a step later
+// than the last one claimed can, so no code is accepted twice. It is
+// atomic, so of two concurrent claims of one step at most one succeeds. An
+// unknown user claims nothing.
+func (s *Store) ClaimTOTPStep(ctx context.Context, userID string, step int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET totp_last_step=?
+		WHERE id=? AND COALESCE(totp_last_step, -1) < ?`, step, userID, step)
+	if err != nil {
+		return false, fmt.Errorf("store: claim totp step: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("store: claim totp step: %w", err)
+	}
+	return n == 1, nil
 }
 
 // TouchLastLogin records a successful login time.

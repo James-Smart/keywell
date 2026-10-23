@@ -127,8 +127,10 @@ func (s *Server) awaitingCode(w http.ResponseWriter, r *http.Request, next strin
 }
 
 // checkCode reports whether code is the user's current TOTP code or one of
-// their unused recovery codes, which it uses up. factor says which kind of
-// code it was taken for: "totp" or "recovery".
+// their unused recovery codes, and uses it up. A TOTP code already used
+// (its time step claimed, at sign-in or by the confirmation of the
+// enrolment) does not match: no code is accepted twice (RFC 6238 §5.2).
+// factor says which kind of code it was taken for: "totp" or "recovery".
 func (s *Server) checkCode(ctx context.Context, user *model.User, code string) (factor string, ok bool, err error) {
 	if rc := totp.NormalizeRecoveryCode(code); recoveryCodeRE.MatchString(rc) {
 		ok, err := s.d.Store.ConsumeRecoveryCode(ctx, user.ID, secrets.HashToken(rc))
@@ -138,7 +140,12 @@ func (s *Server) checkCode(ctx context.Context, user *model.User, code string) (
 	if err != nil {
 		return "", false, err
 	}
-	return "totp", totp.Validate(secret, code), nil
+	step, match := totp.MatchStep(secret, code, s.d.Now())
+	if !match {
+		return "totp", false, nil
+	}
+	ok, err = s.d.Store.ClaimTOTPStep(ctx, user.ID, step)
+	return "totp", ok, err
 }
 
 func totpLimitKey(userID string) string { return "totp:" + userID }
@@ -404,7 +411,8 @@ func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, "totp confirm: open pending secret", err)
 		return
 	}
-	if !totp.Validate(secret, r.PostFormValue("code")) {
+	step, match := totp.MatchStep(secret, r.PostFormValue("code"), s.d.Now())
+	if !match {
 		s.renderAccountTOTP(w, r, sess, user, msgCodeMismatch, next)
 		return
 	}
@@ -423,7 +431,7 @@ func (s *Server) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 	for i, c := range codes {
 		hashes[i] = secrets.HashToken(c)
 	}
-	err = s.d.Store.CompleteTOTPEnrolment(ctx, user.ID, sess.ID, sealed, time.Now().UTC(), hashes, string(codesJSON))
+	err = s.d.Store.CompleteTOTPEnrolment(ctx, user.ID, sess.ID, sealed, time.Now().UTC(), step, hashes, string(codesJSON))
 	if errors.Is(err, store.ErrConflict) || errors.Is(err, store.ErrNotFound) {
 		// Another confirm got there first, or the enrolment is gone.
 		already()

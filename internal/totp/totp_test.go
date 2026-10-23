@@ -33,12 +33,15 @@ func TestGenerateSecret(t *testing.T) {
 	}
 }
 
-func TestValidateWithGeneratedCode(t *testing.T) {
+// MatchStep accepts a code from the current 30 second step or one either
+// side, and returns the step the code belongs to.
+func TestMatchStepWithGeneratedCode(t *testing.T) {
 	secret, err := GenerateSecret()
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 1, 1, 12, 0, 10, 0, time.UTC)
+	step := now.Unix() / 30
 	code := codeAt(t, secret, now)
 	cases := []struct {
 		name  string
@@ -52,29 +55,35 @@ func TestValidateWithGeneratedCode(t *testing.T) {
 		{"90s earlier", -90 * time.Second, false},
 	}
 	for _, c := range cases {
-		if got := validateAt(secret, code, now.Add(c.shift)); got != c.want {
-			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		got, ok := MatchStep(secret, code, now.Add(c.shift))
+		if ok != c.want {
+			t.Errorf("%s: ok %v want %v", c.name, ok, c.want)
+		}
+		if ok && got != step {
+			t.Errorf("%s: step %d want %d (the step the code was made in)", c.name, got, step)
 		}
 	}
 }
 
-func TestValidateIgnoresSpaces(t *testing.T) {
+func TestMatchStepIgnoresSpaces(t *testing.T) {
 	secret, _ := GenerateSecret()
 	now := time.Now()
 	code := codeAt(t, secret, now)
 	spaced := " " + code[:3] + " " + code[3:] + " "
-	if !validateAt(secret, spaced, now) {
-		t.Fatal("code with spaces should validate")
-	}
-	if !Validate(secret, spaced) {
-		t.Fatal("exported Validate should accept the current code with spaces")
+	if step, ok := MatchStep(secret, spaced, now); !ok || step != now.Unix()/30 {
+		t.Fatalf("code with spaces: step %d ok %v", step, ok)
 	}
 }
 
-func TestValidateRejectsGarbage(t *testing.T) {
+func TestMatchStepRejectsGarbage(t *testing.T) {
 	secret, _ := GenerateSecret()
-	if Validate(secret, "") || Validate(secret, "abcdef") || Validate("not base32!", "123456") {
-		t.Fatal("garbage must not validate")
+	now := time.Now()
+	for _, c := range []struct{ secret, code string }{
+		{secret, ""}, {secret, "abcdef"}, {secret, "12345"}, {secret, "1234567"}, {"not base32!", "123456"},
+	} {
+		if _, ok := MatchStep(c.secret, c.code, now); ok {
+			t.Errorf("MatchStep(%q, %q) matched", c.secret, c.code)
+		}
 	}
 }
 

@@ -205,6 +205,7 @@ func New(t *testing.T, opts ...Option) *Env {
 		Limits:     web.NewLimiters(clock.Now),
 		OIDC:       prov,
 		Background: background,
+		Now:        clock.Now,
 		Version:    Version,
 	})
 	handler.Store(&h)

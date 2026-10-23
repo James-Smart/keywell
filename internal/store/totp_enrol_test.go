@@ -31,9 +31,16 @@ func TestTOTPEnrolmentLifecycle(t *testing.T) {
 	}
 
 	confirmed := time.Now().UTC()
-	if err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("second"), confirmed,
+	if err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("second"), confirmed, 500,
 		[]string{"h1", "h2"}, `["c1","c2"]`); err != nil {
 		t.Fatal(err)
+	}
+	// The code that confirmed the enrolment cannot sign in afterwards.
+	if ok, err := s.ClaimTOTPStep(ctx, u.ID, 500); ok || err != nil {
+		t.Fatalf("claim the confirming step: %v, %v; want false", ok, err)
+	}
+	if ok, err := s.ClaimTOTPStep(ctx, u.ID, 501); !ok || err != nil {
+		t.Fatalf("claim the next step: %v, %v; want true", ok, err)
 	}
 	got, err := s.GetUser(ctx, u.ID)
 	if err != nil {
@@ -81,11 +88,11 @@ func TestCompleteTOTPEnrolmentRefusesSecond(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("secret"), now, []string{"a1", "a2"}, `["a"]`); err != nil {
+	if err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("secret"), now, 1, []string{"a1", "a2"}, `["a"]`); err != nil {
 		t.Fatal(err)
 	}
 
-	err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("other"), now.Add(time.Second), []string{"b1", "b2", "b3"}, `["b"]`)
+	err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("other"), now.Add(time.Second), 2, []string{"b1", "b2", "b3"}, `["b"]`)
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("second complete: %v, want ErrConflict", err)
 	}
@@ -114,7 +121,7 @@ func TestCompleteTOTPEnrolmentNeedsEnrolment(t *testing.T) {
 	u := mkUser(t, s, "none@example.org")
 	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
 
-	err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("secret"), time.Now(), []string{"h"}, `["c"]`)
+	err := s.CompleteTOTPEnrolment(ctx, u.ID, "sess", []byte("secret"), time.Now(), 1, []string{"h"}, `["c"]`)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("complete without enrolment: %v, want ErrNotFound", err)
 	}

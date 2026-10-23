@@ -47,10 +47,19 @@ func post(t *testing.T, env *testenv.Env, c *http.Client, path string, form url.
 	return resp, string(body)
 }
 
-// validCode is the current TOTP code for secret.
-func validCode(t *testing.T, secret string) string {
+// validCode moves env's clock on by one 30 second TOTP step and returns
+// the code for secret then. Each call gives a code from a step not used
+// before, as the server accepts each code once.
+func validCode(t *testing.T, env *testenv.Env, secret string) string {
 	t.Helper()
-	code, err := pqtotp.GenerateCode(secret, time.Now())
+	env.Clock.Advance(30 * time.Second)
+	return codeAt(t, secret, env.Clock.Now())
+}
+
+// codeAt is the TOTP code for secret at time at.
+func codeAt(t *testing.T, secret string, at time.Time) string {
+	t.Helper()
+	code, err := pqtotp.GenerateCode(secret, at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,10 +67,10 @@ func validCode(t *testing.T, secret string) string {
 }
 
 // wrongCode is a six-digit code that is not valid for secret in any of the
-// time steps Validate accepts.
-func wrongCode(t *testing.T, secret string) string {
+// time steps the server accepts now (by env's clock).
+func wrongCode(t *testing.T, env *testenv.Env, secret string) string {
 	t.Helper()
-	now := time.Now()
+	now := env.Clock.Now()
 	valid := map[string]bool{}
 	for _, at := range []time.Time{now.Add(-time.Minute), now.Add(-30 * time.Second), now, now.Add(30 * time.Second), now.Add(time.Minute)} {
 		code, err := pqtotp.GenerateCode(secret, at)
@@ -113,7 +122,7 @@ func beginEnrolment(t *testing.T, env *testenv.Env, c *http.Client, form url.Val
 func signInWithCode(t *testing.T, env *testenv.Env, c *http.Client, email, secret string) {
 	t.Helper()
 	env.Login(t, c, email, testPW)
-	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/")
 }
 
@@ -180,7 +189,7 @@ func TestEnrolConfirmShowsCodesOnce(t *testing.T) {
 		t.Fatalf("qr.png: status %d type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 
-	resp, body = post(t, env, c, "/account/totp/confirm", url.Values{"code": {wrongCode(t, key)}})
+	resp, body = post(t, env, c, "/account/totp/confirm", url.Values{"code": {wrongCode(t, env, key)}})
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) || manualKey(t, body) != key {
 		t.Fatalf("wrong confirm code: status %d\n%s", resp.StatusCode, body)
 	}
@@ -188,7 +197,7 @@ func TestEnrolConfirmShowsCodesOnce(t *testing.T) {
 		t.Fatal("enrolled by a wrong code")
 	}
 
-	resp, _ = post(t, env, c, "/account/totp/confirm", url.Values{"code": {validCode(t, key)}})
+	resp, _ = post(t, env, c, "/account/totp/confirm", url.Values{"code": {validCode(t, env, key)}})
 	assertRedirect(t, resp, "/account/totp/codes")
 
 	got := getUser(t, env, u.ID)
@@ -299,7 +308,7 @@ func TestConfirmTwiceStillShowsCodes(t *testing.T) {
 	const next = "/oauth/authorize?client_id=wiki&state=x"
 
 	key := beginEnrolment(t, env, c, url.Values{"next": {next}})
-	form := url.Values{"code": {validCode(t, key)}, "next": {next}}
+	form := url.Values{"code": {validCode(t, env, key)}, "next": {next}}
 	first, _ := post(t, env, c, "/account/totp/confirm", form)
 	assertRedirect(t, first, "/account/totp/codes?next="+url.QueryEscape(next))
 	second, _ := post(t, env, c, "/account/totp/confirm", form)
@@ -317,7 +326,7 @@ func TestConfirmConcurrentStoresOneSetOfCodes(t *testing.T) {
 	c := env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
 	key := beginEnrolment(t, env, c, nil)
-	form := url.Values{"code": {validCode(t, key)}}
+	form := url.Values{"code": {validCode(t, env, key)}}
 
 	locations := make(chan string, 2)
 	for range 2 {
@@ -370,12 +379,12 @@ func TestLoginTOTPCodeAndRecovery(t *testing.T) {
 		t.Error("TOTP page shows the user as signed in")
 	}
 
-	resp, body = post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, secret)}, "next": {"/account?tab=2"}})
+	resp, body = post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, env, secret)}, "next": {"/account?tab=2"}})
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) ||
 		!strings.Contains(body, `name="next" value="/account?tab=2"`) {
 		t.Fatalf("wrong code: status %d\n%s", resp.StatusCode, body)
 	}
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}, "next": {"/account?tab=2"}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}, "next": {"/account?tab=2"}})
 	assertRedirect(t, resp, "/account?tab=2")
 	sess, err := env.Store.GetSession(ctx, jarSession(t, env, c))
 	if err != nil || !sess.TOTPPassed {
@@ -422,7 +431,7 @@ func TestLoginTOTPFiveFailuresEndsSession(t *testing.T) {
 	sid := jarSession(t, env, c)
 
 	// A wrong recovery code counts the same as a wrong six-digit code.
-	for i, code := range []string{wrongCode(t, secret), "zzzzz-zzzzz", wrongCode(t, secret), wrongCode(t, secret)} {
+	for i, code := range []string{wrongCode(t, env, secret), "zzzzz-zzzzz", wrongCode(t, env, secret), wrongCode(t, env, secret)} {
 		resp, body := post(t, env, c, "/login/totp", url.Values{"code": {code}})
 		if resp.StatusCode != http.StatusOK || !strings.Contains(body, codeMismatch) {
 			t.Fatalf("failure %d: status %d", i+1, resp.StatusCode)
@@ -432,7 +441,7 @@ func TestLoginTOTPFiveFailuresEndsSession(t *testing.T) {
 		t.Fatalf("failures audited before the limit: %+v", events)
 	}
 
-	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, secret)}})
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {wrongCode(t, env, secret)}})
 	assertRedirect(t, resp, "/login")
 	if jarSession(t, env, c) != "" {
 		t.Fatal("session cookie not cleared")
@@ -446,7 +455,7 @@ func TestLoginTOTPFiveFailuresEndsSession(t *testing.T) {
 	}
 
 	// Without the session even the right code gets nowhere.
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login?") {
 		t.Fatalf("code after the session ended: status %d location %q", resp.StatusCode, resp.Header.Get("Location"))
 	}
@@ -464,7 +473,7 @@ func wrongGuesses(t *testing.T, env *testenv.Env, c *http.Client, path string, f
 		for k, v := range form {
 			f[k] = v
 		}
-		f.Set("code", wrongCode(t, secret))
+		f.Set("code", wrongCode(t, env, secret))
 		resp, body := post(t, env, c, path, f)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("wrong code %d at %s: status %d location %q", i+1, path, resp.StatusCode, resp.Header.Get("Location"))
@@ -507,7 +516,7 @@ func TestLoginTOTPAccountThrottle(t *testing.T) {
 	sid := jarSession(t, env, last)
 
 	// The budget is spent: even the right code is refused, unchecked.
-	resp, _ := post(t, env, last, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ := post(t, env, last, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/login")
 	if jarSession(t, env, last) != "" {
 		t.Fatal("session cookie not cleared")
@@ -522,7 +531,7 @@ func TestLoginTOTPAccountThrottle(t *testing.T) {
 	// A fresh sign-in does not buy another guess.
 	c := env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/login")
 	if got := secondFactors(t, env); len(got) != 0 {
 		t.Fatalf("sign-in completed while throttled: %v", got)
@@ -531,7 +540,7 @@ func TestLoginTOTPAccountThrottle(t *testing.T) {
 	env.Clock.Advance(16 * time.Minute)
 	c = env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/")
 }
 
@@ -544,7 +553,7 @@ func TestLoginTOTPCorrectCodeResetsAccountThrottle(t *testing.T) {
 	c := env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
 	wrongGuesses(t, env, c, "/login/totp", nil, secret, 4)
-	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/")
 
 	for range 2 {
@@ -554,7 +563,7 @@ func TestLoginTOTPCorrectCodeResetsAccountThrottle(t *testing.T) {
 	}
 	c = env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/")
 }
 
@@ -573,7 +582,7 @@ func TestDisableCountsTowardTOTPThrottle(t *testing.T) {
 	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}}, secret, 3)
 	wrongGuesses(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}}, secret, 10)
 
-	resp, _ := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	resp, _ := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/login")
 	if _, err := env.Store.GetSession(ctx, sid); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("session still stored: %v", err)
@@ -612,7 +621,7 @@ func TestRequiredByGroupForcesEnrolment(t *testing.T) {
 
 	key := beginEnrolment(t, env, c, url.Values{"required": {"1"}, "next": {"/"}})
 	resp, _ = post(t, env, c, "/account/totp/confirm",
-		url.Values{"code": {validCode(t, key)}, "required": {"1"}, "next": {"/"}})
+		url.Values{"code": {validCode(t, env, key)}, "required": {"1"}, "next": {"/"}})
 	assertRedirect(t, resp, "/account/totp/codes?next=%2F")
 	sess, err := env.Store.GetSession(ctx, jarSession(t, env, c))
 	if err != nil || !sess.TOTPPassed {
@@ -655,8 +664,8 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 	}
 
 	for name, form := range map[string]url.Values{
-		"wrong password": {"password": {"not the password"}, "code": {validCode(t, secret)}},
-		"wrong code":     {"password": {testPW}, "code": {wrongCode(t, secret)}},
+		"wrong password": {"password": {"not the password"}, "code": {validCode(t, env, secret)}},
+		"wrong code":     {"password": {testPW}, "code": {wrongCode(t, env, secret)}},
 		"no code":        {"password": {testPW}},
 	} {
 		resp, body := post(t, env, c, "/account/totp/disable", form)
@@ -668,7 +677,7 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 		}
 	}
 
-	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/account/totp")
 	got := getUser(t, env, u.ID)
 	if got.TOTPEnrolled() || got.TOTPSecretEnc != nil {
@@ -699,7 +708,7 @@ func TestDisableRefusedWhenGroupRequiresTOTP(t *testing.T) {
 		strings.Contains(body, `action="/account/totp/disable"`) {
 		t.Fatalf("status page: status %d\n%s", resp.StatusCode, body)
 	}
-	resp, body = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	resp, body = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, env, secret)}})
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, groupRequires) {
 		t.Fatalf("disable: status %d\n%s", resp.StatusCode, body)
 	}
@@ -736,7 +745,7 @@ func TestIncompleteSessionCannotReachAccount(t *testing.T) {
 	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
 	resp, _ = post(t, env, c, "/account/totp/begin", nil)
 	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
-	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/login/totp?next=%2Faccount%2Ftotp")
 	if !getUser(t, env, u.ID).TOTPEnrolled() {
 		t.Fatal("an incomplete session turned TOTP off")
@@ -753,12 +762,12 @@ func TestDisableWrongPasswordThrottled(t *testing.T) {
 	signInWithCode(t, env, c, "alex@example.org", secret)
 
 	for i := range 10 {
-		resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}, "code": {validCode(t, secret)}})
+		resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {"not the password"}, "code": {validCode(t, env, secret)}})
 		if resp.StatusCode != http.StatusOK || !strings.Contains(body, disableMismatch) {
 			t.Fatalf("wrong password %d: status %d\n%s", i+1, resp.StatusCode, body)
 		}
 	}
-	resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, secret)}})
+	resp, body := post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {validCode(t, env, secret)}})
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, throttled) {
 		t.Fatalf("throttled disable: status %d\n%s", resp.StatusCode, body)
 	}

@@ -181,6 +181,40 @@ func TestTOTPAndRecoveryCodes(t *testing.T) {
 	}
 }
 
+// Each TOTP time step can be claimed once, and only after the last one
+// claimed, so a code is never accepted twice (RFC 6238 §5.2).
+func TestClaimTOTPStep(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	u := &model.User{Name: "A", Email: "a@example.org"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		step int64
+		want bool
+	}{
+		{100, true},  // nothing claimed yet
+		{100, false}, // the same code again
+		{99, false},  // an older code
+		{101, true},
+	} {
+		if ok, err := s.ClaimTOTPStep(ctx, u.ID, c.step); ok != c.want || err != nil {
+			t.Fatalf("ClaimTOTPStep(%d) = %v, %v; want %v", c.step, ok, err, c.want)
+		}
+	}
+	// Turning TOTP off forgets the last step, for a new secret.
+	if err := s.ClearTOTP(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.ClaimTOTPStep(ctx, u.ID, 50); !ok || err != nil {
+		t.Fatalf("ClaimTOTPStep after ClearTOTP = %v, %v; want true", ok, err)
+	}
+	if ok, err := s.ClaimTOTPStep(ctx, "nobody", 1000); ok || err != nil {
+		t.Fatalf("ClaimTOTPStep(unknown user) = %v, %v; want false, nil", ok, err)
+	}
+}
+
 func TestTouchLastLogin(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t)

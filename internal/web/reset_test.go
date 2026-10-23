@@ -246,7 +246,7 @@ func TestResetLinkWithTOTPGoesToTOTPStep(t *testing.T) {
 	}
 	resp, _ = get(t, c, env.TS.URL+"/")
 	assertRedirect(t, resp, "/login/totp?next=%2F")
-	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, secret)}})
+	resp, _ = post(t, env, c, "/login/totp", url.Values{"code": {validCode(t, env, secret)}})
 	assertRedirect(t, resp, "/")
 }
 

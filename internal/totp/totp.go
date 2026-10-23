@@ -5,6 +5,7 @@ package totp
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/hex"
 	"fmt"
@@ -79,25 +80,32 @@ func QRPNG(uri string, size int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Validate reports whether code is a valid current TOTP code for secret,
-// allowing one 30 second step of clock skew either way. Spaces in code are
-// ignored.
-func Validate(secret, code string) bool {
-	return validateAt(secret, code, time.Now())
-}
-
-func validateAt(secret, code string, at time.Time) bool {
+// MatchStep reports whether code is a TOTP code for secret at time at,
+// allowing one 30 second step of clock skew either way, and returns the
+// time step (Unix time / 30) whose code it is. Spaces in code are ignored.
+//
+// A code must be accepted only once (RFC 6238 §5.2): callers record the
+// step, and refuse a code whose step is not later than the last one used.
+func MatchStep(secret, code string, at time.Time) (step int64, ok bool) {
 	code = strings.Join(strings.Fields(code), "")
-	if code == "" {
-		return false
+	if len(code) != 6 {
+		return 0, false
 	}
-	ok, err := pqtotp.ValidateCustom(code, secret, at, pqtotp.ValidateOpts{
-		Period:    period,
-		Skew:      1,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	return err == nil && ok
+	now := at.Unix() / period
+	for s := now - 1; s <= now+1; s++ {
+		want, err := pqtotp.GenerateCodeCustom(secret, time.Unix(s*period, 0), pqtotp.ValidateOpts{
+			Period:    period,
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err != nil {
+			return 0, false
+		}
+		if subtle.ConstantTimeCompare([]byte(code), []byte(want)) == 1 {
+			return s, true
+		}
+	}
+	return 0, false
 }
 
 // GenerateRecoveryCodes returns n distinct codes formatted "xxxxx-xxxxx".

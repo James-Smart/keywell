@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"latch/internal/audit"
 	"latch/internal/config"
@@ -41,6 +42,9 @@ type Deps struct {
 	// exiting. nil when nobody waits.
 	Background *sync.WaitGroup
 
+	// Now is the time TOTP codes are checked against; nil means time.Now.
+	Now func() time.Time
+
 	Version string
 }
 
@@ -66,6 +70,9 @@ func newServer(d Deps) *Server {
 	}
 	if d.Background == nil {
 		d.Background = new(sync.WaitGroup)
+	}
+	if d.Now == nil {
+		d.Now = time.Now
 	}
 	return &Server{d: d, dummyHash: dummy}
 }

@@ -27,7 +27,7 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(applied, []string{"0001_core.sql", "0002_totp_enrolment.sql"}) {
+	if !reflect.DeepEqual(applied, []string{"0001_core.sql", "0002_totp_enrolment.sql", "0003_totp_last_step.sql"}) {
 		t.Fatalf("applied = %v", applied)
 	}
 	applied, err = db.Migrate(ctx, d)

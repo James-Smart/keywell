@@ -35,22 +35,24 @@ func (s *Store) GetTOTPEnrolment(ctx context.Context, sessionID string) (secretE
 
 // CompleteTOTPEnrolment confirms the session's enrolment in one
 // transaction: secretEnc becomes the user's TOTP secret, confirmed at
-// confirmedAt; codeHashes replace their recovery codes; and the enrolment
+// confirmedAt with the code for time step, which is claimed as by
+// ClaimTOTPStep so that code cannot also sign in; codeHashes replace their
+// recovery codes; and the enrolment
 // keeps codesJSON, the codes to show once, while its copy of the secret is
 // cleared. It returns ErrConflict when the user is already enrolled (or does
 // not exist) and ErrNotFound when the session has no enrolment; either way
 // nothing is written.
 func (s *Store) CompleteTOTPEnrolment(ctx context.Context, userID, sessionID string, secretEnc []byte,
-	confirmedAt time.Time, codeHashes []string, codesJSON string) error {
+	confirmedAt time.Time, step int64, codeHashes []string, codesJSON string) error {
 	const op = "store: complete totp enrolment"
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=?, totp_confirmed_at=?, updated_at=?
-		WHERE id=? AND totp_confirmed_at IS NULL`,
-		secretEnc, formatTime(confirmedAt), formatTime(time.Now()), userID)
+	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=?, totp_confirmed_at=?, totp_last_step=?,
+		updated_at=? WHERE id=? AND totp_confirmed_at IS NULL`,
+		secretEnc, formatTime(confirmedAt), step, formatTime(time.Now()), userID)
 	if err := oneRow(op, res, err); errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("%s: %w", op, ErrConflict)
 	} else if err != nil {
