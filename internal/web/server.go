@@ -204,6 +204,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("GET /admin/settings", adminOnly(s.settingsPage))
 	mux.Handle("POST /admin/settings/test-email", adminOnly(s.settingsTestEmail))
 	mux.Handle("POST /admin/settings/rotate-keys", adminOnly(s.settingsRotateKeys))
+	mux.Handle("GET /admin/audit", adminOnly(s.auditPage))
 }
 
 // maxBodyBytes is the most a request body may hold, except under /api/.

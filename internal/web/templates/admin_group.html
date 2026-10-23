@@ -3,6 +3,9 @@
 {{- $group := .Group}}
 <p class="back"><a href="/admin/groups">All groups</a></p>
 <h1>{{.Heading}}</h1>
+{{- if $group}}
+<p class="note"><a href="/admin/audit?target={{$group.ID}}&category=all">View activity</a></p>
+{{- end}}
 <div{{if $group}} class="split"{{end}}>
   <form method="post" action="{{if $group}}/admin/groups/{{$group.ID}}{{else}}/admin/groups{{end}}" class="panel fields">
     {{- if $group}}

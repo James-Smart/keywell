@@ -2,6 +2,7 @@
 {{- with .Data}}
 <p class="back"><a href="/admin/members">All members</a></p>
 <h1>{{or .Member.Name .Member.Email}}</h1>
+<p class="note"><a href="/admin/audit?target={{.Member.ID}}&category=all">View activity</a></p>
 {{- if .Own}}
 <p class="note">This is your account. Change your own password from <a href="/account/password">your account page</a>.</p>
 {{- end}}

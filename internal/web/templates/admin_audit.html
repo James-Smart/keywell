@@ -1,0 +1,61 @@
+{{define "content"}}
+{{- with .Data}}
+{{- $category := .Category}}
+<h1>Audit log</h1>
+<div class="toolbar">
+  <form method="get" action="/admin/audit" role="search">
+    <select name="category" aria-label="Show">
+      {{- range .Categories}}
+      <option value="{{.Value}}"{{if eq .Value $category}} selected{{end}}>{{.Label}}</option>
+      {{- end}}
+    </select>
+    <input type="date" name="from" value="{{.From}}" aria-label="From">
+    <input type="date" name="to" value="{{.To}}" aria-label="To">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search the summary" aria-label="Search the summary">
+    {{- if .Action}}
+    <input type="hidden" name="action" value="{{.Action}}">
+    {{- end}}
+    {{- if .ActorID}}
+    <input type="hidden" name="actor" value="{{.ActorID}}">
+    {{- end}}
+    {{- if .TargetID}}
+    <input type="hidden" name="target" value="{{.TargetID}}">
+    {{- end}}
+    <button type="submit" class="button-secondary">Filter</button>
+  </form>
+</div>
+{{- if .ActorID}}
+<p class="note">Showing activity by {{.ActorName}}. <a href="/admin/audit?category={{.Category}}">Show everyone's</a></p>
+{{- end}}
+{{- if .TargetID}}
+<p class="note">Showing activity about {{.TargetName}}. <a href="/admin/audit?category={{.Category}}">Show all activity</a></p>
+{{- end}}
+{{- if .Action}}
+<p class="note">Showing only {{.Action}} events. <a href="/admin/audit?category={{.Category}}">Show all kinds</a></p>
+{{- end}}
+{{- if .Rows}}
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">What</th><th scope="col">About</th></tr>
+    </thead>
+    <tbody>
+    {{- range .Rows}}
+      <tr>
+        <td class="nowrap">{{datetime .At}}</td>
+        <td>{{if .ActorLink}}<a href="{{.ActorLink}}">{{.Actor}}</a>{{else}}{{.Actor}}{{end}}</td>
+        <td>{{.Summary}}{{if gt .Count 1}} ({{.Count}} times){{end}}<br><small><a href="{{.ActionLink}}">{{.Action}}</a></small></td>
+        <td>{{if .TargetLink}}<a href="{{.TargetLink}}">{{.Target}}</a>{{else}}{{.Target}}{{end}}</td>
+      </tr>
+    {{- end}}
+    </tbody>
+  </table>
+</div>
+{{- else if .Pager.Total}}
+<p>There's nothing on this page.</p>
+{{- else}}
+<p>No activity matches.</p>
+{{- end}}
+{{- template "admin-pagination" .Pager}}
+{{- end}}
+{{end}}

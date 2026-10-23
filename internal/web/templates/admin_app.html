@@ -5,6 +5,9 @@
 {{- $accounts := .Accounts}}
 <p class="back"><a href="/admin/apps">All applications</a></p>
 <h1>{{.Heading}}</h1>
+{{- if $app}}
+<p class="note"><a href="/admin/audit?target={{$app.ID}}&category=all">View activity</a></p>
+{{- end}}
 <div{{if $app}} class="split"{{end}}>
   <form method="post" enctype="multipart/form-data" action="{{if $app}}/admin/apps/{{$app.ID}}{{else}}/admin/apps{{end}}" class="panel fields">
     <h2>Basics</h2>
