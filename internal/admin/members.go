@@ -71,7 +71,7 @@ func (s *Service) CreateMember(ctx context.Context, a Actor, in NewMember) (*mod
 	if err != nil {
 		return nil, err
 	}
-	if err := s.checkMemberFree(ctx, p, u.Email, u.Username, ""); err != nil {
+	if err := s.checkUserFree(ctx, p, u.Email, u.Username, ""); err != nil {
 		return nil, err
 	}
 	if err := p.err(); err != nil {
@@ -83,17 +83,8 @@ func (s *Service) CreateMember(ctx context.Context, a Actor, in NewMember) (*mod
 			return nil, fmt.Errorf("admin: hash password: %w", err)
 		}
 	}
-	if err := s.d.Store.CreateUser(ctx, u); err != nil {
-		return nil, s.explainConflict(ctx, fmt.Errorf("admin: create member: %w", err), u.Email, u.Username, "")
-	}
-	if len(groups) > 0 {
-		if err := s.d.Store.ReplaceUserGroups(ctx, u.ID, groupIDs(groups)); err != nil {
-			// Leave no member behind without the groups asked for.
-			if derr := s.d.Store.DeleteUser(ctx, u.ID); derr != nil {
-				err = errors.Join(err, derr)
-			}
-			return nil, fmt.Errorf("admin: create member: %w", err)
-		}
+	if err := s.createUser(ctx, u, groups, "create member"); err != nil {
+		return nil, err
 	}
 	s.record(ctx, a, audit.UserCreate, targetUser, u.ID, "Added member "+displayName(u),
 		map[string]any{"name": u.Name, "email": u.Email, "username": u.Username, "groups": groupNames(groups)})
@@ -139,7 +130,7 @@ func (s *Service) UpdateMember(ctx context.Context, a Actor, id string, p Member
 			return nil, err
 		}
 	}
-	if err := s.checkMemberFree(ctx, probs, next.Email, next.Username, id); err != nil {
+	if err := s.checkUserFree(ctx, probs, next.Email, next.Username, id); err != nil {
 		return nil, err
 	}
 	if err := probs.err(); err != nil {
@@ -165,7 +156,7 @@ func (s *Service) UpdateMember(ctx context.Context, a Actor, id string, p Member
 	changes.noteMetadata(old.Metadata, next.Metadata)
 	if len(changes) > 0 || old.IsActive != next.IsActive {
 		if err := s.d.Store.UpdateUser(ctx, &next); err != nil {
-			return nil, s.explainConflict(ctx, fmt.Errorf("admin: update member: %w", err), next.Email, next.Username, id)
+			return nil, s.explainUserConflict(ctx, fmt.Errorf("admin: update member: %w", err), next.Email, next.Username, id)
 		}
 	}
 	name := displayName(&next)
@@ -341,25 +332,26 @@ func (s *Service) ResolveGroups(ctx context.Context, refs []string) ([]string, e
 	return ids, nil
 }
 
-// checkMemberFree adds a field message when another user than selfID ("" for
-// a new member) has the email, ignoring case, or the username.
-func (s *Service) checkMemberFree(ctx context.Context, p problems, email, username, selfID string) error {
+// checkUserFree adds a field message when another user than selfID ("" for
+// a new user) has the email, ignoring case, or the username. An empty email
+// or username is not checked.
+func (s *Service) checkUserFree(ctx context.Context, p problems, email, username, selfID string) error {
 	if err := checkFree(ctx, p, "email", email, selfID, msgEmailTaken, s.d.Store.GetUserByEmail); err != nil {
 		return err
 	}
 	return checkFree(ctx, p, "username", username, selfID, msgUsernameTaken, s.d.Store.GetUserByUsername)
 }
 
-// explainConflict turns a unique-constraint failure from saving a member,
+// explainUserConflict turns a unique-constraint failure from saving a user,
 // because another request took the email or username after it was
 // checked, into the field message by checking again. Other errors pass
 // through.
-func (s *Service) explainConflict(ctx context.Context, err error, email, username, selfID string) error {
+func (s *Service) explainUserConflict(ctx context.Context, err error, email, username, selfID string) error {
 	if !errors.Is(err, store.ErrConflict) {
 		return err
 	}
 	p := problems{}
-	if cerr := s.checkMemberFree(ctx, p, email, username, selfID); cerr != nil || len(p) == 0 {
+	if cerr := s.checkUserFree(ctx, p, email, username, selfID); cerr != nil || len(p) == 0 {
 		return err
 	}
 	return p.err()

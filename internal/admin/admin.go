@@ -428,3 +428,23 @@ func minus(a, b []model.Group) []model.Group {
 	}
 	return out
 }
+
+// createUser stores u and puts it in groups. A taken email or username
+// becomes a field message. When the groups cannot be set the user is
+// deleted again. op names the operation in errors, such as "create member".
+func (s *Service) createUser(ctx context.Context, u *model.User, groups []model.Group, op string) error {
+	if err := s.d.Store.CreateUser(ctx, u); err != nil {
+		return s.explainUserConflict(ctx, fmt.Errorf("admin: %s: %w", op, err), u.Email, u.Username, "")
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	if err := s.d.Store.ReplaceUserGroups(ctx, u.ID, groupIDs(groups)); err != nil {
+		// Leave no user behind without the groups asked for.
+		if derr := s.d.Store.DeleteUser(ctx, u.ID); derr != nil {
+			err = errors.Join(err, derr)
+		}
+		return fmt.Errorf("admin: %s: %w", op, err)
+	}
+	return nil
+}

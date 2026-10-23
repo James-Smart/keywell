@@ -89,24 +89,15 @@ func (s *Service) CreateServiceAccount(ctx context.Context, a Actor, in ServiceA
 	if err != nil {
 		return nil, err
 	}
-	if err := s.checkServiceFree(ctx, p, u.Username, ""); err != nil {
+	if err := s.checkUserFree(ctx, p, "", u.Username, ""); err != nil {
 		return nil, err
 	}
 	if err := p.err(); err != nil {
 		return nil, err
 	}
 
-	if err := s.d.Store.CreateUser(ctx, u); err != nil {
-		return nil, s.explainServiceConflict(ctx, fmt.Errorf("admin: create service account: %w", err), u.Username, "")
-	}
-	if len(groups) > 0 {
-		if err := s.d.Store.ReplaceUserGroups(ctx, u.ID, groupIDs(groups)); err != nil {
-			// Leave no account behind without the groups asked for.
-			if derr := s.d.Store.DeleteUser(ctx, u.ID); derr != nil {
-				err = errors.Join(err, derr)
-			}
-			return nil, fmt.Errorf("admin: create service account: %w", err)
-		}
+	if err := s.createUser(ctx, u, groups, "create service account"); err != nil {
+		return nil, err
 	}
 	s.record(ctx, a, audit.ServiceAccountCreate, targetServiceAccount, u.ID, "Added service account "+displayName(u),
 		map[string]any{"name": u.Name, "username": u.Username, "groups": groupNames(groups)})
@@ -141,7 +132,7 @@ func (s *Service) UpdateServiceAccount(ctx context.Context, a Actor, id string, 
 			return nil, err
 		}
 	}
-	if err := s.checkServiceFree(ctx, p, next.Username, id); err != nil {
+	if err := s.checkUserFree(ctx, p, "", next.Username, id); err != nil {
 		return nil, err
 	}
 	if err := p.err(); err != nil {
@@ -160,7 +151,7 @@ func (s *Service) UpdateServiceAccount(ctx context.Context, a Actor, id string, 
 	changes.noteMetadata(old.Metadata, next.Metadata)
 	if len(changes) > 0 {
 		if err := s.d.Store.UpdateUser(ctx, &next); err != nil {
-			return nil, s.explainServiceConflict(ctx, fmt.Errorf("admin: update service account: %w", err), next.Username, id)
+			return nil, s.explainUserConflict(ctx, fmt.Errorf("admin: update service account: %w", err), "", next.Username, id)
 		}
 		s.record(ctx, a, audit.ServiceAccountUpdate, targetServiceAccount, id, "Updated "+displayName(&next), changes.detail())
 	}
@@ -299,25 +290,4 @@ func (s *Service) AuthenticateToken(ctx context.Context, raw string) (*Caller, e
 		}
 	}
 	return &Caller{Account: u, Token: t}, nil
-}
-
-// checkServiceFree adds a message under "username" when a user other than
-// selfID ("" for a new account) has the username.
-func (s *Service) checkServiceFree(ctx context.Context, p problems, username, selfID string) error {
-	return checkFree(ctx, p, "username", username, selfID, msgUsernameTaken, s.d.Store.GetUserByUsername)
-}
-
-// explainServiceConflict turns a unique-constraint failure from saving a
-// service account, because another request took the username after it was
-// checked, into the field message by checking again. Other errors pass
-// through.
-func (s *Service) explainServiceConflict(ctx context.Context, err error, username, selfID string) error {
-	if !errors.Is(err, store.ErrConflict) {
-		return err
-	}
-	p := problems{}
-	if cerr := s.checkServiceFree(ctx, p, username, selfID); cerr != nil || len(p) == 0 {
-		return err
-	}
-	return p.err()
 }

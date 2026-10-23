@@ -8,6 +8,7 @@ import (
 
 	"latch/internal/admin"
 	"latch/internal/audit"
+	"latch/internal/model"
 	"latch/internal/store"
 )
 
@@ -114,10 +115,40 @@ func TestLastAdminGroupRefused(t *testing.T) {
 		t.Errorf("%d events recorded", n)
 	}
 
-	// With a second admin group both are allowed.
-	mkGroup(t, st, "Other admins", true)
+	// With a second admin group, Ada is still refused while it is her only one.
+	other := mkGroup(t, st, "Other admins", true)
+	const own = "You can't remove your own admin access. Ask another admin to do it."
+	_, err = svc.UpdateGroup(ctx, a, g.ID, admin.GroupPatch{IsAdmin: ptr(false)})
+	if refusal(t, err) != own {
+		t.Errorf("update refusal %q", refusal(t, err))
+	}
+	if refusal(t, svc.DeleteGroup(ctx, a, g.ID)) != own {
+		t.Error("delete refusal differs")
+	}
+	if got, err := st.GetGroup(ctx, g.ID); err != nil || !got.IsAdmin {
+		t.Errorf("group changed: %+v %v", got, err)
+	}
+	if n := countEvents(t, st); n != 0 {
+		t.Errorf("%d events recorded", n)
+	}
+
+	// Once she is in the other admin group, both are allowed.
+	if err := st.AddMember(ctx, ada.ID, other.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.UpdateGroup(ctx, a, g.ID, admin.GroupPatch{IsAdmin: ptr(false)}); err != nil {
 		t.Errorf("update: %v", err)
+	}
+	if err := svc.DeleteGroup(ctx, a, g.ID); err != nil {
+		t.Errorf("delete: %v", err)
+	}
+
+	// A service account actor is not subject to the own-admin rule.
+	third := mkGroup(t, st, "Third admins", true)
+	door := mkServiceAccount(t, st, "Door", "door")
+	sa := admin.Actor{Type: model.ActorServiceAccount, ID: door.ID}
+	if err := svc.DeleteGroup(ctx, sa, third.ID); err != nil {
+		t.Errorf("service account delete: %v", err)
 	}
 }
 

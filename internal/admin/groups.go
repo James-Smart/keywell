@@ -92,6 +92,12 @@ func (s *Service) UpdateGroup(ctx context.Context, a Actor, id string, patch Gro
 		return nil, err
 	}
 
+	if old.IsAdmin && !next.IsAdmin {
+		if err := s.keepActorAdmin(ctx, a, id); err != nil {
+			return nil, err
+		}
+	}
+
 	changes := changeSet{}
 	noteChange(changes, "name", old.Name, next.Name)
 	noteChange(changes, "description", old.Description, next.Description)
@@ -115,6 +121,11 @@ func (s *Service) DeleteGroup(ctx context.Context, a Actor, id string) error {
 	g, err := s.d.Store.GetGroup(ctx, id)
 	if err != nil {
 		return err
+	}
+	if g.IsAdmin {
+		if err := s.keepActorAdmin(ctx, a, id); err != nil {
+			return err
+		}
 	}
 	if err := s.d.Store.DeleteGroup(ctx, id); err != nil {
 		return groupConflict(fmt.Errorf("admin: delete group: %w", err))
@@ -217,4 +228,32 @@ func groupConflict(err error) error {
 		return &RefusedError{Message: msgLastAdminGroup}
 	}
 	return err
+}
+
+// keepActorAdmin refuses a change that stops group groupID, an admin group,
+// from being one, when the actor is a user who would then be in no admin
+// group. Other actors are unaffected.
+func (s *Service) keepActorAdmin(ctx context.Context, a Actor, groupID string) error {
+	if a.Type != model.ActorUser {
+		return nil
+	}
+	// The last admin group is refused for everyone, first.
+	all, err := s.d.Store.ListGroups(ctx)
+	if err != nil {
+		return fmt.Errorf("admin: check admin access: %w", err)
+	}
+	admins := 0
+	for _, h := range all {
+		if h.IsAdmin {
+			admins++
+		}
+	}
+	if admins < 2 {
+		return &RefusedError{Message: msgLastAdminGroup}
+	}
+	current, err := s.d.Store.ListGroupsForUser(ctx, a.ID)
+	if err != nil {
+		return fmt.Errorf("admin: check admin access: %w", err)
+	}
+	return keepOwnAdmin(a, a.ID, slices.DeleteFunc(current, func(h model.Group) bool { return h.ID == groupID }))
 }
