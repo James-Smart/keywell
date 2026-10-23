@@ -110,6 +110,19 @@ func TestAPILastAdminGroup(t *testing.T) {
 	}
 }
 
+// A huge ?page= is an empty page, never a server error.
+func TestAPIHugePage(t *testing.T) {
+	env := testenv.New(t)
+	raw, _ := env.APIToken(t, "door", model.APITokenScopeAdmin)
+	env.CreateUser(t, "priya@example.org", "pw", "Laser")
+	for _, path := range []string{apiGroups, apiUsers} {
+		body, resp := env.API(t, raw, http.MethodGet, path+"?page=9223372036854775807", nil)
+		if resp.StatusCode != 200 || len(items(t, body)) != 0 || body["total"] != float64(1) {
+			t.Errorf("GET %s: %d %v", path, resp.StatusCode, body)
+		}
+	}
+}
+
 func TestAPIReadTokenCanList(t *testing.T) {
 	env := testenv.New(t)
 	raw, _ := env.APIToken(t, "viewer", model.APITokenScopeRead)

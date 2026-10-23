@@ -161,6 +161,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 const (
 	defaultPerPage = 50
 	maxPerPage     = 200
+	maxPage        = 1_000_000 // keeps (page-1)*perPage far from overflowing; no list is this long
 )
 
 // listJSON is the body of every list response. Make it with newList.
@@ -181,7 +182,8 @@ func newList[T any](items []T, page, perPage, total int) listJSON[T] {
 }
 
 // paging reads ?page= and ?per_page=, whole numbers of 1 or more: page
-// defaults to 1 and per_page to 50, and per_page is capped at 200. Anything
+// defaults to 1 and per_page to 50, and per_page is capped at 200 and page
+// at maxPage (a page past the end of a list is empty). Anything
 // else is answered 422 invalid, naming the parameter, and ok is false.
 func paging(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
 	q, bad := r.URL.Query(), map[string]string{}
@@ -201,5 +203,5 @@ func paging(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool)
 		writeInvalid(w, bad)
 		return 0, 0, false
 	}
-	return page, min(perPage, maxPerPage), true
+	return min(page, maxPage), min(perPage, maxPerPage), true
 }
