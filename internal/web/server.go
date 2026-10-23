@@ -110,7 +110,7 @@ func New(d Deps) http.Handler {
 	h = crossOriginProtection(d.Renderer).Handler(h)
 	h = securityHeaders(h)
 	h = requestLog(d.Log)(h)
-	h = realIP(parseProxies(d.Cfg.TrustedProxies, d.Log))(h)
+	h = realIP(parseProxies(d.Cfg.TrustedProxies, d.Log), d.Log)(h)
 	h = recoverer(d.Log, d.Renderer)(h)
 	return h
 }

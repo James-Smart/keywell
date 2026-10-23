@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -120,11 +121,41 @@ func (p proxyRanges) forwardedFor(r *http.Request) string {
 	return ""
 }
 
+// maxWarnedPeers bounds how many untrusted peers realIP remembers having
+// warned about; when the set is full it starts again.
+const maxWarnedPeers = 64
+
+// warnedPeers is the set of peers realIP has warned about.
+type warnedPeers struct {
+	mu    sync.Mutex
+	peers map[string]struct{}
+}
+
+// first reports whether peer is not yet in the set, and adds it.
+func (w *warnedPeers) first(peer string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.peers[peer]; ok {
+		return false
+	}
+	if w.peers == nil || len(w.peers) >= maxWarnedPeers {
+		w.peers = make(map[string]struct{}, maxWarnedPeers)
+	}
+	w.peers[peer] = struct{}{}
+	return true
+}
+
 // realIP resolves the client address. Only when the peer is a trusted proxy
 // are X-Forwarded-For and X-Forwarded-Proto believed; then RemoteAddr is
 // rewritten to the client address too, so packages that cannot import web
 // (session) record the right IP.
-func realIP(trusted proxyRanges) func(http.Handler) http.Handler {
+//
+// Forwarded headers from any other peer are ignored with a warning, once
+// per peer: they usually mean the reverse proxy is missing from
+// trusted_proxies, which makes every member share its address, so one
+// member's failed sign-ins lock everyone out.
+func realIP(trusted proxyRanges, log *slog.Logger) func(http.Handler) http.Handler {
+	var warned warnedPeers
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip, scheme := hostOnly(r.RemoteAddr), ""
@@ -136,6 +167,9 @@ func realIP(trusted proxyRanges) func(http.Handler) http.Handler {
 				case "http", "https":
 					scheme = proto
 				}
+			} else if header := forwardedHeader(r); header != "" && warned.first(ip) {
+				log.WarnContext(r.Context(), "ignoring "+header+" from untrusted peer "+ip+
+					"; add your reverse proxy to trusted_proxies", "peer", ip)
 			}
 			r = r.WithContext(context.WithValue(r.Context(), clientIPKey, ip))
 			if ip != hostOnly(r.RemoteAddr) {
@@ -149,6 +183,17 @@ func realIP(trusted proxyRanges) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// forwardedHeader names the first of X-Forwarded-For and X-Forwarded-Proto
+// that r carries, or "" for neither.
+func forwardedHeader(r *http.Request) string {
+	for _, h := range []string{"X-Forwarded-For", "X-Forwarded-Proto"} {
+		if r.Header.Get(h) != "" {
+			return h
+		}
+	}
+	return ""
 }
 
 // statusWriter records the status code a handler sends.

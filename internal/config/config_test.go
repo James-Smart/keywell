@@ -196,6 +196,14 @@ func TestExampleFileLoads(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	// No proxy is trusted until the operator names theirs: a guessed range
+	// would let anyone inside it choose their address.
+	if len(c.TrustedProxies) != 0 {
+		t.Errorf("example trusted_proxies %v, want none", c.TrustedProxies)
+	}
+	if !strings.Contains(ExampleYAML, "trusted_proxies: []") || !strings.Contains(ExampleYAML, "172.16.0.0/12") {
+		t.Error("example config should set trusted_proxies: [] and explain what to list, with the Docker range")
+	}
 }
 
 // The repo-root latch.example.yaml is a copy of example.yaml, the source

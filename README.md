@@ -23,6 +23,8 @@ Then open <http://localhost:8080> and sign in. The Admin group requires two-step
 
 For a real installation, set `--public-url` to the HTTPS address members will use (for example `https://login.example.org`) and put Latch behind a reverse proxy that terminates TLS. `GET /healthz` answers `{"status":"ok","version":"..."}` for health checks.
 
+Then list the proxy's address in `trusted_proxies` (for example `127.0.0.1/32` when it runs on the same host, or `172.16.0.0/12` for Docker's default networks). Latch believes `X-Forwarded-For` and `X-Forwarded-Proto` only from those addresses. If the proxy is missing from the list, every member appears to come from the proxy's address, so the sign-in limit of 50 failures per address per 15 minutes is shared by everyone: a few people mistyping their passwords lock the whole space out. Latch logs a warning, `ignoring X-Forwarded-For from untrusted peer ...`, when it sees forwarded headers from an address it does not trust.
+
 ## Configuration
 
 `latch.example.yaml` lists every setting with a short note. `latch init` writes your config file from it. Any setting can also be set with an environment variable: `LATCH_` plus the key path in capitals, for example `LATCH_SMTP_HOST`.
