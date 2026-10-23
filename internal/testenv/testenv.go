@@ -204,6 +204,7 @@ func New(t *testing.T, opts ...Option) *Env {
 		Renderer:   rend,
 		Limits:     web.NewLimiters(clock.Now),
 		OIDC:       prov,
+		Keys:       keys,
 		Background: background,
 		Now:        clock.Now,
 		Version:    Version,
@@ -327,6 +328,68 @@ func (e *Env) Login(t *testing.T, c *http.Client, email, pw string) {
 		}
 	}
 	t.Fatalf("testenv: login %s: no %s cookie", email, session.CookieName)
+}
+
+// AdminEmail and AdminPassword are the account AdminClient signs in as.
+const (
+	AdminEmail    = "admin@example.org"
+	AdminPassword = "admin password for tests"
+)
+
+// AdminClient returns a client signed in as AdminEmail, a member of the
+// group "Admin", and that member. Both are created when missing: the group
+// as an admin group with no second step. A group "Admin" a test already
+// made is used as it is.
+func (e *Env) AdminClient(t *testing.T) (*http.Client, *model.User) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := e.Store.GetGroupByName(ctx, "Admin"); errors.Is(err, store.ErrNotFound) {
+		e.CreateGroup(t, "Admin", true, false)
+	} else if err != nil {
+		t.Fatalf("testenv: get group Admin: %v", err)
+	}
+	u, err := e.Store.GetUserByEmail(ctx, AdminEmail)
+	if errors.Is(err, store.ErrNotFound) {
+		u = e.CreateUser(t, AdminEmail, AdminPassword, "Admin")
+	} else if err != nil {
+		t.Fatalf("testenv: get user %s: %v", AdminEmail, err)
+	}
+	c := e.Client(t)
+	e.Login(t, c, AdminEmail, AdminPassword)
+	return c, u
+}
+
+// Page gets path with c and returns the response, its body already
+// closed, and the body as text.
+func (e *Env) Page(t *testing.T, c *http.Client, path string) (*http.Response, string) {
+	t.Helper()
+	resp, err := c.Get(e.TS.URL + path)
+	if err != nil {
+		t.Fatalf("testenv: get %s: %v", path, err)
+	}
+	return resp, readBody(t, resp)
+}
+
+// Submit posts form to path with c, as a browser submits a form, and
+// returns the response, its body already closed, and the body as text.
+func (e *Env) Submit(t *testing.T, c *http.Client, path string, form url.Values) (*http.Response, string) {
+	t.Helper()
+	resp, err := c.PostForm(e.TS.URL+path, form)
+	if err != nil {
+		t.Fatalf("testenv: post %s: %v", path, err)
+	}
+	return resp, readBody(t, resp)
+}
+
+// readBody reads and closes resp's body.
+func readBody(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("testenv: read %s response: %v", resp.Request.URL.Path, err)
+	}
+	return string(b)
 }
 
 // AuthorizeRaw sends an authorization request with params from c and

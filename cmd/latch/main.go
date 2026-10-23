@@ -249,6 +249,7 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Renderer:   rend,
 		Limits:     web.NewLimiters(time.Now),
 		OIDC:       prov,
+		Keys:       keys,
 		Background: &background,
 		Version:    Version,
 	})

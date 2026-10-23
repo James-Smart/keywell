@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"latch/internal/admin"
 	"latch/internal/audit"
 	"latch/internal/config"
 	"latch/internal/mail"
@@ -38,6 +39,10 @@ type Deps struct {
 	// OIDC mounts the OpenID Connect endpoints; nil leaves them out.
 	OIDC interface{ Mount(*http.ServeMux) }
 
+	// Keys are the token signing keys (*oidc.KeyManager), which the
+	// Settings page lists and rotates.
+	Keys admin.Keys
+
 	// Background counts work handlers carry on with after responding
 	// (emailing reset links), so the caller can wait for it, e.g. before
 	// exiting. nil when nobody waits.
@@ -52,6 +57,8 @@ type Deps struct {
 // Server holds the dependencies of the page handlers.
 type Server struct {
 	d Deps
+	// admin makes every change the admin pages make.
+	admin *admin.Service
 	// dummyHash is verified against when a sign-in names no usable
 	// password, so the response time does not reveal whether it exists.
 	dummyHash string
@@ -86,13 +93,23 @@ func newServer(d Deps) *Server {
 
 // New returns the complete HTTP handler: routes wrapped in the middleware
 // chain (outermost first) recover, real IP, request log, security headers,
-// cross-origin protection, sessions. Health checks and static files are
-// served without a session lookup.
+// cross-origin protection, body limit, sessions. Health checks and static
+// files are served without a session lookup.
 func New(d Deps) http.Handler {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
 	s := newServer(d)
+	s.admin = admin.New(admin.Deps{
+		Cfg:          d.Cfg,
+		Store:        d.Store,
+		Audit:        d.Audit,
+		Mailer:       d.Mailer,
+		Notifier:     s,
+		Keys:         d.Keys,
+		HashPassword: s.hashPassword,
+		Now:          s.d.Now,
+	})
 
 	pages := http.NewServeMux()
 	s.routes(pages)
@@ -107,6 +124,7 @@ func New(d Deps) http.Handler {
 	root.Handle("/", d.Sessions.Middleware(pages))
 
 	var h http.Handler = root
+	h = limitBody(d.Renderer)(h)
 	h = crossOriginProtection(d.Renderer).Handler(h)
 	h = securityHeaders(h)
 	h = requestLog(d.Log)(h)
@@ -141,6 +159,40 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("POST /account/totp/confirm", signedIn(s.confirmTOTP))
 	mux.Handle("GET /account/totp/codes", signedIn(s.totpCodes))
 	mux.Handle("POST /account/totp/disable", signedIn(s.disableTOTP))
+
+	// Admin pages: a complete session of a member of an admin group,
+	// checked on every request.
+	adminOnly := func(h http.HandlerFunc) http.Handler { return session.RequireUser(s.requireAdmin(h)) }
+	mux.Handle("GET /admin", adminOnly(s.adminHome))
+	mux.Handle("GET /admin/{$}", adminOnly(s.adminHome))
+	mux.Handle("GET /admin/settings", adminOnly(s.settingsPage))
+	mux.Handle("POST /admin/settings/test-email", adminOnly(s.settingsTestEmail))
+	mux.Handle("POST /admin/settings/rotate-keys", adminOnly(s.settingsRotateKeys))
+}
+
+// maxBodyBytes is the most a request body may hold, except under /api/.
+const maxBodyBytes = 1 << 20
+
+// limitBody caps request bodies at maxBodyBytes: a request that declares a
+// longer body gets a 413 page unread, and any other body stops being read
+// at the limit. Paths under /api/ are left to the API, which limits its
+// own bodies so it can answer in JSON.
+func limitBody(rd *Renderer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if r.ContentLength > maxBodyBytes {
+				rd.RenderError(w, r, http.StatusRequestEntityTooLarge, "Too much data",
+					"That was more than we can take in one go. Go back and try again with less.")
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // serverError logs err and shows the generic error page. what names the

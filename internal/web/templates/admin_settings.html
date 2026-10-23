@@ -1,0 +1,67 @@
+{{define "content"}}
+{{- with .Data}}
+<h1>Settings</h1>
+
+<section class="panel" aria-labelledby="branding">
+  <h2 id="branding">Branding</h2>
+  <dl class="facts">
+    <dt>Name</dt>
+    <dd>{{.Branding.Name}}</dd>
+    <dt>Logo</dt>
+    <dd>{{if .LogoURL}}<span class="logo-preview"><img src="{{.LogoURL}}" alt="The logo"></span>{{else}}None{{end}}</dd>
+    <dt>Colour</dt>
+    <dd><span class="swatch" style="background-color: {{.Branding.PrimaryColor}}"></span>{{.Branding.PrimaryColor}}</dd>
+    <dt>Support text</dt>
+    <dd>{{with .Branding.SupportText}}{{.}}{{else}}None{{end}}</dd>
+  </dl>
+  <p>To change these, edit the branding section of Latch's config file (latch.yaml) and restart Latch.</p>
+</section>
+
+<section class="panel" aria-labelledby="email">
+  <h2 id="email">Email</h2>
+  {{- if .SMTP.Host}}
+  <dl class="facts">
+    <dt>Mail server</dt>
+    <dd>{{.SMTP.Host}}</dd>
+    <dt>Port</dt>
+    <dd>{{.SMTP.Port}}</dd>
+    <dt>From address</dt>
+    <dd>{{.SMTP.From}}</dd>
+    <dt>Encryption</dt>
+    <dd>{{.SMTP.TLS}}</dd>
+  </dl>
+  <p>To change these, edit the smtp section of Latch's config file (latch.yaml) and restart Latch.</p>
+  {{- else}}
+  <p>Email isn't set up yet. To set it up, add an smtp section to Latch's config file (latch.yaml) and restart Latch.</p>
+  {{- end}}
+  <form method="post" action="/admin/settings/test-email">
+    <button type="submit">Send a test email to {{.AdminEmail}}</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="keys">
+  <h2 id="keys">Signing keys</h2>
+  <p>Latch signs the tokens it gives apps with the key in use. Apps check them against every key still published.</p>
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr><th scope="col">Key ID</th><th scope="col">Made</th><th scope="col">State</th></tr>
+      </thead>
+      <tbody>
+      {{- range .Keys}}
+        <tr>
+          <td><code>{{.KID}}</code></td>
+          <td class="nowrap">{{date .CreatedAt}}</td>
+          <td class="nowrap">{{if .Active}}<span class="status status-active">In use</span>{{else if .RetiredAt}}Retired {{date .RetiredAt}}{{else}}<span class="status">Still published</span>{{end}}</td>
+        </tr>
+      {{- end}}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="/admin/settings/rotate-keys">
+    <button type="submit">Make a new signing key</button>
+  </form>
+  <p class="hint">Apps pick up the new key automatically. Older keys are retired {{.RetireDays}} days after they're replaced.</p>
+</section>
+{{- end}}
+{{end}}

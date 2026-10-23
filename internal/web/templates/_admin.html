@@ -1,0 +1,28 @@
+{{/*
+  Admin partials. Like every templates/_*.html file, this one is parsed
+  into every page's template set and is never a page itself. Each partial
+  is named "admin-…". The frame uses admin-header and admin-nav when
+  Page.Section is set. Markup that more than one admin page needs, such as
+  a field's error message, a confirm disclosure or pagination, belongs here.
+*/}}
+
+{{- define "admin-header"}}
+  <span class="bar-label">Admin</span>
+  <div class="bar-account">
+  {{- with .User}}
+    <span class="bar-email">{{.Email}}</span>
+  {{- end}}
+    <a href="/">Member home</a>
+    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  </div>
+{{- end}}
+
+{{- define "admin-nav"}}
+<nav class="admin-nav" aria-label="Admin">
+  <ul>
+  {{- range .AdminNav}}
+    <li><a href="{{.Href}}"{{if eq .Section $.Section}} aria-current="page"{{end}}>{{.Label}}</a></li>
+  {{- end}}
+  </ul>
+</nav>
+{{- end}}

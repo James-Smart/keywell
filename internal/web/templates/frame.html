@@ -3,25 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{if .Title}}{{.Title}} · {{end}}{{.Brand.Name}}</title>
+<title>{{if .Title}}{{.Title}} · {{end}}{{if .Section}}Admin · {{end}}{{.Brand.Name}}</title>
 <link rel="stylesheet" href="/static/latch.css">
 <style>:root{--primary: {{.Brand.PrimaryColor}}}</style>
 </head>
 <body>
 <header class="bar">
   <a class="brand" href="/">{{if .Brand.LogoURL}}<img src="{{.Brand.LogoURL}}" alt="">{{end}}<span>{{.Brand.Name}}</span></a>
+{{- if .Section}}
+{{- template "admin-header" .}}
+{{- end}}
 </header>
+{{- if .Section}}
+<main class="admin">
+{{- template "admin-nav" .}}
+<div class="admin-main">
+{{- template "alerts" .}}
+{{template "content" .}}
+</div>
+</main>
+{{- else}}
 <main class="{{block "layout" .}}narrow{{end}}">
+{{- template "alerts" .}}
+{{template "content" .}}
+</main>
+{{- end}}
+{{- if .Brand.SupportText}}
+<footer class="footer"><p>{{.Brand.SupportText}}</p></footer>
+{{- end}}
+</body>
+</html>
+{{- define "alerts"}}
 {{- if .Error}}
   <p class="alert alert-error" role="alert">{{.Error}}</p>
 {{- end}}
 {{- if .Notice}}
   <p class="alert alert-notice" role="status">{{.Notice}}</p>
 {{- end}}
-{{template "content" .}}
-</main>
-{{- if .Brand.SupportText}}
-<footer class="footer"><p>{{.Brand.SupportText}}</p></footer>
 {{- end}}
-</body>
-</html>

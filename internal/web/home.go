@@ -24,16 +24,22 @@ type homeTile struct {
 type homeData struct {
 	FirstName string
 	Tiles     []homeTile
+	IsAdmin   bool // links to the admin pages
 }
 
 // home is the member home: a greeting, the apps the member may open, and
-// links to their account settings.
+// links to their account settings (and, for admins, the admin pages).
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	_, user, _ := session.FromContext(ctx) // RequireUser: a complete session
 	apps, err := s.d.Store.ListTileApplicationsForUser(ctx, user.ID)
 	if err != nil {
 		s.serverError(w, r, "home: list apps", err)
+		return
+	}
+	isAdmin, err := s.isAdmin(ctx, user.ID)
+	if err != nil {
+		s.serverError(w, r, "home: list groups", err)
 		return
 	}
 	tiles := make([]homeTile, 0, len(apps))
@@ -51,7 +57,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	s.d.Renderer.Render(w, r, http.StatusOK, "home", Page{Title: "Home",
-		Data: homeData{FirstName: firstName(user), Tiles: tiles}})
+		Data: homeData{FirstName: firstName(user), Tiles: tiles, IsAdmin: isAdmin}})
 }
 
 // webURL reports whether s is an absolute http or https URL. Launch URLs
