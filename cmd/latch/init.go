@@ -20,8 +20,10 @@ import (
 
 // cmdInit sets up a new installation: the config file, the database, the
 // Admin group, a signing key and, when --admin-email is given, the first
-// admin. Everything that can be refused (flags, the admin's password) is
-// checked before anything is written.
+// admin. Everything that can be refused (flags, an existing config or
+// database, the admin's password) is checked before anything is written.
+// LATCH_* environment variables are ignored: the database is set up as the
+// written file describes.
 func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -51,13 +53,21 @@ func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	issuer := strings.TrimSuffix(*publicURL, "/")
 	key := secrets.GenerateKey()
-	defaults, err := config.Load("", os.Getenv)
+	defaults, err := config.Load("", noEnv)
 	if err != nil {
 		return fail(stderr, err)
 	}
-	defaults.PublicURL, defaults.EncryptionKey = issuer, key
+	defaults.PublicURL, defaults.EncryptionKey, defaults.DataDir = issuer, key, *dataDir
 	if err := defaults.Validate(); err != nil {
 		return usageError(stderr, "init", "%v", err)
+	}
+	// Its secrets are sealed with the lost config's key; a new key would
+	// make them unreadable.
+	if _, err := os.Stat(defaults.DBPath()); err == nil {
+		return fail(stderr, fmt.Errorf("a database already exists at %s; restore your config file instead of running init again",
+			defaults.DBPath()))
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fail(stderr, err)
 	}
 	var pw string
 	if *adminEmail != "" {
@@ -73,7 +83,10 @@ func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err := writeNewFile(*configPath, text); err != nil {
 		return fail(stderr, err)
 	}
-	cfg, err := loadConfig(*configPath)
+	cfg, err := config.Load(*configPath, noEnv)
+	if err == nil {
+		err = cfg.Validate()
+	}
 	if err != nil {
 		return fail(stderr, err)
 	}
@@ -95,6 +108,9 @@ func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		cfg.Issuer(), adminGroup)
 	return 0
 }
+
+// noEnv is an environment with no variables set.
+func noEnv(string) string { return "" }
 
 // setUp creates the data directory and database, the Admin group, a
 // signing key and, when email is not empty, the admin with password pw.

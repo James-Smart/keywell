@@ -149,6 +149,7 @@ func TestHomeSkipsTilesWithoutHTTPLaunchURL(t *testing.T) {
 	script := tileApp(t, env, "Sneaky", "javascript:alert(1)", "")
 	shouty := tileApp(t, env, "Shouty", "JavaScript:alert(2)", "")
 	noScheme := tileApp(t, env, "Relative", "//elsewhere.example.org/app", "")
+	spaced := tileApp(t, env, "Spacey", " javascript:alert(3)", "") // browsers strip the space
 
 	c := env.Client(t)
 	env.Login(t, c, "alex@example.org", testPW)
@@ -160,7 +161,7 @@ func TestHomeSkipsTilesWithoutHTTPLaunchURL(t *testing.T) {
 		if !strings.Contains(body, `href="https://safe.example.org"`) {
 			t.Error("body missing the Safe tile")
 		}
-		for _, unwanted := range []string{"Sneaky", "Shouty", "Relative", "alert(", "elsewhere.example.org", "ZgotmplZ"} {
+		for _, unwanted := range []string{"Sneaky", "Shouty", "Relative", "Spacey", "alert(", "elsewhere.example.org", "ZgotmplZ"} {
 			if strings.Contains(body, unwanted) {
 				t.Errorf("body has %q", unwanted)
 			}
@@ -168,7 +169,7 @@ func TestHomeSkipsTilesWithoutHTTPLaunchURL(t *testing.T) {
 	}
 	// Each skipped tile is logged once, however often the page is shown.
 	got := logs.String()
-	for _, app := range []*model.Application{script, shouty, noScheme} {
+	for _, app := range []*model.Application{script, shouty, noScheme, spaced} {
 		if n := strings.Count(got, app.ID); n != 1 {
 			t.Errorf("app %s logged %d times, want 1; log:\n%s", app.Name, n, got)
 		}

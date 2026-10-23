@@ -206,24 +206,100 @@ func TestInitCreatesConfigDBAdminAndKey(t *testing.T) {
 	}
 }
 
-func TestConfigFromExampleQuotesValues(t *testing.T) {
+// Values with ports, colons, # and quotes survive the substitution: each
+// loads back exactly as given.
+func TestConfigFromExampleSubstitutesValues(t *testing.T) {
+	for _, tc := range []struct{ name, publicURL, dataDir string }{
+		{"port", "https://login.example.org:8443", "./data"},
+		{"# in public_url", "https://login.example.org/#top", "./data"},
+		{"# in data_dir", publicURL, "./data#2"},
+		{"comment-like data_dir", publicURL, `my data #1: "x"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := secrets.GenerateKey()
+			text, err := configFromExample(config.ExampleYAML, tc.publicURL, tc.dataDir, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgPath := filepath.Join(t.TempDir(), "latch.yaml")
+			if err := os.WriteFile(cfgPath, []byte(text), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(cfgPath, func(string) string { return "" })
+			if err != nil {
+				t.Fatalf("%v\n%s", err, text)
+			}
+			if cfg.PublicURL != tc.publicURL || cfg.DataDir != tc.dataDir || cfg.EncryptionKey != key {
+				t.Errorf("public_url %q, data_dir %q, encryption_key %q\n%s", cfg.PublicURL, cfg.DataDir, cfg.EncryptionKey, text)
+			}
+		})
+	}
+}
+
+// An operator who lost their config must not get a new encryption key over
+// a database whose secrets were sealed with the old one.
+func TestInitRefusesExistingDatabase(t *testing.T) {
+	cfgPath := initInstall(t)
+	dataDir := filepath.Join(filepath.Dir(cfgPath), "data")
+	if err := os.Remove(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL,
+		"--admin-email", "admin@example.org", "--admin-password", testPW)
+	want := "latch: a database already exists at " + filepath.Join(dataDir, "latch.db") +
+		"; restore your config file instead of running init again\n"
+	if code != 1 || stdout != "" || stderr != want {
+		t.Fatalf("exit %d, stdout %q, stderr %q; want exit 1, %q", code, stdout, stderr, want)
+	}
+	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+		t.Errorf("config file written (stat: %v)", err)
+	}
+}
+
+func TestInitAcceptsEmptyDataDir(t *testing.T) {
 	dir := t.TempDir()
-	dataDir := filepath.Join(dir, `my data #1: "x"`)
-	key := secrets.GenerateKey()
-	text, err := configFromExample(config.ExampleYAML, publicURL, dataDir, key)
-	if err != nil {
+	dataDir := filepath.Join(dir, "data")
+	if err := os.Mkdir(dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(dir, "latch.yaml")
-	if err := os.WriteFile(cfgPath, []byte(text), 0o600); err != nil {
+	const portURL = "https://login.example.org:8443"
+	code, _, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", portURL)
+	if code != 0 || stderr != "" {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	cfg, st := openInstallation(t, cfgPath)
+	if cfg.PublicURL != portURL || cfg.DataDir != dataDir {
+		t.Errorf("public_url %q, data_dir %q", cfg.PublicURL, cfg.DataDir)
+	}
+	if keys, err := st.ListSigningKeys(context.Background()); err != nil || len(keys) != 1 {
+		t.Errorf("%d signing keys (err %v), want 1", len(keys), err)
+	}
+}
+
+// init sets up the database the file describes, whatever LATCH_*
+// variables happen to be set.
+func TestInitIgnoresEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	elsewhere := filepath.Join(dir, "elsewhere")
+	t.Setenv("LATCH_DATA_DIR", elsewhere)
+	t.Setenv("LATCH_ENCRYPTION_KEY", secrets.GenerateKey())
+	cfgPath := filepath.Join(dir, "latch.yaml")
+	dataDir := filepath.Join(dir, "data")
+	code, _, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	if _, err := os.Stat(elsewhere); !os.IsNotExist(err) {
+		t.Errorf("LATCH_DATA_DIR used (stat: %v)", err)
+	}
+	cfg, st := openInstallation(t, cfgPath) // the file's data_dir and key
+	enc, err := secrets.NewEncryptor(cfg.EncryptionKey)
+	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(cfgPath, func(string) string { return "" })
-	if err != nil {
-		t.Fatalf("%v\n%s", err, text)
-	}
-	if cfg.DataDir != dataDir || cfg.EncryptionKey != key || cfg.PublicURL != publicURL {
-		t.Errorf("data_dir %q, encryption_key %q, public_url %q", cfg.DataDir, cfg.EncryptionKey, cfg.PublicURL)
+	if _, err := oidc.NewKeyManager(context.Background(), st, enc); err != nil {
+		t.Fatalf("signing key not sealed with the file's key: %v", err)
 	}
 }
 

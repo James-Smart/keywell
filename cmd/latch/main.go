@@ -144,10 +144,10 @@ func cmdVersion(_ []string, _ io.Reader, stdout, _ io.Writer) int {
 }
 
 func cmdServe(args []string, _ io.Reader, _, stderr io.Writer) int {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	configPath := fs.String("config", "./latch.yaml", "path to the config file")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 	cfg, err := loadConfig(*configPath)
