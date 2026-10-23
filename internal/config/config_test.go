@@ -85,6 +85,25 @@ func TestLoadYAMLAndEnvOverride(t *testing.T) {
 	}
 }
 
+// A misspelt key is an error naming it, not silently ignored (which would
+// leave, say, trusted_proxies at its default).
+func TestLoadRejectsUnknownKeys(t *testing.T) {
+	for _, tc := range []struct{ yaml, key string }{
+		{"public_url: https://x\ntrusted_proxy: [10.0.0.0/8]\n", "trusted_proxy"},
+		{"smtp:\n  hostname: mail.example.org\n", "hostname"},
+		{"sessions:\n  idle: 7d\n  absolut: 30d\n", "absolut"},
+	} {
+		p := filepath.Join(t.TempDir(), "latch.yaml")
+		if err := os.WriteFile(p, []byte(tc.yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Load(p, noEnv)
+		if err == nil || !strings.Contains(err.Error(), tc.key) {
+			t.Errorf("Load(%q) err = %v, want one naming %s", tc.yaml, err, tc.key)
+		}
+	}
+}
+
 func TestLoadErrors(t *testing.T) {
 	if _, err := Load("/nonexistent/latch.yaml", noEnv); err == nil {
 		t.Error("missing file: want error")
@@ -181,6 +200,16 @@ func TestDerived(t *testing.T) {
 	c.PublicURL = "http://x"
 	if c.SecureCookies() {
 		t.Error("SecureCookies want false")
+	}
+	// The scheme is case-insensitive: Validate writes it in lower case, so
+	// cookies are still Secure and the issuer is what clients expect.
+	c.PublicURL = "HTTPS://login.example.org/"
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !c.SecureCookies() || c.Issuer() != "https://login.example.org" {
+		t.Errorf("HTTPS:// public_url: SecureCookies %v, Issuer %q; want true, https://login.example.org",
+			c.SecureCookies(), c.Issuer())
 	}
 	if c.DBPath() != "/var/lib/latch/latch.db" {
 		t.Errorf("DBPath = %q", c.DBPath())

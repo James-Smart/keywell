@@ -3,6 +3,7 @@
 package config
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
@@ -146,7 +147,7 @@ func Load(path string, env func(string) string) (*Config, error) {
 			if err := normalizeDurations(&doc); err != nil {
 				return nil, fmt.Errorf("parse %s: %w", path, err)
 			}
-			if err := doc.Decode(c); err != nil {
+			if err := decodeStrict(&doc, c); err != nil {
 				return nil, fmt.Errorf("parse %s: %w", path, err)
 			}
 		}
@@ -155,6 +156,20 @@ func Load(path string, env func(string) string) (*Config, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// decodeStrict decodes doc into c, refusing keys Config does not have (a
+// misspelt key would otherwise be ignored, leaving its default). yaml.v3
+// checks keys only when decoding a stream, so doc is encoded again first.
+// Its errors name the unknown key.
+func decodeStrict(doc *yaml.Node, c *Config) error {
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	return dec.Decode(c)
 }
 
 // normalizeDurations rewrites "Nd" scalars at the known duration paths into
@@ -272,6 +287,8 @@ func applyEnv(c *Config, env func(string) string) error {
 var colorRE = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // Validate checks required keys and formats; errors name the offending key.
+// It writes public_url's scheme in lower case (url.Parse accepts any case),
+// so SecureCookies and Issuer see "https://".
 func (c *Config) Validate() error {
 	u, err := url.Parse(c.PublicURL)
 	switch {
@@ -282,6 +299,7 @@ func (c *Config) Validate() error {
 	case (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery:
 		return fmt.Errorf("public_url must not have a path, query or fragment, got %q", c.PublicURL)
 	}
+	c.PublicURL = u.Scheme + c.PublicURL[len(u.Scheme):] // u.Scheme is lower case
 	key, err := base64.StdEncoding.DecodeString(c.EncryptionKey)
 	if err != nil || len(key) != 32 {
 		return fmt.Errorf("encryption_key must be standard base64 of exactly 32 bytes")
