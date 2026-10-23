@@ -10,7 +10,7 @@ import (
 
 func TestTOTPEnrolmentLifecycle(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "enrol@example.org")
 	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
 
@@ -74,7 +74,7 @@ func TestTOTPEnrolmentLifecycle(t *testing.T) {
 // codes stored as hashes stay the ones kept to show.
 func TestCompleteTOTPEnrolmentRefusesSecond(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "twice@example.org")
 	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
 	if err := s.PutTOTPEnrolment(ctx, "sess", []byte("secret")); err != nil {
@@ -110,7 +110,7 @@ func TestCompleteTOTPEnrolmentRefusesSecond(t *testing.T) {
 // Without the session's enrolment nothing is written, the user included.
 func TestCompleteTOTPEnrolmentNeedsEnrolment(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "none@example.org")
 	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
 
@@ -134,7 +134,7 @@ func TestCompleteTOTPEnrolmentNeedsEnrolment(t *testing.T) {
 // its session does.
 func TestTOTPEnrolmentEndsWithSession(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "cascade@example.org")
 	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
 	if err := s.PutTOTPEnrolment(ctx, "sess", []byte("secret")); err != nil {

@@ -21,7 +21,7 @@ func oauthFixture(t *testing.T, s *Store) (*model.User, *model.Application) {
 
 func TestConsumeAuthCodeOnce(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u, a := oauthFixture(t, s)
 	now := time.Now().UTC()
 	mk := func(hash string, exp time.Time) {
@@ -54,7 +54,7 @@ func TestConsumeAuthCodeOnce(t *testing.T) {
 
 func TestRevokeRefreshTokenIfActive(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u, a := oauthFixture(t, s)
 	now := time.Now().UTC()
 	mk := func(hash string, exp time.Time) {
@@ -90,7 +90,7 @@ func TestRevokeRefreshTokenIfActive(t *testing.T) {
 
 func TestRefreshTokenFamilyRevoke(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u, a := oauthFixture(t, s)
 	other := mkUser(t, s, "other@example.org")
 	now := time.Now().UTC()

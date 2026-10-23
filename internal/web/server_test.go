@@ -15,7 +15,7 @@ import (
 
 	"latch/internal/config"
 	"latch/internal/session"
-	"latch/internal/store"
+	"latch/internal/store/storetest"
 	"latch/internal/testenv"
 	"latch/internal/web"
 )
@@ -111,7 +111,7 @@ func customHandler(t *testing.T, trusted []string, mount mountFunc) http.Handler
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.OpenTest(t)
+	st := storetest.OpenTest(t)
 	return web.New(web.Deps{
 		Cfg:      cfg,
 		Store:    st,

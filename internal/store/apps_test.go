@@ -36,7 +36,7 @@ func mkUser(t *testing.T, s *Store, email string) *model.User {
 
 func TestApplicationRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	g1, g2, g3 := mkGroup(t, s, "g1"), mkGroup(t, s, "g2"), mkGroup(t, s, "g3")
 	svc := &model.User{Name: "svc", Type: model.UserTypeService, IsActive: true}
 	if err := s.CreateUser(ctx, svc); err != nil {
@@ -125,7 +125,7 @@ func TestApplicationRoundTrip(t *testing.T) {
 
 func TestListTileApplicationsForUser(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "u@example.org")
 	g := mkGroup(t, s, "G")
 	mk := func(slug, launch string, tile bool, groups ...string) {

@@ -18,7 +18,7 @@ func jsonEqual(a, b any) bool {
 
 func TestCreateAndGetUser(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "Alex", Email: "  Alex@Example.org ", Username: "alex", IsActive: true,
 		Metadata: map[string]any{"member_number": 42}}
 	if err := s.CreateUser(ctx, u); err != nil {
@@ -56,7 +56,7 @@ func TestCreateAndGetUser(t *testing.T) {
 
 func TestUpdateUser(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "Alex", Email: "a@example.org", IsActive: true}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestUpdateUser(t *testing.T) {
 
 func TestCreateUserDuplicateEmailCaseInsensitive(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	if err := s.CreateUser(ctx, &model.User{Name: "A", Email: "alex@example.org"}); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestCreateUserDuplicateEmailCaseInsensitive(t *testing.T) {
 
 func TestServiceAccountNoEmail(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	for _, name := range []string{"door", "printer"} {
 		u := &model.User{Name: name, Type: model.UserTypeService, Username: name, IsActive: true}
 		if err := s.CreateUser(ctx, u); err != nil {
@@ -112,7 +112,7 @@ func TestServiceAccountNoEmail(t *testing.T) {
 
 func TestSetPasswordClearsLegacy(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "A", Email: "a@example.org", LegacyPasswordHash: "pbkdf2_sha256$1$x$y"}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestSetPasswordClearsLegacy(t *testing.T) {
 
 func TestTOTPAndRecoveryCodes(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "A", Email: "a@example.org"}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestTOTPAndRecoveryCodes(t *testing.T) {
 
 func TestTouchLastLogin(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "A", Email: "a@example.org"}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)

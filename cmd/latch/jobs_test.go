@@ -17,6 +17,7 @@ import (
 	"latch/internal/oidc"
 	"latch/internal/secrets"
 	"latch/internal/store"
+	"latch/internal/store/storetest"
 )
 
 // within bounds each wait in these tests, so a broken loop fails the test
@@ -126,7 +127,7 @@ func sessionIDs(t *testing.T, conn *sql.DB) []string {
 
 func TestSessionJanitorDeletesExpiredSessions(t *testing.T) {
 	ctx := context.Background()
-	st, conn := store.OpenTestDB(t)
+	st, conn := storetest.OpenTestDB(t)
 	u := &model.User{Email: "alex@example.org", IsActive: true}
 	if err := st.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
@@ -148,7 +149,7 @@ func TestSessionJanitorDeletesExpiredSessions(t *testing.T) {
 // made active.
 func TestKeyReloaderPicksUpRotation(t *testing.T) {
 	ctx := context.Background()
-	st := store.OpenTest(t)
+	st := storetest.OpenTest(t)
 	enc, err := secrets.NewEncryptor(secrets.GenerateKey())
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +183,7 @@ func TestKeyReloaderPicksUpRotation(t *testing.T) {
 // A job that fails logs a warning and returns; the next run tries again.
 func TestJobsWarnOnFailure(t *testing.T) {
 	ctx := context.Background()
-	st, conn := store.OpenTestDB(t)
+	st, conn := storetest.OpenTestDB(t)
 	enc, err := secrets.NewEncryptor(secrets.GenerateKey())
 	if err != nil {
 		t.Fatal(err)

@@ -19,7 +19,7 @@ func mkReset(t *testing.T, s *Store, hash, userID string, p model.ResetPurpose, 
 
 func TestConsumeResetTokenOnce(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "r@example.org")
 	now := time.Now()
 	mkReset(t, s, "good", u.ID, model.ResetPurposeReset, now.Add(time.Hour))
@@ -40,7 +40,7 @@ func TestConsumeResetTokenOnce(t *testing.T) {
 
 func TestHasActiveInviteToken(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "i@example.org")
 	other := mkUser(t, s, "j@example.org")
 	check := func(id string, want bool) {
@@ -66,7 +66,7 @@ func TestHasActiveInviteToken(t *testing.T) {
 // PeekResetToken finds an unused, unexpired token without using it up.
 func TestPeekResetToken(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "p@example.org")
 	now := time.Now()
 	mkReset(t, s, "good", u.ID, model.ResetPurposeInvite, now.Add(time.Hour))

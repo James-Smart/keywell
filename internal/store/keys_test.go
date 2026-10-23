@@ -11,7 +11,7 @@ import (
 
 func TestSigningKeysOrderAndRetire(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	older := &model.SigningKey{KID: "old", Alg: "RS256", PrivateKeyEnc: []byte{1, 2}, PublicKeyPEM: "pem1", CreatedAt: base}
 	newer := &model.SigningKey{KID: "new", Alg: "RS256", PrivateKeyEnc: []byte{3}, PublicKeyPEM: "pem2", CreatedAt: base.Add(time.Hour)}

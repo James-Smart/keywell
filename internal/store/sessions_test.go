@@ -21,7 +21,7 @@ func mkSession(t *testing.T, s *Store, id, userID string, exp time.Time) *model.
 
 func TestSessionExpiryHidden(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "sess@example.org")
 	now := time.Now().UTC()
 	mkSession(t, s, "live", u.ID, now.Add(time.Hour))
@@ -57,7 +57,7 @@ func TestSessionExpiryHidden(t *testing.T) {
 
 func TestDeleteSessionsForUser(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	a := mkUser(t, s, "a@example.org")
 	b := mkUser(t, s, "b@example.org")
 	exp := time.Now().Add(time.Hour)
@@ -85,7 +85,7 @@ func TestDeleteSessionsForUser(t *testing.T) {
 
 func TestDeleteOtherSessions(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	a := mkUser(t, s, "a@example.org")
 	b := mkUser(t, s, "b@example.org")
 	exp := time.Now().Add(time.Hour)
@@ -112,7 +112,7 @@ func TestDeleteOtherSessions(t *testing.T) {
 // TOTP step cannot undo TOTPPassed.
 func TestTouchSessionKeepsTOTPPassed(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "touch@example.org")
 	now := time.Now().UTC()
 	sess := mkSession(t, s, "touch", u.ID, now.Add(time.Hour))
@@ -139,7 +139,7 @@ func TestTouchSessionKeepsTOTPPassed(t *testing.T) {
 
 func TestIncrementTOTPFailures(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := mkUser(t, s, "fail@example.org")
 	exp := time.Now().Add(time.Hour)
 	mkSession(t, s, "one", u.ID, exp)

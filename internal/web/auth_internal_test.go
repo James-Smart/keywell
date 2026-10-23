@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"latch/internal/store"
+	"latch/internal/store/storetest"
 )
 
 func TestSafeNext(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSafeNext(t *testing.T) {
 // The dummy hash stands in for missing users; its password must not let
 // anyone in.
 func TestAuthenticateUnknownEmailWithDummyPassword(t *testing.T) {
-	s := newServer(Deps{Store: store.OpenTest(t), Log: slog.New(slog.DiscardHandler)})
+	s := newServer(Deps{Store: storetest.OpenTest(t), Log: slog.New(slog.DiscardHandler)})
 	u, ok, err := s.authenticate(context.Background(), "nobody@example.org", dummyPassword)
 	if u != nil || ok || err != nil {
 		t.Fatalf("authenticate = %v, %v, %v; want nil, false, nil", u, ok, err)

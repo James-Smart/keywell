@@ -13,7 +13,7 @@ import (
 	"latch/internal/mail"
 	"latch/internal/model"
 	"latch/internal/secrets"
-	"latch/internal/store"
+	"latch/internal/store/storetest"
 )
 
 // SendReset with purpose invite mails the invitation, with a link that
@@ -28,7 +28,7 @@ func TestSendResetInvite(t *testing.T) {
 	cfg.PublicURL = "https://id.example.org"
 	cfg.Branding.Name = "Makerspace"
 	cfg.Branding.SupportText = "Ask at the front desk."
-	st, db := store.OpenTestDB(t)
+	st, db := storetest.OpenTestDB(t)
 	log := slog.New(slog.DiscardHandler)
 	mailer := &mail.Memory{}
 	s := newServer(Deps{Cfg: cfg, Store: st, Mailer: mailer, Audit: audit.New(st, log), Log: log})
@@ -80,7 +80,7 @@ func TestSendResetLinkUsesIssuer(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.PublicURL = "https://id.example.org/"
-	st, _ := store.OpenTestDB(t)
+	st, _ := storetest.OpenTestDB(t)
 	log := slog.New(slog.DiscardHandler)
 	mailer := &mail.Memory{}
 	s := newServer(Deps{Cfg: cfg, Store: st, Mailer: mailer, Audit: audit.New(st, log), Log: log})

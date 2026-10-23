@@ -32,6 +32,7 @@ import (
 	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
+	"latch/internal/store/storetest"
 	"latch/internal/totp"
 	"latch/internal/web"
 )
@@ -168,7 +169,7 @@ func New(t *testing.T, opts ...Option) *Env {
 	if err != nil {
 		t.Fatalf("testenv: renderer: %v", err)
 	}
-	st, db := store.OpenTestDB(t)
+	st, db := storetest.OpenTestDB(t)
 	mailer := &mail.Memory{}
 	var serverMailer mail.Mailer = mailer
 	if o.mailer != nil {

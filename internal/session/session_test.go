@@ -11,6 +11,7 @@ import (
 	"latch/internal/model"
 	"latch/internal/session"
 	"latch/internal/store"
+	"latch/internal/store/storetest"
 )
 
 // harness wires a Manager to a test store with a settable clock that starts
@@ -24,7 +25,7 @@ type harness struct {
 
 func newHarness(t *testing.T, idle, absolute time.Duration) *harness {
 	t.Helper()
-	h := &harness{st: store.OpenTest(t), now: time.Now().UTC()}
+	h := &harness{st: storetest.OpenTest(t), now: time.Now().UTC()}
 	h.m = session.NewManager(h.st, idle, absolute, true)
 	h.m.SetClock(func() time.Time { return h.now })
 	return h

@@ -10,7 +10,7 @@ import (
 
 func TestGroupsAndMembership(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "A", Email: "a@example.org"}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestGroupsAndMembership(t *testing.T) {
 
 func TestDeleteUserCascadesMembership(t *testing.T) {
 	ctx := context.Background()
-	s := OpenTest(t)
+	s := openTest(t)
 	u := &model.User{Name: "A", Email: "a@example.org"}
 	g := &model.Group{Name: "g"}
 	if err := s.CreateUser(ctx, u); err != nil {

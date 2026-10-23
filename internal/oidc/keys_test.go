@@ -21,6 +21,7 @@ import (
 	"latch/internal/oidc"
 	"latch/internal/secrets"
 	"latch/internal/store"
+	"latch/internal/store/storetest"
 )
 
 func newEncryptor(t *testing.T) *secrets.Encryptor {
@@ -86,7 +87,7 @@ func jwksKey(t *testing.T, k *oidc.KeyManager, kid string) jose.JSONWebKey {
 
 func TestEnsureKeyCreatesOnce(t *testing.T) {
 	ctx := context.Background()
-	s := store.OpenTest(t)
+	s := storetest.OpenTest(t)
 	enc := newEncryptor(t)
 
 	k1 := newKeyManager(t, s, enc)
@@ -143,7 +144,7 @@ func TestEnsureKeyCreatesOnce(t *testing.T) {
 }
 
 func TestSignVerifiesAgainstJWKS(t *testing.T) {
-	k := newKeyManager(t, store.OpenTest(t), newEncryptor(t))
+	k := newKeyManager(t, storetest.OpenTest(t), newEncryptor(t))
 	kid := k.ActiveKID()
 
 	claims := map[string]any{"sub": "u1", "aud": "app", "n": float64(3), "groups": []any{"a", "b"}}
@@ -194,7 +195,7 @@ func TestSignVerifiesAgainstJWKS(t *testing.T) {
 
 func TestRotateKeepsOldPublished(t *testing.T) {
 	ctx := context.Background()
-	s, db := store.OpenTestDB(t)
+	s, db := storetest.OpenTestDB(t)
 	enc := newEncryptor(t)
 	k := newKeyManager(t, s, enc).WithAudit(audit.New(s, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	oldKID := k.ActiveKID()
@@ -242,7 +243,7 @@ func TestRotateKeepsOldPublished(t *testing.T) {
 
 func TestRetireOlderThan(t *testing.T) {
 	ctx := context.Background()
-	s := store.OpenTest(t)
+	s := storetest.OpenTest(t)
 	enc := newEncryptor(t)
 	k := newKeyManager(t, s, enc)
 	oldKID := k.ActiveKID()
@@ -298,7 +299,7 @@ func TestRetireOlderThan(t *testing.T) {
 
 func TestPrivateKeyEncryptedAtRest(t *testing.T) {
 	ctx := context.Background()
-	s, db := store.OpenTestDB(t)
+	s, db := storetest.OpenTestDB(t)
 	enc := newEncryptor(t)
 	k := newKeyManager(t, s, enc)
 	kid := k.ActiveKID()
@@ -341,7 +342,7 @@ func TestPrivateKeyEncryptedAtRest(t *testing.T) {
 
 func TestRetiredKeyStopsVerifyingAfterGrace(t *testing.T) {
 	ctx := context.Background()
-	s := store.OpenTest(t)
+	s := storetest.OpenTest(t)
 	enc := newEncryptor(t)
 	var offset time.Duration
 	clock := func() time.Time { return time.Now().Add(offset) }
@@ -396,7 +397,7 @@ func TestRetiredKeyStopsVerifyingAfterGrace(t *testing.T) {
 func TestRetireOlderThanMeasuresFromSupersession(t *testing.T) {
 	ctx := context.Background()
 	const day = 24 * time.Hour
-	k := newKeyManager(t, store.OpenTest(t), newEncryptor(t))
+	k := newKeyManager(t, storetest.OpenTest(t), newEncryptor(t))
 	var offset time.Duration
 	k.SetClock(func() time.Time { return time.Now().Add(offset) })
 	kidA := k.ActiveKID()
@@ -434,7 +435,7 @@ func TestRetireOlderThanMeasuresFromSupersession(t *testing.T) {
 
 func TestReloadPicksUpAnotherManagersChanges(t *testing.T) {
 	ctx := context.Background()
-	s := store.OpenTest(t)
+	s := storetest.OpenTest(t)
 	enc := newEncryptor(t)
 	a := newKeyManager(t, s, enc) // e.g. latch rotate-keys
 	b := newKeyManager(t, s, enc) // e.g. the running server
