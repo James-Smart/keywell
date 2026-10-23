@@ -125,6 +125,61 @@ button:focus-visible, .button:focus-visible { outline: 2px solid var(--text); ou
   gap: 0.4rem 1rem;
 }
 
+/* Member home: app tiles, one column on phones and three on wide screens */
+.tiles {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+.tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  height: 100%;
+  padding: 1rem;
+  color: inherit;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.tile:hover { border-color: var(--primary); }
+.tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tile-icon {
+  flex: none;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius);
+  object-fit: contain;
+}
+.tile-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--primary);
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+.tile-text { display: flex; flex-direction: column; min-width: 0; }
+.tile-name { font-weight: 600; color: var(--primary); overflow-wrap: anywhere; }
+.tile-description { color: var(--muted); font-size: 0.95rem; overflow-wrap: anywhere; }
+.account-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+@media (min-width: 720px) {
+  .tiles { grid-template-columns: repeat(3, 1fr); }
+}
+
 /* Footer */
 .footer {
   padding: 1rem;

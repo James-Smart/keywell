@@ -108,6 +108,7 @@ type Option func(*options)
 type options struct {
 	config []func(*config.Config)
 	mailer func(*mail.Memory) mail.Mailer
+	log    *slog.Logger
 }
 
 // WithConfig edits the config after the defaults (and PublicURL) are set.
@@ -119,6 +120,12 @@ func WithConfig(f func(*config.Config)) Option {
 // or fail sends. Env.Mailer records what the wrapper passes on.
 func WithMailer(wrap func(*mail.Memory) mail.Mailer) Option {
 	return func(o *options) { o.mailer = wrap }
+}
+
+// WithLog gives the stack log instead of a logger that discards
+// everything, so a test can assert on what the server logs.
+func WithLog(log *slog.Logger) Option {
+	return func(o *options) { o.log = log }
 }
 
 // New builds the full stack: test store, memory mailer, fake clock, the
@@ -154,6 +161,9 @@ func New(t *testing.T, opts ...Option) *Env {
 		t.Fatalf("testenv: encryptor: %v", err)
 	}
 	log := slog.New(slog.DiscardHandler)
+	if o.log != nil {
+		log = o.log
+	}
 	rend, err := web.NewRenderer(cfg, log)
 	if err != nil {
 		t.Fatalf("testenv: renderer: %v", err)

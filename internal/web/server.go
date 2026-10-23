@@ -50,6 +50,9 @@ type Server struct {
 	// dummyHash is verified against when a sign-in names no usable
 	// password, so the response time does not reveal whether it exists.
 	dummyHash string
+	// skippedTiles remembers the app tiles already logged as hidden for a
+	// bad launch URL (keyed by app ID and URL), so each is logged once.
+	skippedTiles sync.Map
 }
 
 // dummyPassword is what dummyHash hashes. Knowing it gains nothing: a
@@ -99,7 +102,7 @@ func New(d Deps) http.Handler {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
-	mux.Handle("GET /{$}", session.RequireUser(http.HandlerFunc(s.homePlaceholder)))
+	mux.Handle("GET /{$}", session.RequireUser(http.HandlerFunc(s.home)))
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("GET /logout", s.logoutPage)
@@ -124,11 +127,6 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("POST /account/totp/confirm", signedIn(s.confirmTOTP))
 	mux.Handle("GET /account/totp/codes", signedIn(s.totpCodes))
 	mux.Handle("POST /account/totp/disable", signedIn(s.disableTOTP))
-}
-
-// homePlaceholder is where sign-in lands until the member home replaces it.
-func (s *Server) homePlaceholder(w http.ResponseWriter, r *http.Request) {
-	s.d.Renderer.Render(w, r, http.StatusOK, "home", Page{Title: "Home"})
 }
 
 // serverError logs err and shows the generic error page. what names the

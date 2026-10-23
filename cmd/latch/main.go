@@ -3,10 +3,12 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,16 +35,27 @@ var Version = "dev"
 const usage = `usage: latch <command> [flags]
 
 commands:
-  serve     run the web server (--config PATH, default ./latch.yaml)
-  version   print the version
+  init            write a config file, set up the database and the first admin
+  serve           run the web server
+  create-admin    add someone to the Admin group, creating their account if needed
+  reset-password  print a one-time link for choosing a new password
+  rotate-keys     make a new token signing key and retire old ones
+  version         print the version
+
+Every command but version takes --config PATH (default ./latch.yaml).
+Run latch <command> -h for its flags.
 `
 
 // command runs one subcommand and returns the process exit code.
 type command func(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 
 var commands = map[string]command{
-	"serve":   cmdServe,
-	"version": cmdVersion,
+	"init":           cmdInit,
+	"serve":          cmdServe,
+	"create-admin":   cmdCreateAdmin,
+	"reset-password": cmdResetPassword,
+	"rotate-keys":    cmdRotateKeys,
+	"version":        cmdVersion,
 }
 
 func main() {
@@ -62,6 +75,69 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return cmd(args[1:], stdin, stdout, stderr)
 }
 
+// fail reports err on one line and returns exit code 1.
+func fail(stderr io.Writer, err error) int {
+	fmt.Fprintf(stderr, "latch: %v\n", err)
+	return 1
+}
+
+// usageError reports, on one line, a mistake in how command was called and
+// returns exit code 2.
+func usageError(stderr io.Writer, command, format string, args ...any) int {
+	fmt.Fprintf(stderr, "latch %s: %s\n", command, fmt.Sprintf(format, args...))
+	return 2
+}
+
+// loadConfig reads the config file at path, applies LATCH_* overrides from
+// the environment and validates the result.
+func loadConfig(path string) (*config.Config, error) {
+	cfg, err := config.Load(path, os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// openStore opens the database at path, creating it if needed, and applies
+// any pending migrations. The caller closes the returned connection.
+func openStore(ctx context.Context, path string) (*store.Store, *sql.DB, error) {
+	conn, err := db.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := db.Migrate(ctx, conn); err != nil {
+		conn.Close()
+		return nil, nil, err
+	}
+	return store.New(conn), conn, nil
+}
+
+// openInstall loads the config at configPath and opens its database, which
+// latch init must already have made. The caller closes the connection.
+func openInstall(ctx context.Context, configPath string) (*config.Config, *store.Store, *sql.DB, error) {
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if _, err := os.Stat(cfg.DBPath()); errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, nil, fmt.Errorf("no database at %s; run latch init first", cfg.DBPath())
+	}
+	st, conn, err := openStore(ctx, cfg.DBPath())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return cfg, st, conn, nil
+}
+
+// cliLogger logs warnings and errors (such as a failed audit write) to
+// stderr; the commands report their own progress on stdout.
+func cliLogger(stderr io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+}
+
 func cmdVersion(_ []string, _ io.Reader, stdout, _ io.Writer) int {
 	fmt.Fprintf(stdout, "latch %s\n", Version)
 	return 0
@@ -74,18 +150,13 @@ func cmdServe(args []string, _ io.Reader, _, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	cfg, err := config.Load(*configPath, os.Getenv)
-	if err == nil {
-		err = cfg.Validate()
-	}
+	cfg, err := loadConfig(*configPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "latch: %v\n", err)
-		return 1
+		return fail(stderr, err)
 	}
 	log, err := newLogger(cfg.Log, stderr)
 	if err != nil {
-		fmt.Fprintf(stderr, "latch: %v\n", err)
-		return 1
+		return fail(stderr, err)
 	}
 	slog.SetDefault(log)
 

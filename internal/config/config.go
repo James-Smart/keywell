@@ -3,6 +3,7 @@
 package config
 
 import (
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -15,6 +16,12 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// ExampleYAML is the annotated example configuration. latch init writes new
+// config files from it; latch.example.yaml at the repository root is a copy.
+//
+//go:embed example.yaml
+var ExampleYAML string
 
 type BrandingConfig struct {
 	Name         string
@@ -92,9 +99,9 @@ var durationPaths = [][]string{
 	{"tokens", "access"}, {"tokens", "id"}, {"tokens", "refresh"}, {"tokens", "refresh_absolute"},
 }
 
-// parseDuration is time.ParseDuration plus a "d" suffix meaning 24h
+// ParseDuration is time.ParseDuration plus a "d" suffix meaning 24h
 // (whole or fractional days, e.g. "30d").
-func parseDuration(s string) (time.Duration, error) {
+func ParseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if days, ok := strings.CutSuffix(s, "d"); ok {
 		n, err := strconv.ParseFloat(days, 64)
@@ -152,7 +159,7 @@ func normalizeDurations(doc *yaml.Node) error {
 		if n == nil || n.Kind != yaml.ScalarNode {
 			continue
 		}
-		d, err := parseDuration(n.Value)
+		d, err := ParseDuration(n.Value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", strings.Join(p, "."), err)
 		}
@@ -182,7 +189,7 @@ func applyEnv(c *Config, env func(string) string) error {
 	var err error
 	dur := func(key string, dst *time.Duration) {
 		if v := env(key); v != "" && err == nil {
-			d, e := parseDuration(v)
+			d, e := ParseDuration(v)
 			if e != nil {
 				err = fmt.Errorf("%s: %w", key, e)
 				return

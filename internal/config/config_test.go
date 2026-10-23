@@ -168,3 +168,34 @@ func TestExampleFileLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The repo-root latch.example.yaml is a copy of example.yaml, the source
+// that latch init writes configs from.
+func TestRootExampleMatchesEmbedded(t *testing.T) {
+	root, err := os.ReadFile("../../latch.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(root) != ExampleYAML {
+		t.Fatal("latch.example.yaml differs from internal/config/example.yaml; copy example.yaml over it")
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	for in, want := range map[string]time.Duration{
+		"90d":  90 * 24 * time.Hour,
+		"1.5d": 36 * time.Hour,
+		"0d":   0,
+		"30m":  30 * time.Minute,
+	} {
+		got, err := ParseDuration(in)
+		if err != nil || got != want {
+			t.Errorf("ParseDuration(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "soon", "xd", "5 days"} {
+		if _, err := ParseDuration(in); err == nil {
+			t.Errorf("ParseDuration(%q): no error", in)
+		}
+	}
+}
