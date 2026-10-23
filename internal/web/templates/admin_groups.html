@@ -1,0 +1,28 @@
+{{define "content"}}
+{{- with .Data}}
+<h1>Groups</h1>
+<div class="toolbar">
+  <a class="button" href="/admin/groups/new">Add group</a>
+</div>
+{{- if .Rows}}
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th></tr>
+    </thead>
+    <tbody>
+    {{- range .Rows}}
+      <tr>
+        <td><a href="/admin/groups/{{.ID}}">{{.Name}}</a>{{if .IsAdmin}} <span class="chip">Admin access</span>{{end}}{{if .RequireTOTP}} <span class="chip">Requires two-step sign in</span>{{end}}</td>
+        <td>{{.Description}}</td>
+        <td>{{.MemberCount}}</td>
+      </tr>
+    {{- end}}
+    </tbody>
+  </table>
+</div>
+{{- else}}
+<p>There are no groups yet.</p>
+{{- end}}
+{{- end}}
+{{end}}

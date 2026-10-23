@@ -1,0 +1,83 @@
+{{define "content"}}
+{{- with .Data}}
+{{- $group := .Group}}
+<p class="back"><a href="/admin/groups">All groups</a></p>
+<h1>{{.Heading}}</h1>
+<div{{if $group}} class="split"{{end}}>
+  <form method="post" action="{{if $group}}/admin/groups/{{$group.ID}}{{else}}/admin/groups{{end}}" class="panel fields">
+    {{- if $group}}
+    <h2>Details</h2>
+    {{- end}}
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" value="{{.Form.Name}}" autocomplete="off" required{{if .Errors.name}} aria-invalid="true" aria-describedby="name-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "name"}}
+    <label for="description">Description</label>
+    <input id="description" name="description" type="text" value="{{.Form.Description}}" autocomplete="off"{{if .Errors.description}} aria-invalid="true" aria-describedby="description-error"{{end}}>
+    {{- template "admin-field-error" .Errors.For "description"}}
+    <fieldset class="checks">
+      <legend>Options</legend>
+      <label><input type="checkbox" name="is_admin"{{if .Form.IsAdmin}} checked{{end}}>Members can use the admin pages</label>
+      <label><input type="checkbox" name="require_totp"{{if .Form.RequireTOTP}} checked{{end}}>Members must use two-step sign in</label>
+    </fieldset>
+    {{- template "admin-metadata" .Metadata}}
+    <button type="submit">{{.SubmitTxt}}</button>
+  </form>
+  {{- if $group}}
+  <div>
+    <section class="panel" aria-labelledby="members">
+      <h2 id="members">Members</h2>
+      {{- if .Members}}
+      <div class="table-wrap">
+        <table class="list">
+          <thead>
+            <tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Remove</th></tr>
+          </thead>
+          <tbody>
+          {{- range .Members}}
+            <tr>
+              <td>{{or .Name .Email}}{{if eq .Type "service"}} <span class="chip">Service account</span>{{end}}</td>
+              <td>{{.Email}}</td>
+              <td>
+                <form method="post" action="/admin/groups/{{$group.ID}}/members/{{.ID}}/remove">
+                  <button type="submit" class="button-secondary">Remove</button>
+                </form>
+              </td>
+            </tr>
+          {{- end}}
+          </tbody>
+        </table>
+      </div>
+      {{- template "admin-pagination" .Pager}}
+      {{- else}}
+      <p>No one is in this group yet.</p>
+      {{- end}}
+    </section>
+    <section class="panel" aria-labelledby="add">
+      <h2 id="add">Add someone</h2>
+      <form method="get" action="/admin/groups/{{$group.ID}}" role="search" class="toolbar">
+        <input type="search" name="q" value="{{.Query}}" placeholder="Search name, email or username" aria-label="Search name, email or username">
+        <button type="submit" class="button-secondary">Search</button>
+      </form>
+      {{- if .Matches}}
+      {{- range .Matches}}
+      <form method="post" action="/admin/groups/{{$group.ID}}/members" class="actions">
+        <input type="hidden" name="user_id" value="{{.ID}}">
+        <span>{{or .Name .Email}}{{if eq .Type "service"}} <span class="chip">Service account</span>{{end}} <span class="hint">{{.Email}}</span></span>
+        <button type="submit" class="button-secondary">Add</button>
+      </form>
+      {{- end}}
+      {{- else if .Query}}
+      <p>No one else matches.</p>
+      {{- end}}
+    </section>
+    <section class="panel" aria-labelledby="danger">
+      <h2 id="danger">Actions</h2>
+      <div class="actions">
+        {{- template "admin-confirm" .Delete}}
+      </div>
+    </section>
+  </div>
+  {{- end}}
+</div>
+{{- end}}
+{{end}}
