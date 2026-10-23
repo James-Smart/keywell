@@ -41,7 +41,9 @@ Latch refuses to start if:
 
 ## Connecting MediaWiki
 
-Install the [PluggableAuth](https://www.mediawiki.org/wiki/Extension:PluggableAuth) and [OpenID Connect](https://www.mediawiki.org/wiki/Extension:OpenID_Connect) extensions. Register the wiki in Latch as a confidential application with the redirect URI `https://wiki.example.org/index.php/Special:PluggableAuthLogin` (use your wiki's own address). Then add this to `LocalSettings.php`:
+Install the [PluggableAuth](https://www.mediawiki.org/wiki/Extension:PluggableAuth) and [OpenID Connect](https://www.mediawiki.org/wiki/Extension:OpenID_Connect) extensions. Register the wiki in Latch as a confidential application with the redirect URI `https://wiki.example.org/index.php/Special:PluggableAuthLogin` (use your wiki's own address). Then add this to `LocalSettings.php`. The app's page in Latch has a Setup details panel with this snippet already filled in, apart from the secret.
+
+The snippet:
 
 ```php
 wfLoadExtension( 'PluggableAuth' );
@@ -78,7 +80,32 @@ https://login.example.org/.well-known/openid-configuration
 - ID tokens are signed with RS256. The public keys are at `/.well-known/jwks.json`.
 - To sign a member out, send their browser to the `end_session_endpoint` (`/oauth/logout`) with `id_token_hint`, and `post_logout_redirect_uri` if you registered one.
 
-Applications will be registered in the admin UI, which is not built yet (see Status).
+To register an app, open Admin pages, then Applications, then Add application. Say whether the app keeps a secret, list the addresses it signs members back to, and choose which groups may use it. For an app that keeps a secret, copy the secret when it is shown. It is shown once; if you lose it, regenerate it from the app's page.
+
+## Admin pages
+
+Admins manage Latch at `/admin` (there is a link on the member home page). You need to be in a group that has admin access, and if that group requires two-step sign in, you need to have passed it. The `Admin` group that `latch init` makes has both.
+
+The sidebar has these entries:
+
+- **Members**: add, find and edit members; send an invitation or reset email, set a password, clear two-step sign in, sign someone out everywhere, or disable or delete an account.
+- **Groups**: make groups, choose which give admin access or require two-step sign in, and add or remove members.
+- **Applications**: register apps, choose which groups may use them, show them on the members' home page, and see the details to set each one up.
+- **Service accounts**: accounts for scripts and devices, with the API tokens they use.
+- **Settings**: the space's branding, a button to test the email settings, and the signing keys.
+- **Audit log**: who changed what and when, and sign-in activity.
+
+## Admin API
+
+Anything you can do on the admin pages you can also do over HTTP, for scripts. Open Admin pages, then Service accounts, and add a service account. On its page, make a token, choosing Read only or Full admin. Copy the token when it is shown. It starts with `latch_` and is shown once.
+
+Send the token as a bearer token:
+
+```sh
+curl -H "Authorization: Bearer latch_…" https://login.example.org/api/v1/me
+```
+
+A read-only token can only make `GET` requests. A full admin token can change things too. Requests and answers are JSON, and each token may make 600 requests a minute. The OpenAPI document at `/api/v1/openapi.json` lists every route.
 
 ## Commands
 
@@ -95,4 +122,4 @@ Every command except `version` takes `--config PATH` (default `./latch.yaml`). R
 
 ## Status
 
-Sign-in, password reset, two-step sign in, the member home page, the OpenID Connect endpoints and the commands above work. The admin UI, the admin API and the Authentik importer are being built next.
+Sign-in, password reset, two-step sign in, the member home page, the OpenID Connect endpoints, the commands above, the admin pages and the admin API work. The Authentik importer is next.
