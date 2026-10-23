@@ -146,3 +146,24 @@ func (s *Store) RevokeRefreshTokenFamily(ctx context.Context, familyID string) e
 func (s *Store) RevokeRefreshTokensForUser(ctx context.Context, userID string) error {
 	return s.revokeWhere(ctx, "store: revoke user refresh tokens", "user_id", userID)
 }
+
+// DeleteSpentAuthCodes removes authorization codes that are used or
+// expired, and returns how many it removed.
+func (s *Store) DeleteSpentAuthCodes(ctx context.Context) (int64, error) {
+	return s.deleteRows(ctx, "store: delete spent auth codes",
+		`DELETE FROM auth_codes WHERE used_at IS NOT NULL OR expires_at <= ?`, formatTime(time.Now()))
+}
+
+// revokedRefreshKept is how long a revoked refresh token is kept, so that
+// presenting it again still ends its family (reuse detection).
+const revokedRefreshKept = 24 * time.Hour
+
+// DeleteDeadRefreshTokens removes refresh tokens past their absolute
+// lifetime, or revoked more than revokedRefreshKept ago, and returns how
+// many it removed.
+func (s *Store) DeleteDeadRefreshTokens(ctx context.Context) (int64, error) {
+	now := time.Now()
+	return s.deleteRows(ctx, "store: delete dead refresh tokens",
+		`DELETE FROM refresh_tokens WHERE absolute_expires_at <= ? OR revoked_at <= ?`,
+		formatTime(now), formatTime(now.Add(-revokedRefreshKept)))
+}

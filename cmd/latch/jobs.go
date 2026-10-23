@@ -11,7 +11,7 @@ import (
 
 // How often serve runs its background jobs.
 const (
-	sessionCleanupInterval = time.Hour
+	cleanupInterval = time.Hour
 	// latch rotate-keys tells the operator a running server picks up a new
 	// key within this long.
 	keyReloadInterval = 5 * time.Minute
@@ -32,18 +32,35 @@ func runEvery(ctx context.Context, d time.Duration, fn func(context.Context)) {
 	}
 }
 
-// sessionJanitor returns a job that deletes expired sessions. A failure is
-// logged as a warning, unless it came from ctx ending.
-func sessionJanitor(st *store.Store, log *slog.Logger) func(context.Context) {
+// janitor returns a job that deletes rows that can no longer be used:
+// expired sessions, used or expired authorization codes and reset links,
+// and refresh tokens past their absolute lifetime or long revoked. A
+// failure is logged as a warning, unless it came from ctx ending, and the
+// next kind of row is tried.
+func janitor(st *store.Store, log *slog.Logger) func(context.Context) {
+	cleanups := []struct {
+		what string
+		run  func(context.Context) (int64, error)
+	}{
+		{"expired sessions", st.DeleteExpiredSessions},
+		{"used or expired authorization codes", st.DeleteSpentAuthCodes},
+		{"expired or long-revoked refresh tokens", st.DeleteDeadRefreshTokens},
+		{"used or expired reset links", st.DeleteSpentResetTokens},
+	}
 	return func(ctx context.Context) {
-		n, err := st.DeleteExpiredSessions(ctx)
-		if err != nil {
-			if ctx.Err() == nil {
-				log.WarnContext(ctx, "delete expired sessions", "error", err)
+		for _, c := range cleanups {
+			if ctx.Err() != nil {
+				return
 			}
-			return
+			n, err := c.run(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.WarnContext(ctx, "delete "+c.what, "error", err)
+				}
+				continue
+			}
+			log.DebugContext(ctx, "deleted "+c.what, "count", n)
 		}
-		log.DebugContext(ctx, "deleted expired sessions", "count", n)
 	}
 }
 

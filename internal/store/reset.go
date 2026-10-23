@@ -75,6 +75,13 @@ func (s *Store) readResetToken(ctx context.Context, query string, args ...any) (
 	return &t, nil
 }
 
+// DeleteSpentResetTokens removes reset and invite tokens that are used or
+// expired, and returns how many it removed.
+func (s *Store) DeleteSpentResetTokens(ctx context.Context) (int64, error) {
+	return s.deleteRows(ctx, "store: delete spent reset tokens",
+		`DELETE FROM password_reset_tokens WHERE used_at IS NOT NULL OR expires_at <= ?`, formatTime(time.Now()))
+}
+
 // HasActiveInviteToken reports whether the user has an unused, unexpired invite token.
 func (s *Store) HasActiveInviteToken(ctx context.Context, userID string) (bool, error) {
 	var ok bool

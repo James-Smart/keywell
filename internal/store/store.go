@@ -2,6 +2,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -47,6 +48,19 @@ func wrapWrite(op string, err error) error {
 		return fmt.Errorf("%s: %w", op, ErrConflict)
 	}
 	return fmt.Errorf("%s: %w", op, err)
+}
+
+// deleteRows runs a DELETE and returns how many rows it removed.
+func (s *Store) deleteRows(ctx context.Context, op, query string, args ...any) (int64, error) {
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	return n, nil
 }
 
 // timeLayout is fixed-width UTC (always 9 fractional digits) so that string

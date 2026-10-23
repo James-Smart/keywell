@@ -125,7 +125,7 @@ func sessionIDs(t *testing.T, conn *sql.DB) []string {
 	return ids
 }
 
-func TestSessionJanitorDeletesExpiredSessions(t *testing.T) {
+func TestJanitorDeletesExpiredSessions(t *testing.T) {
 	ctx := context.Background()
 	st, conn := storetest.OpenTestDB(t)
 	u := &model.User{Email: "alex@example.org", IsActive: true}
@@ -136,12 +136,69 @@ func TestSessionJanitorDeletesExpiredSessions(t *testing.T) {
 	live := addSession(t, st, u.ID, time.Now().Add(time.Hour))
 	log, logs := debugLog()
 
-	sessionJanitor(st, log)(ctx)
+	janitor(st, log)(ctx)
 	if ids := sessionIDs(t, conn); len(ids) != 1 || ids[0] != live {
 		t.Fatalf("sessions left %v, want only the live one %s", ids, live)
 	}
 	if out := logs.String(); !strings.Contains(out, `level=DEBUG msg="deleted expired sessions" count=1`) {
 		t.Fatalf("log:\n%s", out)
+	}
+}
+
+// countRows returns how many rows table holds.
+func countRows(t *testing.T, conn *sql.DB, table string) int {
+	t.Helper()
+	var n int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// The janitor also deletes authorization codes, refresh tokens and reset
+// links that can no longer be used, leaving live ones.
+func TestJanitorPrunesSpentCodesAndTokens(t *testing.T) {
+	ctx := context.Background()
+	st, conn := storetest.OpenTestDB(t)
+	u := &model.User{Email: "alex@example.org", IsActive: true}
+	if err := st.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	app := &model.Application{Name: "Wiki", Slug: "wiki", ClientID: "wiki"}
+	if err := st.CreateApplication(ctx, app); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for _, exp := range []time.Time{now.Add(time.Minute), now.Add(-time.Second)} {
+		if err := st.CreateAuthCode(ctx, &model.AuthCode{CodeHash: secrets.NewID(), ApplicationID: app.ID, UserID: u.ID,
+			SessionID: "s", RedirectURI: "https://wiki.example.org/cb", AuthTime: now, ExpiresAt: exp}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.CreateRefreshToken(ctx, &model.RefreshToken{TokenHash: secrets.NewID(), FamilyID: "f",
+			ApplicationID: app.ID, UserID: u.ID, AuthTime: now, CreatedAt: now, ExpiresAt: exp, AbsoluteExpiresAt: exp}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.CreateResetToken(ctx, &model.ResetToken{TokenHash: secrets.NewID(), UserID: u.ID,
+			Purpose: model.ResetPurposeReset, CreatedAt: now, ExpiresAt: exp}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	log, logs := debugLog()
+
+	janitor(st, log)(ctx)
+	for _, table := range []string{"auth_codes", "refresh_tokens", "password_reset_tokens"} {
+		if n := countRows(t, conn, table); n != 1 {
+			t.Errorf("%s: %d rows left, want only the live one", table, n)
+		}
+	}
+	for _, want := range []string{
+		`level=DEBUG msg="deleted used or expired authorization codes" count=1`,
+		`level=DEBUG msg="deleted expired or long-revoked refresh tokens" count=1`,
+		`level=DEBUG msg="deleted used or expired reset links" count=1`,
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log missing %q:\n%s", want, logs)
+		}
 	}
 }
 
@@ -195,7 +252,7 @@ func TestJobsWarnOnFailure(t *testing.T) {
 	conn.Close()
 	log, logs := debugLog()
 
-	sessionJanitor(st, log)(ctx)
+	janitor(st, log)(ctx)
 	keyReloader(keys, log)(ctx)
 	out := logs.String()
 	for _, want := range []string{`level=WARN msg="delete expired sessions"`, `level=WARN msg="reload signing keys"`} {

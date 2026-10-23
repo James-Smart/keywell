@@ -236,7 +236,7 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	// not only when ctx ends.
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	defer stopJobs()
-	background.Go(func() { runEvery(jobsCtx, sessionCleanupInterval, sessionJanitor(st, log)) })
+	background.Go(func() { runEvery(jobsCtx, cleanupInterval, janitor(st, log)) })
 	background.Go(func() { runEvery(jobsCtx, keyReloadInterval, keyReloader(keys, log)) })
 	handler := web.New(web.Deps{
 		Cfg:        cfg,
