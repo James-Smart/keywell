@@ -76,7 +76,9 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 }
 
 // settingsTestEmail sends a test email to the signed-in admin. A failure
-// shows the mailer's own error: the admin needs it to fix the settings.
+// shows the mailer's own error, which SendTestEmail returns as it is: the
+// admin needs it to fix the settings. It is the one admin page that shows
+// a raw error, so it does not go through adminFailed.
 func (s *Server) settingsTestEmail(w http.ResponseWriter, r *http.Request) {
 	_, user, _ := session.FromContext(r.Context())
 	if err := s.admin.SendTestEmail(r.Context(), adminActor(r), user); err != nil {
