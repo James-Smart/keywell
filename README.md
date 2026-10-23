@@ -70,6 +70,7 @@ https://login.example.org/.well-known/openid-configuration
 
 - Grants: `authorization_code`, `refresh_token`, and `client_credentials` (for confidential apps that act as a service account).
 - PKCE with `S256`. Public clients such as browser apps must use it; confidential clients may.
+- Browser apps can call the token, userinfo and revocation endpoints directly: Latch allows cross-origin requests (CORS) from the origin of any registered redirect URI, without cookies. Discovery and the keys are readable from any origin.
 - Client authentication: `client_secret_basic`, `client_secret_post`, or `none` for public clients.
 - Scopes: `openid`, `profile`, `email`, `groups`, `offline_access`. The `groups` claim is a list of group names.
 - ID tokens are signed with RS256. The public keys are at `/.well-known/jwks.json`.

@@ -40,6 +40,7 @@ type Deps struct {
 type Provider struct {
 	d      Deps
 	issuer string
+	cors   *corsOrigins
 }
 
 // NewProvider returns a Provider whose issuer is the configured public URL.
@@ -50,10 +51,16 @@ func NewProvider(d Deps) *Provider {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &Provider{d: d, issuer: d.Cfg.Issuer()}
+	return &Provider{d: d, issuer: d.Cfg.Issuer(), cors: &corsOrigins{store: d.Store, log: d.Log, now: d.Now}}
 }
 
 // Mount registers the OpenID Connect routes on mux.
+//
+// Browser apps (public clients) call the token, userinfo and revocation
+// endpoints from their own origin, so those answer CORS requests from the
+// origins of registered redirect URIs (withCORS); discovery and the keys
+// are open to any origin. Introspection is for servers, and authorization
+// and logout are top-level navigations, so they get no CORS.
 func (p *Provider) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/openid-configuration", p.discovery)
 	mux.HandleFunc("GET /.well-known/jwks.json", p.jwks)
@@ -61,11 +68,12 @@ func (p *Provider) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /oauth/authorize", p.authorize)
 	// The token, introspection and revocation endpoints take every method
 	// so that a wrong one gets a JSON error, not the mux's plain text.
-	mux.HandleFunc("/oauth/token", p.token)
+	mux.Handle("/oauth/token", p.withCORS(p.token))
 	mux.HandleFunc("/oauth/introspect", p.introspect)
-	mux.HandleFunc("/oauth/revoke", p.revoke)
-	mux.HandleFunc("GET /oauth/userinfo", p.userinfo)
-	mux.HandleFunc("POST /oauth/userinfo", p.userinfo)
+	mux.Handle("/oauth/revoke", p.withCORS(p.revoke))
+	mux.Handle("GET /oauth/userinfo", p.withCORS(p.userinfo))
+	mux.Handle("POST /oauth/userinfo", p.withCORS(p.userinfo))
+	mux.Handle("OPTIONS /oauth/userinfo", p.withCORS(p.userinfo))
 	mux.HandleFunc("GET /oauth/logout", p.logout)
 	mux.HandleFunc("POST /oauth/logout", p.logout)
 }
@@ -96,6 +104,7 @@ type discoveryDocument struct {
 }
 
 func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeJSON(w, http.StatusOK, "public, max-age=3600", discoveryDocument{
 		Issuer:                            p.issuer,
 		AuthorizationEndpoint:             p.issuer + "/oauth/authorize",
@@ -119,6 +128,7 @@ func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) jwks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeJSON(w, http.StatusOK, "public, max-age=3600", p.d.Keys.JWKS())
 }
 
