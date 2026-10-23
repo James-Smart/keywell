@@ -26,3 +26,94 @@
   </ul>
 </nav>
 {{- end}}
+
+{{- /*
+  The message beside a form field (a fieldError), with the id the input's
+  aria-describedby names. The input itself adds
+  {{if .Errors.<field>}} aria-invalid="true" aria-describedby="<field>-error"{{end}}.
+*/}}
+{{- define "admin-field-error"}}
+{{- if .Message}}
+<p class="field-error" id="{{.Field}}-error">{{.Message}}</p>
+{{- end}}
+{{- end}}
+
+{{- /* The rows shown and the links either side, under a list (a pager). */}}
+{{- define "admin-pagination"}}
+{{- if .Total}}
+<nav class="pagination" aria-label="Pages">
+  {{- with .Prev}}
+  <a href="{{.}}" rel="prev">Previous</a>
+  {{- end}}
+  {{- if .First}}
+  <span>Showing {{.First}}–{{.Last}} of {{.Total}}</span>
+  {{- end}}
+  {{- with .Next}}
+  <a href="{{.}}" rel="next">Next</a>
+  {{- end}}
+</nav>
+{{- end}}
+{{- end}}
+
+{{- /* A "groups" checkbox for each group (a groupChecks). */}}
+{{- define "admin-group-checks"}}
+<fieldset class="checks"{{if .Error}} aria-describedby="groups-error"{{end}}>
+  <legend>Groups</legend>
+  {{- range .Groups}}
+  <label><input type="checkbox" name="groups" value="{{.ID}}"{{if index $.Checked .ID}} checked{{end}}>{{.Name}}{{if .IsAdmin}} <span class="hint">(admin access)</span>{{end}}</label>
+  {{- else}}
+  <p class="hint">There are no groups yet.</p>
+  {{- end}}
+  {{- if .Error}}
+  <p class="field-error" id="groups-error">{{.Error}}</p>
+  {{- end}}
+</fieldset>
+{{- end}}
+
+{{- /* The "metadata" textarea, folded away until needed (a metadataField). */}}
+{{- define "admin-metadata"}}
+<details class="metadata"{{if or .Open .Error}} open{{end}}>
+  <summary id="metadata-label">Metadata (custom JSON, passed to apps)</summary>
+  <textarea id="metadata" name="metadata" rows="6" spellcheck="false" aria-labelledby="metadata-label"{{if .Error}} aria-invalid="true" aria-describedby="metadata-error"{{else}} aria-describedby="metadata-hint"{{end}}>{{.Value}}</textarea>
+  {{- if .Error}}
+  <p class="field-error" id="metadata-error">{{.Error}}</p>
+  {{- else}}
+  <p class="hint" id="metadata-hint">A JSON object, like {"member_number": 42}. Apps that ask for it get it with the rest of the account's details.</p>
+  {{- end}}
+</details>
+{{- end}}
+
+{{- /* A destructive action behind an inline confirmation (a confirmBox). */}}
+{{- define "admin-confirm"}}
+<details class="confirm"{{if .Error}} open{{end}}>
+  <summary>{{.Summary}}</summary>
+  <form method="post" action="{{.Action}}">
+    {{- with .Message}}
+    <p>{{.}}</p>
+    {{- end}}
+    {{- if .Typed}}
+    <label for="confirm">{{.Typed}}</label>
+    <input id="confirm" name="confirm" type="text" autocomplete="off" required{{if .Error}} aria-invalid="true" aria-describedby="confirm-error"{{end}}>
+    {{- if .Error}}
+    <p class="field-error" id="confirm-error">{{.Error}}</p>
+    {{- end}}
+    {{- end}}
+    <button type="submit" class="button-danger">{{.Button}}</button>
+  </form>
+</details>
+{{- end}}
+
+{{- /* The fields the add and edit member forms share (a memberFields). */}}
+{{- define "admin-member-fields"}}
+<label for="name">Full name</label>
+<input id="name" name="name" type="text" value="{{.Name}}" autocomplete="off" required{{if .Errors.name}} aria-invalid="true" aria-describedby="name-error"{{end}}>
+{{- template "admin-field-error" .Errors.For "name"}}
+<label for="email">Email (used to sign in)</label>
+<input id="email" name="email" type="email" value="{{.Email}}" autocomplete="off" required{{if .Errors.email}} aria-invalid="true" aria-describedby="email-error"{{end}}>
+{{- template "admin-field-error" .Errors.For "email"}}
+<label for="username">Username (optional, for the wiki)</label>
+<input id="username" name="username" type="text" value="{{.Username}}" autocomplete="off" autocapitalize="none" spellcheck="false"{{if .Errors.username}} aria-invalid="true" aria-describedby="username-error"{{end}}>
+{{- template "admin-field-error" .Errors.For "username"}}
+{{- template "admin-group-checks" .Groups}}
+{{- template "admin-metadata" .Metadata}}
+{{- end}}

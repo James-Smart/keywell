@@ -367,6 +367,15 @@ table.list tbody tr:last-child td { border-bottom: 0; }
 }
 .toolbar input, .toolbar select { width: auto; flex: 1 1 12rem; }
 .toolbar button, .toolbar .button { margin-top: 0; }
+.toolbar > form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  flex: 1 1 24rem;
+  margin: 0;
+}
+.toolbar > .button { margin-left: auto; }
 .pagination {
   display: flex;
   flex-wrap: wrap;
@@ -396,6 +405,65 @@ details.confirm[open] {
   border-left: 3px solid var(--danger);
   border-radius: var(--radius);
 }
+
+/* A record's page: a link back to its list above the heading, a note, and
+   its form beside its details and actions on wide screens */
+.back { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.note {
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius);
+}
+.split { display: grid; gap: 0 1.5rem; align-items: start; }
+@media (min-width: 1100px) {
+  .split { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
+
+/* An admin form: fields stacked, buttons their own width */
+.fields { display: flex; flex-direction: column; gap: 0.35rem; max-width: 44rem; }
+.fields > button { align-self: flex-start; }
+
+/* The add member form hides the password field while an invitation is
+   chosen; without :has it is always shown */
+.setup-password { display: flex; flex-direction: column; gap: 0.35rem; }
+form:has(input[name="setup"][value="invite"]:checked) .setup-password { display: none; }
+
+/* Metadata: a JSON textarea folded away until needed */
+details.metadata { margin-top: 0.75rem; }
+details.metadata > summary { font-weight: 600; cursor: pointer; }
+details.metadata textarea { margin-top: 0.5rem; font-family: var(--mono); font-size: 0.9rem; }
+details.metadata .hint { margin: 0.35rem 0 0; }
+
+/* A form folded behind a button, such as setting a password */
+details.reveal > summary {
+  display: inline-block;
+  padding: 0.65rem 1.1rem;
+  font-weight: 600;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  list-style: none;
+}
+details.reveal > summary::-webkit-details-marker { display: none; }
+details.reveal > summary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+details.reveal[open] {
+  padding: 0.75rem 1rem 1rem;
+  background: var(--background);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius);
+}
+
+/* A record's actions, each its own small form, one under another */
+.actions { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+.actions > form, .actions > details.confirm, .actions > details.reveal { margin: 0; }
+.actions > details[open] { align-self: stretch; }
+.actions button { margin-top: 0; }
+.actions details form { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.75rem; }
+.actions details form p { margin: 0; }
+.actions details form button { align-self: flex-start; margin-top: 0.5rem; }
 
 /* A secret shown once, selected whole with one click for copying */
 .secret {

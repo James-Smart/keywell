@@ -1,0 +1,69 @@
+{{define "content"}}
+{{- with .Data}}
+<p class="back"><a href="/admin/members">All members</a></p>
+<h1>{{or .Member.Name .Member.Email}}</h1>
+{{- if .Own}}
+<p class="note">This is your account. Change your own password from <a href="/account/password">your account page</a>.</p>
+{{- end}}
+<div class="split">
+  <form method="post" action="/admin/members/{{.Member.ID}}" class="panel fields">
+    <h2>Details</h2>
+    {{- template "admin-member-fields" .Fields}}
+    <button type="submit">Save changes</button>
+  </form>
+  <div>
+    <section class="panel" aria-labelledby="account">
+      <h2 id="account">Account</h2>
+      <dl class="facts">
+        <dt>Status</dt>
+        <dd><span class="status status-{{.Status}}">{{.StatusLabel}}</span></dd>
+        <dt>Last login</dt>
+        <dd>{{ago .Member.LastLoginAt}}{{with .Member.LastLoginAt}} <span class="hint">({{datetime .}})</span>{{end}}</dd>
+        <dt>Created</dt>
+        <dd>{{date .Member.CreatedAt}}</dd>
+        <dt>Two-step sign in</dt>
+        <dd>{{with .Member.TOTPConfirmedAt}}On since {{date .}}{{else}}Off{{end}}{{with .RequiredBy}}<br><span class="hint">Required by {{.}}; they'll set it up next time they sign in.</span>{{end}}</dd>
+        {{- if .Imported}}
+        <dt>Origin</dt>
+        <dd>Imported from Authentik</dd>
+        {{- end}}
+      </dl>
+    </section>
+    <section class="panel" aria-labelledby="actions">
+      <h2 id="actions">Actions</h2>
+      <div class="actions">
+        <form method="post" action="/admin/members/{{.Member.ID}}/send-email">
+          <button type="submit" class="button-secondary">{{if .Member.HasPassword}}Send password reset email{{else}}Send invite email{{end}}</button>
+        </form>
+        <details class="reveal"{{if .Errors.password}} open{{end}}>
+          <summary>Set password manually</summary>
+          <form method="post" action="/admin/members/{{.Member.ID}}/password">
+            <label for="password">New password</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" required{{if .Errors.password}} aria-invalid="true" aria-describedby="password-error"{{else}} aria-describedby="password-hint"{{end}}>
+            {{- template "admin-field-error" .Errors.For "password"}}
+            <p class="hint" id="password-hint">At least {{.MinLength}} characters. They'll be signed out everywhere.</p>
+            <button type="submit">Set password</button>
+          </form>
+        </details>
+        {{- if .Member.TOTPEnrolled}}
+        {{- template "admin-confirm" .ClearTOTP}}
+        {{- end}}
+        <form method="post" action="/admin/members/{{.Member.ID}}/sign-out">
+          <button type="submit" class="button-secondary">Sign out everywhere</button>
+        </form>
+        {{- if not .Own}}
+        {{- if .Member.IsActive}}
+        {{- template "admin-confirm" .Disable}}
+        {{- else}}
+        <form method="post" action="/admin/members/{{.Member.ID}}/enable">
+          <button type="submit" class="button-secondary">Enable account</button>
+        </form>
+        {{- end}}
+        {{- template "admin-confirm" .Delete}}
+        {{- end}}
+      </div>
+    </section>
+  </div>
+</div>
+{{- end}}
+{{end}}

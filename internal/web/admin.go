@@ -3,8 +3,12 @@ package web
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
+	"strings"
 
 	"latch/internal/admin"
 	"latch/internal/model"
@@ -34,7 +38,8 @@ import (
 //   - GET pages for a missing record show s.adminNotFound.
 //
 // Each page sets Page.Section to its sidebar entry, which gives it the
-// admin layout.
+// admin layout. Markup several pages share is in templates/_admin.html,
+// with the types below as the data of its partials.
 
 // adminNotices are the messages shown after a successful change, by the
 // key it redirected with.
@@ -176,4 +181,103 @@ func adminActor(r *http.Request) admin.Actor {
 // adminHome sends /admin to the first sidebar entry.
 func (s *Server) adminHome(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/members", http.StatusSeeOther)
+}
+
+// fieldErrors are the messages shown beside a form's fields, by field
+// name: an adminFailure's Fields, or a handler's own checks.
+type fieldErrors map[string]string
+
+// fieldError is one field's message, the data of the admin-field-error
+// partial, which shows nothing when Message is "".
+type fieldError struct{ Field, Message string }
+
+// For returns field's message for the admin-field-error partial, which
+// gives it the id "<field>-error" for the input's aria-describedby:
+//
+//	{{template "admin-field-error" .Errors.For "email"}}
+func (e fieldErrors) For(field string) fieldError { return fieldError{field, e[field]} }
+
+// listPerPage is how many rows an admin list shows a page.
+const listPerPage = 50
+
+// pageNumber is a list's ?page=: anything but a positive number is 1.
+func pageNumber(r *http.Request) int {
+	n, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
+// pager is the data of the admin-pagination partial, under a list.
+type pager struct {
+	First, Last, Total int    // the rows shown (1-based; 0 when none are) and how many there are
+	Prev, Next         string // links to the pages either side; "" when there is none
+}
+
+// newPager returns the pager for page (1-based) of a list of total rows,
+// perPage to a page. Its links go to path with params, the list's search
+// and filters, and the page number.
+func newPager(path string, params url.Values, page, perPage, total int) pager {
+	link := func(n int) string {
+		q := url.Values{}
+		maps.Copy(q, params)
+		q.Set("page", strconv.Itoa(n))
+		return path + "?" + q.Encode()
+	}
+	p := pager{Total: total}
+	pages := (total + perPage - 1) / perPage
+	if page <= pages {
+		p.First, p.Last = (page-1)*perPage+1, min(page*perPage, total)
+	}
+	if page > 1 && pages > 0 {
+		p.Prev = link(min(page-1, pages))
+	}
+	if page < pages {
+		p.Next = link(page + 1)
+	}
+	return p
+}
+
+// groupChecks is the data of the admin-group-checks partial: a "groups"
+// checkbox for each group, ticked when its ID is in Checked, and the
+// field's message.
+type groupChecks struct {
+	Groups  []model.Group
+	Checked map[string]bool
+	Error   string
+}
+
+// newGroupChecks lists groups with the IDs in checked ticked.
+func newGroupChecks(groups []model.Group, checked []string, msg string) groupChecks {
+	c := groupChecks{Groups: groups, Checked: map[string]bool{}, Error: msg}
+	for _, id := range checked {
+		c.Checked[id] = true
+	}
+	return c
+}
+
+// metadataField is the data of the admin-metadata partial: a "metadata"
+// textarea holding Value, folded away unless Open or there is a message.
+type metadataField struct {
+	Value, Error string
+	Open         bool
+}
+
+// newMetadataField shows value, the metadata as typed or stored, open
+// when it holds something.
+func newMetadataField(value, msg string) metadataField {
+	v := strings.TrimSpace(value)
+	return metadataField{Value: value, Error: msg, Open: v != "" && v != "{}"}
+}
+
+// confirmBox is the data of the admin-confirm partial: a destructive
+// action behind an inline confirmation. Summary is the red button that
+// opens it, showing Message and a form posting to Action with the Button
+// that does it. With Typed set the form also has a "confirm" field, so
+// at most one such box per page, labelled Typed, with Error beside it;
+// the box then starts open.
+type confirmBox struct {
+	Summary, Message, Action, Button string
+	Typed, Error                     string
 }

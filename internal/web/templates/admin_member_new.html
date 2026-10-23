@@ -1,0 +1,21 @@
+{{define "content"}}
+{{- with .Data}}
+<p class="back"><a href="/admin/members">All members</a></p>
+<h1>Add member</h1>
+<form method="post" action="/admin/members" class="panel fields">
+  {{- template "admin-member-fields" .Fields}}
+  <fieldset class="checks">
+    <legend>How will they set their password?</legend>
+    <label><input type="radio" name="setup" value="invite"{{if eq .Setup "invite"}} checked{{end}}>Email them an invitation (recommended)</label>
+    <label><input type="radio" name="setup" value="password"{{if eq .Setup "password"}} checked{{end}}>Set a password now</label>
+  </fieldset>
+  <div class="setup-password">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password"{{if .Errors.password}} aria-invalid="true" aria-describedby="password-error"{{else}} aria-describedby="password-hint"{{end}}>
+    {{- template "admin-field-error" .Errors.For "password"}}
+    <p class="hint" id="password-hint">At least {{.MinLength}} characters. We don't email it, so tell them yourself.</p>
+  </div>
+  <button type="submit">Add member</button>
+</form>
+{{- end}}
+{{end}}

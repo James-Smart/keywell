@@ -1,0 +1,43 @@
+{{define "content"}}
+{{- with .Data}}
+{{- $status := .Status}}
+<h1>Members</h1>
+<div class="toolbar">
+  <form method="get" action="/admin/members" role="search">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search name, email or username" aria-label="Search name, email or username">
+    <select name="status" aria-label="Show">
+      {{- range .Filters}}
+      <option value="{{.Value}}"{{if eq .Value $status}} selected{{end}}>{{.Label}}</option>
+      {{- end}}
+    </select>
+    <button type="submit" class="button-secondary">Search</button>
+  </form>
+  <a class="button" href="/admin/members/new">Add member</a>
+</div>
+{{- if .Rows}}
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Groups</th><th scope="col">Status</th><th scope="col">Last login</th></tr>
+    </thead>
+    <tbody>
+    {{- range .Rows}}
+      <tr>
+        <td><a href="/admin/members/{{.ID}}">{{or .Name .Email}}</a></td>
+        <td>{{.Email}}</td>
+        <td>{{range .Groups}}<span class="chip">{{.Name}}</span>{{end}}</td>
+        <td><span class="status status-{{.Status}}">{{.StatusLabel}}</span></td>
+        <td class="nowrap">{{ago .LastLoginAt}}</td>
+      </tr>
+    {{- end}}
+    </tbody>
+  </table>
+</div>
+{{- else if .Pager.Total}}
+<p>There's nothing on this page.</p>
+{{- else}}
+<p>No members match.</p>
+{{- end}}
+{{- template "admin-pagination" .Pager}}
+{{- end}}
+{{end}}
