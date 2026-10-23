@@ -72,11 +72,11 @@ func resetTTL(purpose model.ResetPurpose) (time.Duration, error) {
 // SendReset emails user a link to choose a password, as a reset or an
 // invitation by purpose, and records the request.
 func (s *Server) SendReset(ctx context.Context, user *model.User, purpose model.ResetPurpose) error {
-	link, err := IssueResetLink(ctx, s.d.Store, s.d.Cfg.PublicURL, user.ID, purpose)
+	link, err := IssueResetLink(ctx, s.d.Store, s.d.Cfg.Issuer(), user.ID, purpose)
 	if err != nil {
 		return err
 	}
-	brand := mail.Brand{Name: s.d.Cfg.Branding.Name, SupportText: s.d.Cfg.Branding.SupportText, PublicURL: s.d.Cfg.PublicURL}
+	brand := mail.Brand{Name: s.d.Cfg.Branding.Name, SupportText: s.d.Cfg.Branding.SupportText, PublicURL: s.d.Cfg.Issuer()}
 	msg, summary := mail.ResetEmail(brand, link, ResetTokenTTL), "Emailed a password reset link"
 	if purpose == model.ResetPurposeInvite {
 		msg, summary = mail.InviteEmail(brand, link, InviteTokenTTL), "Emailed an invitation"

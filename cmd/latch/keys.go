@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,10 +22,7 @@ func cmdRotateKeys(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	retireAfter := 90 * 24 * time.Hour
 	flags.Func("retire-after", "retire older keys once they have been superseded this long, e.g. 90d or 0d (default 90d)",
 		func(s string) error {
-			d, err := config.ParseDuration(s)
-			if err == nil && d < 0 {
-				err = errors.New("must not be negative")
-			}
+			d, err := config.ParseDuration(s) // refuses negative durations
 			retireAfter = d
 			return err
 		})

@@ -479,8 +479,10 @@ func TestRotateKeys(t *testing.T) {
 		t.Errorf("stdout %q", stdout)
 	}
 
-	if code, _, _ := latch("", "rotate-keys", "--config", cfgPath, "--retire-after", "soon"); code != 2 {
-		t.Errorf("bad --retire-after: exit %d, want 2", code)
+	for _, bad := range []string{"soon", "-1d"} {
+		if code, _, _ := latch("", "rotate-keys", "--config", cfgPath, "--retire-after", bad); code != 2 {
+			t.Errorf("--retire-after %s: exit %d, want 2", bad, code)
+		}
 	}
 }
 

@@ -70,3 +70,34 @@ func TestSendResetInvite(t *testing.T) {
 		t.Fatalf("audit event %s %s %s %s", action, actorID, targetID, detail)
 	}
 }
+
+// Reset links start with the issuer, so a public_url written with a
+// trailing slash does not give them a double slash.
+func TestSendResetLinkUsesIssuer(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.Load("", func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.PublicURL = "https://id.example.org/"
+	st, _ := store.OpenTestDB(t)
+	log := slog.New(slog.DiscardHandler)
+	mailer := &mail.Memory{}
+	s := newServer(Deps{Cfg: cfg, Store: st, Mailer: mailer, Audit: audit.New(st, log), Log: log})
+	u := &model.User{Name: "Alex", Email: "alex@example.org", IsActive: true}
+	if err := st.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SendReset(ctx, u, model.ResetPurposeReset); err != nil {
+		t.Fatal(err)
+	}
+	msg, ok := mailer.Last()
+	if !ok {
+		t.Fatal("no email sent")
+	}
+	if !regexp.MustCompile(`https://id\.example\.org/reset/[A-Za-z0-9_-]{43}\b`).MatchString(msg.Text) ||
+		strings.Contains(msg.Text, "//reset/") {
+		t.Fatalf("want a link under https://id.example.org/reset/ in:\n%s", msg.Text)
+	}
+}

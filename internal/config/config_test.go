@@ -125,14 +125,43 @@ func TestValidate(t *testing.T) {
 		{"encryption_key", func(c *Config) { c.EncryptionKey = base64.StdEncoding.EncodeToString(make([]byte, 16)) }},
 		{"smtp.tls", func(c *Config) { c.SMTP.TLS = "foo" }},
 		{"branding.primary_color", func(c *Config) { c.Branding.PrimaryColor = "red" }},
+		// The common-password list only holds passwords of 10 or more
+		// characters, so a shorter minimum would let common ones through.
+		{"password.min_length", func(c *Config) { c.Password.MinLength = 9 }},
+		{"password.min_length", func(c *Config) { c.Password.MinLength = 0 }},
+		{"sessions.idle", func(c *Config) { c.Sessions.Idle = 0 }},
+		{"sessions.absolute", func(c *Config) { c.Sessions.Absolute = -time.Hour }},
+		{"tokens.access", func(c *Config) { c.Tokens.Access = 0 }},
+		{"tokens.id", func(c *Config) { c.Tokens.ID = -time.Second }},
+		{"tokens.refresh", func(c *Config) { c.Tokens.Refresh = 0 }},
+		{"tokens.refresh_absolute", func(c *Config) { c.Tokens.RefreshAbsolute = 0 }},
+		// Retired signing keys verify tokens for only 24 hours.
+		{"tokens.access", func(c *Config) { c.Tokens.Access = 24*time.Hour + time.Second }},
+		{"tokens.id", func(c *Config) { c.Tokens.ID = 25 * time.Hour }},
+		{"tokens.refresh_absolute", func(c *Config) { c.Tokens.RefreshAbsolute = c.Tokens.Refresh - time.Second }},
+		{"trusted_proxies", func(c *Config) { c.TrustedProxies = []string{"10.0.0.0/8", "proxy.internal"} }},
+		{"trusted_proxies", func(c *Config) { c.TrustedProxies = []string{"10.0.0.0/33"} }},
+		{"trusted_proxies", func(c *Config) { c.TrustedProxies = []string{""} }},
 	}
 	for _, tc := range cases {
 		c := valid(t)
 		tc.mutate(c)
 		err := c.Validate()
-		if err == nil || !strings.Contains(err.Error(), tc.key) {
+		if err == nil || !strings.HasPrefix(err.Error(), tc.key+" ") {
 			t.Errorf("%s: err = %v", tc.key, err)
 		}
+	}
+}
+
+// Values at the limits, and every form of trusted proxy, are accepted.
+func TestValidateAcceptsLimits(t *testing.T) {
+	c := valid(t)
+	c.Password.MinLength = 10
+	c.Tokens.Access, c.Tokens.ID = 24*time.Hour, 24*time.Hour
+	c.Tokens.RefreshAbsolute = c.Tokens.Refresh
+	c.TrustedProxies = []string{"10.0.0.0/8", "192.168.1.10", "fd00::/8", "::1"}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -193,7 +222,8 @@ func TestParseDuration(t *testing.T) {
 			t.Errorf("ParseDuration(%q) = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "soon", "xd", "5 days"} {
+	for _, in := range []string{"", "soon", "xd", "5 days",
+		"infd", "+Infd", "nand", "NaNd", "-1d", "-0.5d", "-30m", "1e300d"} {
 		if _, err := ParseDuration(in); err == nil {
 			t.Errorf("ParseDuration(%q): no error", in)
 		}

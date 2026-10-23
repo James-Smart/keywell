@@ -227,10 +227,17 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	prov := oidc.NewProvider(oidc.Deps{
 		Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend, Sessions: sessions,
 	})
-	// Emails already under way (each bounded by its own timeout) finish
-	// before the database closes, however serve returns.
+	// Emails already under way (each bounded by its own timeout) and the
+	// periodic jobs finish before the database closes, however serve
+	// returns.
 	var background sync.WaitGroup
 	defer background.Wait()
+	// Deferred after Wait, so it runs first: the jobs stop on any return,
+	// not only when ctx ends.
+	jobsCtx, stopJobs := context.WithCancel(ctx)
+	defer stopJobs()
+	background.Go(func() { runEvery(jobsCtx, sessionCleanupInterval, sessionJanitor(st, log)) })
+	background.Go(func() { runEvery(jobsCtx, keyReloadInterval, keyReloader(keys, log)) })
 	handler := web.New(web.Deps{
 		Cfg:        cfg,
 		Store:      st,

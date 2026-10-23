@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"math"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -100,17 +102,31 @@ var durationPaths = [][]string{
 }
 
 // ParseDuration is time.ParseDuration plus a "d" suffix meaning 24h
-// (whole or fractional days, e.g. "30d").
+// (whole or fractional days, e.g. "30d"). Negative durations are refused.
 func ParseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if days, ok := strings.CutSuffix(s, "d"); ok {
 		n, err := strconv.ParseFloat(days, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
 			return 0, fmt.Errorf("invalid duration %q", s)
 		}
-		return time.Duration(n * float64(24*time.Hour)), nil
+		if n < 0 {
+			return 0, fmt.Errorf("duration %q must not be negative", s)
+		}
+		ns := n * float64(24*time.Hour)
+		if ns >= math.MaxInt64 {
+			return 0, fmt.Errorf("duration %q is too long", s)
+		}
+		return time.Duration(ns), nil
 	}
-	return time.ParseDuration(s)
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, err
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("duration %q must not be negative", s)
+	}
+	return d, nil
 }
 
 // Load reads path (if non-empty) over the defaults, then applies LATCH_*
@@ -278,8 +294,52 @@ func (c *Config) Validate() error {
 	if !colorRE.MatchString(c.Branding.PrimaryColor) {
 		return fmt.Errorf("branding.primary_color must be #rrggbb, got %q", c.Branding.PrimaryColor)
 	}
+	// The common-password list holds only passwords of 10 or more
+	// characters; a lower minimum would let shorter common ones through.
+	if c.Password.MinLength < 10 {
+		return fmt.Errorf("password.min_length must be at least 10, got %d", c.Password.MinLength)
+	}
+	for _, d := range []struct {
+		key string
+		val time.Duration
+	}{
+		{"sessions.idle", c.Sessions.Idle},
+		{"sessions.absolute", c.Sessions.Absolute},
+		{"tokens.access", c.Tokens.Access},
+		{"tokens.id", c.Tokens.ID},
+		{"tokens.refresh", c.Tokens.Refresh},
+		{"tokens.refresh_absolute", c.Tokens.RefreshAbsolute},
+	} {
+		if d.val <= 0 {
+			return fmt.Errorf("%s must be more than 0, got %v", d.key, d.val)
+		}
+	}
+	// A retired signing key verifies tokens for only 24 hours after it is
+	// retired (oidc.RetiredKeyGrace), so no token may outlive that.
+	if c.Tokens.Access > maxTokenLifetime {
+		return fmt.Errorf("tokens.access must be at most 24h, got %v", c.Tokens.Access)
+	}
+	if c.Tokens.ID > maxTokenLifetime {
+		return fmt.Errorf("tokens.id must be at most 24h, got %v", c.Tokens.ID)
+	}
+	if c.Tokens.RefreshAbsolute < c.Tokens.Refresh {
+		return fmt.Errorf("tokens.refresh_absolute must be at least tokens.refresh (%v), got %v",
+			c.Tokens.Refresh, c.Tokens.RefreshAbsolute)
+	}
+	for _, p := range c.TrustedProxies {
+		if _, err := netip.ParsePrefix(p); err == nil {
+			continue
+		}
+		if _, err := netip.ParseAddr(p); err != nil {
+			return fmt.Errorf("trusted_proxies entries must be CIDR ranges or IP addresses, got %q", p)
+		}
+	}
 	return nil
 }
+
+// maxTokenLifetime caps tokens.access and tokens.id; it matches
+// oidc.RetiredKeyGrace.
+const maxTokenLifetime = 24 * time.Hour
 
 // Issuer is PublicURL with any trailing slash stripped.
 func (c *Config) Issuer() string { return strings.TrimSuffix(c.PublicURL, "/") }
