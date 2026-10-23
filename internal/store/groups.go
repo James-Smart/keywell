@@ -126,6 +126,11 @@ func (s *Store) RemoveMember(ctx context.Context, userID, groupID string) error 
 // ErrLastAdminGroup is returned when a change would leave no group with is_admin.
 var ErrLastAdminGroup = errors.New("store: last admin group")
 
+// ErrSoleAppGroup is returned when deleting a group would leave an
+// application that lets in only that group with no groups, which lets in
+// every member.
+var ErrSoleAppGroup = errors.New("store: the only group an application lets in")
+
 // lastAdminOK is true when the group may stop being an admin group or be
 // deleted: it is not one, or another admin group exists. It reads the row
 // the enclosing statement targets, so the check and the write are one statement.
@@ -179,12 +184,32 @@ func (s *Store) UpdateGroup(ctx context.Context, g *model.Group) error {
 	return s.guardedResult(ctx, "store: update group", g.ID, res, err)
 }
 
+// soleAppGroup is true when the group the enclosing statement targets is the
+// only group some application lets in. Deleting it would leave that
+// application with no groups, which lets in every member.
+const soleAppGroup = `EXISTS (SELECT 1 FROM application_groups ag WHERE ag.group_id = groups.id
+	AND NOT EXISTS (SELECT 1 FROM application_groups other
+	                WHERE other.application_id = ag.application_id AND other.group_id <> ag.group_id))`
+
 // DeleteGroup removes the group; memberships and application grants go with
-// it. It returns ErrNotFound if the group is gone and ErrLastAdminGroup if it
-// is the only admin group.
+// it. It returns ErrNotFound if the group is gone, ErrLastAdminGroup if it
+// is the only admin group, and ErrSoleAppGroup if it is the only group an
+// application lets in. The checks and the delete are one statement.
 func (s *Store) DeleteGroup(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM groups WHERE id = ? AND `+lastAdminOK, id)
-	return s.guardedResult(ctx, "store: delete group", id, res, err)
+	res, err := s.db.ExecContext(ctx, `DELETE FROM groups WHERE id = ? AND `+lastAdminOK+` AND NOT `+soleAppGroup, id)
+	err = s.guardedResult(ctx, "store: delete group", id, res, err)
+	if !errors.Is(err, ErrLastAdminGroup) {
+		return err
+	}
+	// One of two guards refused; say which.
+	var sole bool
+	if qerr := s.db.QueryRowContext(ctx, `SELECT `+soleAppGroup+` FROM groups WHERE id = ?`, id).Scan(&sole); qerr != nil {
+		return fmt.Errorf("store: delete group: %w", qerr)
+	}
+	if sole {
+		return ErrSoleAppGroup
+	}
+	return err
 }
 
 // guardedResult reports the outcome of a group write guarded by lastAdminOK.

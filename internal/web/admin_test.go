@@ -102,6 +102,106 @@ func TestAdminRequiresSecondStep(t *testing.T) {
 	assertRedirect(t, resp, "/login/totp?next=%2Fadmin%2Fsettings")
 }
 
+// Ruling 15: a member who signed in when no group of theirs required two-step
+// sign in, and is then made an admin by a group that does, sets it up before
+// the next admin page.
+func TestAdminPromotedMidSessionMustEnrol(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "member@example.org", testPW, "Members")
+	c := env.Client(t)
+	env.Login(t, c, "member@example.org", testPW)
+	if resp, _ := env.Page(t, c, "/admin/members"); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("before promotion: status %d, want 403", resp.StatusCode)
+	}
+
+	admins := env.CreateGroup(t, "Admin", true, true)
+	if err := env.Store.AddMember(ctx, u.ID, admins.ID); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ := env.Page(t, c, "/admin/members?q=alex")
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2Fadmin%2Fmembers%3Fq%3Dalex")
+	resp, _ = env.Submit(t, c, "/admin/members/"+u.ID+"/sign-out", nil)
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/account/totp?required=1") {
+		t.Errorf("POST: status %d to %q, want 303 to enrolment", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	// The enrolment page itself works for this session.
+	resp, body := env.Page(t, c, "/account/totp?required=1&next=%2Fadmin%2Fmembers")
+	assertStatus(t, resp, http.StatusOK)
+	assertContains(t, body, `name="next" value="/admin/members"`)
+
+	// Once enrolled, the admin pages open.
+	stored, err := env.Store.GetUser(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.EnrolTOTP(t, stored)
+	resp, _ = env.Page(t, c, "/admin/members")
+	assertStatus(t, resp, http.StatusOK)
+}
+
+// Ruling 15: an admin whose admin group starts requiring two-step sign in
+// sets it up before the next admin page.
+func TestAdminGroupStartsRequiringSecondStep(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	c, _ := env.AdminClient(t)
+	resp, _ := env.Page(t, c, "/admin/settings")
+	assertStatus(t, resp, http.StatusOK)
+
+	g, err := env.Store.GetGroupByName(ctx, "Admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.RequireTOTP = true
+	if err := env.Store.UpdateGroup(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ = env.Page(t, c, "/admin/settings")
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2Fadmin%2Fsettings")
+
+	// Another group requiring it counts too, once its member is an admin.
+	g.RequireTOTP = false
+	if err := env.Store.UpdateGroup(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ = env.Page(t, c, "/admin/settings")
+	assertStatus(t, resp, http.StatusOK)
+	laser := env.CreateGroup(t, "Laser", false, true)
+	admin, err := env.Store.GetUserByEmail(ctx, testenv.AdminEmail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.Store.AddMember(ctx, admin.ID, laser.ID); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ = env.Page(t, c, "/admin/settings")
+	assertRedirect(t, resp, "/account/totp?required=1&next=%2Fadmin%2Fsettings")
+}
+
+// The admin check is made afresh on every request: an admin taken out of
+// their admin group mid-session is refused on the next one.
+func TestAdminRemovedMidSessionRefused(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	c, admin := env.AdminClient(t)
+	resp, _ := env.Page(t, c, "/admin/members")
+	assertStatus(t, resp, http.StatusOK)
+
+	g, err := env.Store.GetGroupByName(ctx, "Admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.Store.RemoveMember(ctx, admin.ID, g.ID); err != nil {
+		t.Fatal(err)
+	}
+	resp, body := env.Page(t, c, "/admin/members")
+	assertStatus(t, resp, http.StatusForbidden)
+	assertContains(t, body, "Admins only")
+	resp, _ = env.Submit(t, c, "/admin/settings/rotate-keys", nil)
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestAdminFrame(t *testing.T) {
 	env := testenv.New(t)
 	c, _ := env.AdminClient(t)

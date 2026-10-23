@@ -3,12 +3,15 @@ package admin_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"latch/internal/admin"
 	"latch/internal/audit"
 	"latch/internal/model"
+	"latch/internal/secrets"
 	"latch/internal/store"
 )
 
@@ -169,6 +172,88 @@ func TestDeleteGroup(t *testing.T) {
 	}
 	if err := svc.DeleteGroup(ctx, actorFor(ada), laser.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("second delete: %v", err)
+	}
+}
+
+// mkApp stores a public application that lets in only these groups (any
+// active member when there are none).
+func mkApp(t *testing.T, st *store.Store, name string, groups ...*model.Group) *model.Application {
+	t.Helper()
+	app := &model.Application{Name: name, Slug: "app-" + secrets.NewID(), ClientID: secrets.NewID(),
+		ClientType: model.ClientTypePublic}
+	for _, g := range groups {
+		app.AllowedGroupIDs = append(app.AllowedGroupIDs, g.ID)
+	}
+	if err := st.CreateApplication(context.Background(), app); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+// assertAllowed checks the app lets in exactly the groups with these IDs.
+func assertAllowed(t *testing.T, st *store.Store, appID string, groupIDs ...string) {
+	t.Helper()
+	app, err := st.GetApplication(context.Background(), appID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sortedCopy(app.AllowedGroupIDs), sortedCopy(groupIDs)) {
+		t.Errorf("%s lets in %v, want %v", app.Name, app.AllowedGroupIDs, groupIDs)
+	}
+}
+
+func sortedCopy(s []string) []string { return slices.Sorted(slices.Values(s)) }
+
+// Ruling 14: deleting the only group an app lets in would leave the app
+// with no groups, which lets in every member, so it is refused, naming the
+// app. An app that lets in another group too doesn't stop the delete.
+func TestDeleteGroupOnlyAllowedGroupRefused(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	ada, _ := mkAdmin(t, st)
+	a := actorFor(ada)
+	laser := mkGroup(t, st, "Laser", false)
+	wood := mkGroup(t, st, "Woodshop", false)
+	cutter := mkApp(t, st, "Laser cutter", laser)
+	wiki := mkApp(t, st, "Wiki", laser, wood)
+
+	before := countEvents(t, st)
+	if msg := refusal(t, svc.DeleteGroup(ctx, a, laser.ID)); msg !=
+		"Laser is the only group allowed into Laser cutter. Change who can sign in to that app first." {
+		t.Errorf("message %q", msg)
+	}
+	if _, err := st.GetGroup(ctx, laser.ID); err != nil {
+		t.Errorf("group gone: %v", err)
+	}
+	assertAllowed(t, st, cutter.ID, laser.ID)
+	assertAllowed(t, st, wiki.ID, laser.ID, wood.ID)
+	if n := countEvents(t, st) - before; n != 0 {
+		t.Errorf("recorded %d events for a refused delete", n)
+	}
+
+	// Every such app is named.
+	engraver := mkApp(t, st, "Engraver", laser)
+	if msg := refusal(t, svc.DeleteGroup(ctx, a, laser.ID)); msg !=
+		"Laser is the only group allowed into Engraver and Laser cutter. Change who can sign in to those apps first." {
+		t.Errorf("two apps: message %q", msg)
+	}
+	mkApp(t, st, "Big printer", laser)
+	if msg := refusal(t, svc.DeleteGroup(ctx, a, laser.ID)); msg !=
+		"Laser is the only group allowed into Big printer, Engraver and Laser cutter. Change who can sign in to those apps first." {
+		t.Errorf("three apps: message %q", msg)
+	}
+	assertAllowed(t, st, engraver.ID, laser.ID)
+
+	// Wiki also lets in Laser, so Woodshop can go; Wiki keeps Laser.
+	if err := svc.DeleteGroup(ctx, a, wood.ID); err != nil {
+		t.Fatalf("delete a group another lets in alongside: %v", err)
+	}
+	if _, err := st.GetGroup(ctx, wood.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("Woodshop still there: %v", err)
+	}
+	assertAllowed(t, st, wiki.ID, laser.ID)
+	if ev := oneEvent(t, st, audit.GroupDelete); ev.TargetID != wood.ID {
+		t.Errorf("delete event %+v", ev)
 	}
 }
 

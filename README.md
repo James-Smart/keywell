@@ -84,7 +84,7 @@ To register an app, open Admin pages, then Applications, then Add application. S
 
 ## Admin pages
 
-Admins manage Latch at `/admin` (there is a link on the member home page). You need to be in a group that has admin access, and if that group requires two-step sign in, you need to have passed it. The `Admin` group that `latch init` makes has both.
+Admins manage Latch at `/admin` (there is a link on the member home page). You need to be in a group that has admin access. If any of your groups requires two-step sign in, you need to have set it up, and Latch asks for your code when you sign in. This is checked again on every admin page: if you join such a group, or one of your groups starts requiring it, after you signed in, the next admin page sends you to set up two-step sign in first. The `Admin` group that `latch init` makes has admin access and requires two-step sign in.
 
 The sidebar has these entries:
 
@@ -97,7 +97,7 @@ The sidebar has these entries:
 
 ## Admin API
 
-Anything you can do on the admin pages you can also do over HTTP, for scripts. Open Admin pages, then Service accounts, and add a service account. On its page, make a token, choosing Read only or Full admin. Copy the token when it is shown. It starts with `latch_` and is shown once.
+Most of what you can do on the admin pages you can also do over HTTP, for scripts. Three things are on the admin pages only: sending a test email, making a new signing key (also `latch rotate-keys`), and uploading an app's icon (over HTTP, set `icon_url` to an `https://` address instead). Open Admin pages, then Service accounts, and add a service account. On its page, make a token, choosing Read only or Full admin. Copy the token when it is shown. It starts with `latch_` and is shown once.
 
 Send the token as a bearer token:
 

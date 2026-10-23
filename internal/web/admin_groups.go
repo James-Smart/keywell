@@ -138,7 +138,7 @@ func (s *Server) renderGroup(w http.ResponseWriter, r *http.Request, g *model.Gr
 		}
 		d.Delete = confirmBox{
 			Summary: "Delete group",
-			Message: "This removes the group and everyone's place in it. Apps that only this group could open will no longer open for them. The people themselves are kept.",
+			Message: "This removes the group and everyone's place in it. The people themselves are kept, but they lose any app access that came only from this group. If this is the only group allowed into an app, change who can sign in to that app first.",
 			Action:  "/admin/groups/" + g.ID + "/delete",
 			Button:  "Delete group",
 			Typed:   "Type the group's name to confirm",

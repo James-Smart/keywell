@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"latch/internal/model"
 	"latch/internal/testenv"
 )
 
@@ -246,6 +247,37 @@ func TestDeleteGroupConfirm(t *testing.T) {
 		t.Fatal("group still stored")
 	}
 	if events := auditEvents(t, env, "group.delete"); len(events) != 1 || events[0].ActorID != admin.ID {
+		t.Errorf("group.delete events %+v", events)
+	}
+}
+
+// Ruling 14: the only group an app lets in can't be deleted, as the app
+// would then let in every member. The page says which app, at the top,
+// and the confirmation says so before the admin tries.
+func TestDeleteSoleAppGroupRefusedInUI(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	g := env.CreateGroup(t, "Laser", false, false)
+	app := env.CreateApp(t, model.Application{Name: "Laser cutter", Slug: "laser-cutter", ClientID: "cutter",
+		ClientType: model.ClientTypePublic, AllowedGroupIDs: []string{g.ID}}, "")
+	base := "/admin/groups/" + g.ID
+
+	_, body := env.Page(t, c, base)
+	assertContains(t, body, html.EscapeString("If this is the only group allowed into an app, change who can sign in to that app first."))
+	assertLacks(t, body, "will no longer open for them")
+
+	resp, body := env.Submit(t, c, base+"/delete", url.Values{"confirm": {"Laser"}})
+	assertStatus(t, resp, http.StatusConflict)
+	assertContains(t, body, `<p class="alert alert-error" role="alert">`+
+		html.EscapeString("Laser is the only group allowed into Laser cutter. Change who can sign in to that app first.")+"</p>")
+	if _, err := env.Store.GetGroup(context.Background(), g.ID); err != nil {
+		t.Fatalf("group gone: %v", err)
+	}
+	if got, err := env.Store.GetApplication(context.Background(), app.ID); err != nil ||
+		len(got.AllowedGroupIDs) != 1 || got.AllowedGroupIDs[0] != g.ID {
+		t.Errorf("app lets in %v (%v), want only Laser", got.AllowedGroupIDs, err)
+	}
+	if events := auditEvents(t, env, "group.delete"); len(events) != 0 {
 		t.Errorf("group.delete events %+v", events)
 	}
 }

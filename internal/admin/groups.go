@@ -17,6 +17,9 @@ const (
 	msgGroupName      = "Enter a group name."
 	msgGroupNameTaken = "There's already a group with that name."
 	msgLastAdminGroup = "This is the only admin group. Make another group an admin group first."
+	// msgSoleGroupFormat takes the group's name, the applications' names and
+	// "that app" or "those apps".
+	msgSoleGroupFormat = "%s is the only group allowed into %s. Change who can sign in to %s first."
 
 	maxGroupNameLen        = 100
 	maxGroupDescriptionLen = 500
@@ -116,10 +119,14 @@ func (s *Service) UpdateGroup(ctx context.Context, a Actor, id string, patch Gro
 
 // DeleteGroup deletes the group, with its memberships and application
 // access, and records group.delete with its name. Deleting the only admin
-// group is a *RefusedError.
+// group is a *RefusedError, and so is deleting the only group an
+// application lets in: the application would then let in every member.
 func (s *Service) DeleteGroup(ctx context.Context, a Actor, id string) error {
 	g, err := s.d.Store.GetGroup(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := s.keepAppsClosed(ctx, g); err != nil {
 		return err
 	}
 	if g.IsAdmin {
@@ -128,10 +135,40 @@ func (s *Service) DeleteGroup(ctx context.Context, a Actor, id string) error {
 		}
 	}
 	if err := s.d.Store.DeleteGroup(ctx, id); err != nil {
+		if errors.Is(err, store.ErrSoleAppGroup) {
+			// An application was limited to this group since the check.
+			if err := s.keepAppsClosed(ctx, g); err != nil {
+				return err
+			}
+			return &RefusedError{Message: fmt.Sprintf(msgSoleGroupFormat, g.Name, "an app", "that app")}
+		}
 		return groupConflict(fmt.Errorf("admin: delete group: %w", err))
 	}
 	s.record(ctx, a, audit.GroupDelete, targetGroup, id, "Deleted group "+g.Name, map[string]any{"name": g.Name})
 	return nil
+}
+
+// keepAppsClosed refuses to delete g while it is the only group some
+// application lets in, naming each such application.
+func (s *Service) keepAppsClosed(ctx context.Context, g *model.Group) error {
+	apps, err := s.d.Store.ListApplications(ctx)
+	if err != nil {
+		return fmt.Errorf("admin: check application access: %w", err)
+	}
+	var names []string
+	for _, app := range apps {
+		if len(app.AllowedGroupIDs) == 1 && app.AllowedGroupIDs[0] == g.ID {
+			names = append(names, app.Name)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return nil
+	case 1:
+		return &RefusedError{Message: fmt.Sprintf(msgSoleGroupFormat, g.Name, names[0], "that app")}
+	}
+	list := strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	return &RefusedError{Message: fmt.Sprintf(msgSoleGroupFormat, g.Name, list, "those apps")}
 }
 
 // AddToGroup adds a member or service account to the group and records

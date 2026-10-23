@@ -103,11 +103,12 @@ func TestDeleteGroupCascades(t *testing.T) {
 	ctx := context.Background()
 	s := openTest(t)
 	g := mkGroup(t, s, "G")
+	other := mkGroup(t, s, "H")
 	u := mkUser(t, s, "u@example.org")
 	if err := s.AddMember(ctx, u.ID, g.ID); err != nil {
 		t.Fatal(err)
 	}
-	a := &model.Application{Name: "A", Slug: "a", ClientID: "a", AllowedGroupIDs: []string{g.ID}}
+	a := &model.Application{Name: "A", Slug: "a", ClientID: "a", AllowedGroupIDs: []string{g.ID, other.ID}}
 	if err := s.CreateApplication(ctx, a); err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +124,48 @@ func TestDeleteGroupCascades(t *testing.T) {
 			t.Fatalf("%s: n=%d err=%v", q, n, err)
 		}
 	}
-	if got, _ := s.GetApplication(ctx, a.ID); len(got.AllowedGroupIDs) != 0 {
+	if got, _ := s.GetApplication(ctx, a.ID); !reflect.DeepEqual(got.AllowedGroupIDs, []string{other.ID}) {
+		t.Fatalf("app groups: %v, want only %s", got.AllowedGroupIDs, other.ID)
+	}
+}
+
+// Ruling 14: a group that is the only one an application lets in is not
+// deleted, as the application would then let in every member. The check
+// and the delete are one statement.
+func TestDeleteGroupSoleAppGroupGuard(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	g := mkGroup(t, s, "G")
+	a := &model.Application{Name: "A", Slug: "a", ClientID: "a", AllowedGroupIDs: []string{g.ID}}
+	if err := s.CreateApplication(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteGroup(ctx, g.ID); !errors.Is(err, ErrSoleAppGroup) {
+		t.Fatalf("delete: %v, want ErrSoleAppGroup", err)
+	}
+	if _, err := s.GetGroup(ctx, g.ID); err != nil {
+		t.Fatalf("group gone: %v", err)
+	}
+	if got, _ := s.GetApplication(ctx, a.ID); !reflect.DeepEqual(got.AllowedGroupIDs, []string{g.ID}) {
 		t.Fatalf("app groups: %v", got.AllowedGroupIDs)
+	}
+
+	// The last admin group is still told apart.
+	admin := &model.Group{Name: "Admin", IsAdmin: true}
+	if err := s.CreateGroup(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteGroup(ctx, admin.ID); !errors.Is(err, ErrLastAdminGroup) {
+		t.Fatalf("last admin group: %v", err)
+	}
+
+	// With another group allowed in, it can go.
+	a.AllowedGroupIDs = []string{g.ID, admin.ID}
+	if err := s.UpdateApplication(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteGroup(ctx, g.ID); err != nil {
+		t.Fatalf("delete alongside another group: %v", err)
 	}
 }
 

@@ -160,17 +160,28 @@ func (s *Server) adminNotFound(w http.ResponseWriter, r *http.Request) {
 // in an admin group, and otherwise shows a 403 page. It runs inside
 // session.RequireUser, which has already sent anyone without a complete
 // session to sign in, and checks the groups afresh on every request.
+//
+// A session's second step is settled when it starts, but an admin's groups
+// can change after that: they may join an admin group that requires
+// two-step sign in, or their group may start requiring it. So an admin
+// without two-step sign in, any of whose groups requires it, is sent to
+// set it up (with the current URL as next, as session.RequireUser does)
+// before any admin page.
 func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, user, _ := session.FromContext(r.Context())
-		ok, err := s.isAdmin(r.Context(), user.ID)
+		groups, err := s.d.Store.ListGroupsForUser(r.Context(), user.ID)
 		if err != nil {
 			s.serverError(w, r, "admin: list groups", err)
 			return
 		}
-		if !ok {
+		if !slices.ContainsFunc(groups, func(g model.Group) bool { return g.IsAdmin }) {
 			s.d.Renderer.RenderError(w, r, http.StatusForbidden, "Admins only",
 				"You need to be in an admin group to use these pages. Ask an existing admin if you think you should be.")
+			return
+		}
+		if !user.TOTPEnrolled() && slices.ContainsFunc(groups, func(g model.Group) bool { return g.RequireTOTP }) {
+			http.Redirect(w, r, "/account/totp?required=1&next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 			return
 		}
 		next.ServeHTTP(w, r)

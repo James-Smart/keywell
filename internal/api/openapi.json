@@ -1035,7 +1035,7 @@
       "delete": {
         "operationId": "deleteGroup",
         "summary": "Delete a group",
-        "description": "Deleting the only admin group is refused.",
+        "description": "Deleting the only admin group is refused. So is deleting the only group an app lets in, because the app would then let in every member; change the app's allowed_groups first.",
         "parameters": [
           {
             "name": "id",

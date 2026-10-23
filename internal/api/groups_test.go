@@ -110,6 +110,37 @@ func TestAPILastAdminGroup(t *testing.T) {
 	}
 }
 
+// Ruling 14: the only group an app lets in can't be deleted, as the app
+// would then let in every member; one of two groups can.
+func TestAPIDeleteSoleAppGroup(t *testing.T) {
+	env := testenv.New(t)
+	raw, _ := env.APIToken(t, "door", model.APITokenScopeAdmin)
+	laser := env.CreateGroup(t, "Laser", false, false)
+	wood := env.CreateGroup(t, "Woodshop", false, false)
+	cutter := env.CreateApp(t, model.Application{Name: "Laser cutter", Slug: "laser-cutter", ClientID: "cutter",
+		ClientType: model.ClientTypePublic, AllowedGroupIDs: []string{laser.ID}}, "")
+	wiki := env.CreateApp(t, model.Application{Name: "Wiki", Slug: "wiki", ClientID: "wiki",
+		ClientType: model.ClientTypePublic, AllowedGroupIDs: []string{laser.ID, wood.ID}}, "")
+
+	body, resp := env.API(t, raw, http.MethodDelete, apiGroups+"/"+laser.ID, nil)
+	assertError(t, body, resp, 409, "refused")
+	if msg, _ := body["message"].(string); msg != "Laser is the only group allowed into Laser cutter. Change who can sign in to that app first." {
+		t.Errorf("message %q", msg)
+	}
+	if got, err := env.Store.GetApplication(context.Background(), cutter.ID); err != nil || len(got.AllowedGroupIDs) != 1 {
+		t.Errorf("Laser cutter lets in %v (%v), want only Laser", got.AllowedGroupIDs, err)
+	}
+
+	_, resp = env.API(t, raw, http.MethodDelete, apiGroups+"/"+wood.ID, nil)
+	if resp.StatusCode != 204 {
+		t.Fatalf("delete Woodshop: %d", resp.StatusCode)
+	}
+	if got, err := env.Store.GetApplication(context.Background(), wiki.ID); err != nil ||
+		len(got.AllowedGroupIDs) != 1 || got.AllowedGroupIDs[0] != laser.ID {
+		t.Errorf("Wiki lets in %v (%v), want only Laser", got.AllowedGroupIDs, err)
+	}
+}
+
 // A huge ?page= is an empty page, never a server error.
 func TestAPIHugePage(t *testing.T) {
 	env := testenv.New(t)
