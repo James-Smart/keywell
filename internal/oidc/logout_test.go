@@ -16,6 +16,7 @@ import (
 	"latch/internal/audit"
 	"latch/internal/model"
 	"latch/internal/oidc"
+	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
 	"latch/internal/testenv"
@@ -114,11 +115,11 @@ func signedOutPage(t *testing.T, resp *http.Response) {
 	}
 }
 
-// sessionEnded checks that the session with id is gone, that c's cookie is
-// cleared, and that the old cookie no longer signs anyone in.
-func sessionEnded(t *testing.T, env *testenv.Env, c *http.Client, id string) {
+// sessionEnded checks that the session c held with cookie raw is gone, that
+// c's cookie is cleared, and that the old cookie no longer signs anyone in.
+func sessionEnded(t *testing.T, env *testenv.Env, c *http.Client, raw string) {
 	t.Helper()
-	if _, err := env.Store.GetSession(context.Background(), id); !errors.Is(err, store.ErrNotFound) {
+	if _, err := env.Store.GetSession(context.Background(), secrets.HashToken(raw)); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("session still stored (err %v)", err)
 	}
 	u, err := url.Parse(env.TS.URL)
@@ -131,13 +132,31 @@ func sessionEnded(t *testing.T, env *testenv.Env, c *http.Client, id string) {
 		}
 	}
 	old := env.Client(t)
-	old.Jar.SetCookies(u, []*http.Cookie{{Name: session.CookieName, Value: id}})
+	old.Jar.SetCookies(u, []*http.Cookie{{Name: session.CookieName, Value: raw}})
 	resp := get(t, old, env.TS.URL+"/")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
 		t.Errorf("old session cookie: status %d Location %q, want 303 to sign-in",
 			resp.StatusCode, resp.Header.Get("Location"))
 	}
+}
+
+// cookieOf returns the session cookie c holds, failing the test unless it
+// names a stored session.
+func cookieOf(t *testing.T, env *testenv.Env, c *http.Client) string {
+	t.Helper()
+	sessionOf(t, env, c)
+	u, err := url.Parse(env.TS.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ck := range c.Jar.Cookies(u) {
+		if ck.Name == session.CookieName {
+			return ck.Value
+		}
+	}
+	t.Fatal("client has no session cookie")
+	return ""
 }
 
 // sessionKept checks that c is still signed in with the session with id.
@@ -176,7 +195,7 @@ func TestRPLogoutRedirectsWhenRegistered(t *testing.T) {
 	env := testenv.New(t)
 	app := logoutApp(t, env)
 	c, u, tokens := memberTokens(t, env, app, wikiSecret)
-	sess := sessionOf(t, env, c)
+	raw := cookieOf(t, env, c)
 
 	logoutRedirect(t, rpLogout(t, env, c, http.MethodGet, url.Values{
 		"id_token_hint":            {str(t, tokens, "id_token")},
@@ -184,7 +203,7 @@ func TestRPLogoutRedirectsWhenRegistered(t *testing.T) {
 		"client_id":                {app.ClientID},
 		"state":                    {"bye now&x=1"},
 	}), signedOutURI+"?state=bye+now%26x%3D1")
-	sessionEnded(t, env, c, sess.ID)
+	sessionEnded(t, env, c, raw)
 	if got := rpLogouts(t, env, u); !slices.Equal(got, []string{app.ClientID}) {
 		t.Errorf("RP logout events naming %q, want one naming %s", got, app.ClientID)
 	}
@@ -227,11 +246,11 @@ func TestRPLogoutUnregisteredURIRendersPage(t *testing.T) {
 	} {
 		t.Run(uri, func(t *testing.T) {
 			c, hint := idTokenFor(t, env, app, u)
-			sess := sessionOf(t, env, c)
+			raw := cookieOf(t, env, c)
 			signedOutPage(t, rpLogout(t, env, c, http.MethodGet, url.Values{
 				"id_token_hint": {hint}, "post_logout_redirect_uri": {uri}, "state": {"s1"},
 			}))
-			sessionEnded(t, env, c, sess.ID)
+			sessionEnded(t, env, c, raw)
 		})
 	}
 }
@@ -241,7 +260,7 @@ func TestRPLogoutClientIDMismatchRendersPage(t *testing.T) {
 	app := logoutApp(t, env)
 	tools := toolsApp(t, env)
 	c, u, tokens := memberTokens(t, env, app, wikiSecret)
-	sess := sessionOf(t, env, c)
+	raw := cookieOf(t, env, c)
 
 	// The hint is valid and is the member's, so the session ends, but the
 	// request names another application, so nobody is sent back.
@@ -249,7 +268,7 @@ func TestRPLogoutClientIDMismatchRendersPage(t *testing.T) {
 		"id_token_hint": {str(t, tokens, "id_token")}, "post_logout_redirect_uri": {signedOutURI},
 		"client_id": {tools.ClientID}, "state": {"s1"},
 	}))
-	sessionEnded(t, env, c, sess.ID)
+	sessionEnded(t, env, c, raw)
 	if got := rpLogouts(t, env, u); !slices.Equal(got, []string{app.ClientID}) {
 		t.Errorf("RP logout events naming %q, want one naming %s", got, app.ClientID)
 	}
@@ -259,7 +278,7 @@ func TestRPLogoutWithoutHintAsksFirst(t *testing.T) {
 	env := testenv.New(t)
 	app := logoutApp(t, env)
 	c, u := signedIn(t, env)
-	sess := sessionOf(t, env, c)
+	sess, raw := sessionOf(t, env, c), cookieOf(t, env, c)
 	params := url.Values{"post_logout_redirect_uri": {signedOutURI}, "state": {"s1"}, "client_id": {app.ClientID}}
 
 	// A link or image on any site can make this request, so the member is
@@ -281,7 +300,7 @@ func TestRPLogoutWithoutHintAsksFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	sessionEnded(t, env, c, sess.ID)
+	sessionEnded(t, env, c, raw)
 
 	// Without a session there is nothing to ask about.
 	signedOutPage(t, rpLogout(t, env, c, http.MethodGet, params))
@@ -291,13 +310,13 @@ func TestRPLogoutIgnoresHintExpiry(t *testing.T) {
 	env := testenv.New(t)
 	app := logoutApp(t, env)
 	c, _, tokens := memberTokens(t, env, app, wikiSecret)
-	sess := sessionOf(t, env, c)
+	raw := cookieOf(t, env, c)
 	env.Clock.Advance(2 * time.Hour) // the ID token lasts an hour
 
 	logoutRedirect(t, rpLogout(t, env, c, http.MethodGet, url.Values{
 		"id_token_hint": {str(t, tokens, "id_token")}, "post_logout_redirect_uri": {loopbackBye},
 	}), loopbackBye)
-	sessionEnded(t, env, c, sess.ID)
+	sessionEnded(t, env, c, raw)
 }
 
 func TestRPLogoutHintFirstAudienceNamesApp(t *testing.T) {
@@ -327,12 +346,12 @@ func TestRPLogoutHintFirstAudienceNamesApp(t *testing.T) {
 		app := logoutApp(t, env)
 		tools := toolsApp(t, env) // has no post-logout addresses
 		c, u := signedIn(t, env)
-		sess := sessionOf(t, env, c)
+		raw := cookieOf(t, env, c)
 		signedOutPage(t, rpLogout(t, env, c, http.MethodGet, url.Values{
 			"id_token_hint":            {expired(t, env, u, app, []string{tools.ClientID, app.ClientID})},
 			"post_logout_redirect_uri": {signedOutURI},
 		}))
-		sessionEnded(t, env, c, sess.ID) // a valid hint for this member, from Tool Booking
+		sessionEnded(t, env, c, raw) // a valid hint for this member, from Tool Booking
 		if got := rpLogouts(t, env, u); !slices.Equal(got, []string{tools.ClientID}) {
 			t.Errorf("RP logout events naming %q, want one naming %s", got, tools.ClientID)
 		}

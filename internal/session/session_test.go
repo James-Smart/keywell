@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"latch/internal/model"
+	"latch/internal/secrets"
 	"latch/internal/session"
 	"latch/internal/store"
 	"latch/internal/store/storetest"
@@ -108,8 +109,9 @@ func TestStartLoadsUserAndExtends(t *testing.T) {
 	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" || c.MaxAge != 86400 {
 		t.Fatalf("cookie attributes: %+v", c)
 	}
-	if c.Value != sess.ID || len(sess.ID) != 43 {
-		t.Fatalf("cookie value %q, session id %q", c.Value, sess.ID)
+	// The cookie carries the random token; only its hash is stored.
+	if len(c.Value) != 43 || sess.ID != secrets.HashToken(c.Value) {
+		t.Fatalf("cookie value %q, session id %q; want a 43-character token and its hash", c.Value, sess.ID)
 	}
 	if sess.IP != "192.0.2.10" || sess.UserAgent != "test-agent" || !sess.TOTPPassed {
 		t.Fatalf("session fields: %+v", sess)

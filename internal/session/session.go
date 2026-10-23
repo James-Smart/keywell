@@ -1,5 +1,7 @@
-// Package session manages browser sessions: a random ID in the latch_session
-// cookie referencing a row in the sessions table.
+// Package session manages browser sessions: a random token in the
+// latch_session cookie whose hash (secrets.HashToken) is the ID of a row in
+// the sessions table. Only the hash is stored, so a copy of the database
+// does not hold anything that works as a cookie.
 package session
 
 import (
@@ -43,15 +45,17 @@ func (m *Manager) SetClock(now func() time.Time) { m.now = now }
 
 // Start creates a session for userID and sets the cookie. Any session the
 // request already carried is deleted so a session ID never survives a login.
+// The returned session's ID is the stored one: the hash of the cookie.
 func (m *Manager) Start(ctx context.Context, w http.ResponseWriter, r *http.Request, userID string, totpPassed bool) (*model.Session, error) {
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-		if err := m.store.DeleteSession(ctx, c.Value); err != nil {
+		if err := m.store.DeleteSession(ctx, secrets.HashToken(c.Value)); err != nil {
 			return nil, err
 		}
 	}
+	token := secrets.RandomToken(32)
 	now := m.now().UTC()
 	sess := &model.Session{
-		ID:         secrets.RandomToken(32),
+		ID:         secrets.HashToken(token),
 		UserID:     userID,
 		CreatedAt:  now,
 		LastSeenAt: now,
@@ -63,7 +67,7 @@ func (m *Manager) Start(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err := m.store.CreateSession(ctx, sess); err != nil {
 		return nil, err
 	}
-	http.SetCookie(w, m.cookie(sess.ID, int(m.absolute/time.Second)))
+	http.SetCookie(w, m.cookie(token, int(m.absolute/time.Second)))
 	return sess, nil
 }
 
@@ -74,7 +78,7 @@ func (m *Manager) End(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	if err != nil || c.Value == "" {
 		return nil
 	}
-	return m.store.DeleteSession(ctx, c.Value)
+	return m.store.DeleteSession(ctx, secrets.HashToken(c.Value))
 }
 
 // Update saves sess's LastSeenAt, ExpiresAt and TOTPPassed, e.g. after the
@@ -91,7 +95,7 @@ func (m *Manager) Update(ctx context.Context, sess *model.Session) error {
 func (m *Manager) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-			if sess, user := m.load(w, r, c.Value); sess != nil {
+			if sess, user := m.load(w, r, secrets.HashToken(c.Value)); sess != nil {
 				r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, loaded{sess, user}))
 			}
 		}
@@ -99,7 +103,8 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// load returns the live session named by id and its active member, or nils.
+// load returns the live session whose stored ID is id (the hash of the
+// cookie) and its active member, or nils.
 func (m *Manager) load(w http.ResponseWriter, r *http.Request, id string) (*model.Session, *model.User) {
 	ctx := r.Context()
 	sess, err := m.store.GetSession(ctx, id)

@@ -50,7 +50,8 @@ func creds(email, pw string) url.Values {
 	return url.Values{"email": {email}, "password": {pw}}
 }
 
-// jarSession returns the session cookie value c holds, or "".
+// jarSession returns the stored ID (the hash of the cookie) of the session
+// c's cookie names, or "" when c holds no session cookie.
 func jarSession(t *testing.T, env *testenv.Env, c *http.Client) string {
 	t.Helper()
 	u, err := url.Parse(env.TS.URL)
@@ -59,7 +60,7 @@ func jarSession(t *testing.T, env *testenv.Env, c *http.Client) string {
 	}
 	for _, ck := range c.Jar.Cookies(u) {
 		if ck.Name == session.CookieName {
-			return ck.Value
+			return secrets.HashToken(ck.Value)
 		}
 	}
 	return ""

@@ -147,7 +147,8 @@ func assertError(t *testing.T, env *testenv.Env, q url.Values, code string) {
 	}
 }
 
-// sessionOf returns the session c's cookie names.
+// sessionOf returns the session c's cookie names (stored under the
+// cookie's hash).
 func sessionOf(t *testing.T, env *testenv.Env, c *http.Client) *model.Session {
 	t.Helper()
 	u, err := url.Parse(env.TS.URL)
@@ -156,7 +157,7 @@ func sessionOf(t *testing.T, env *testenv.Env, c *http.Client) *model.Session {
 	}
 	for _, ck := range c.Jar.Cookies(u) {
 		if ck.Name == session.CookieName {
-			sess, err := env.Store.GetSession(context.Background(), ck.Value)
+			sess, err := env.Store.GetSession(context.Background(), secrets.HashToken(ck.Value))
 			if err != nil {
 				t.Fatalf("get session: %v", err)
 			}
