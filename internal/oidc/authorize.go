@@ -87,6 +87,9 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, user, ok := session.FromContext(ctx)
+	// Only members use the login pages; the session middleware already
+	// drops anyone else's session.
+	ok = ok && user.Type == model.UserTypeMember
 	if !ok || !sess.TOTPPassed || req.promptLogin || req.tooOld(p.now(), sess.CreatedAt) {
 		if req.promptNone {
 			fail(&oauthError{"login_required", "the member must sign in"})

@@ -22,6 +22,10 @@ import (
 // adminGroup is the group whose members administer Latch.
 const adminGroup = "Admin"
 
+// errServiceAccount refuses to make a service account an admin or give it
+// a reset link: it cannot use the login pages.
+var errServiceAccount = errors.New("that is a service account, which cannot sign in")
+
 func cmdCreateAdmin(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("create-admin", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -62,15 +66,23 @@ func cmdCreateAdmin(args []string, stdin io.Reader, stdout, stderr io.Writer) in
 
 // makeAdmin adds the user with email to the Admin group, creating the group
 // if it is missing and the account, with the password getPassword returns,
-// if there is none. It reports whether it created the account.
+// if there is none. It reports whether it created the account. A service
+// account is refused.
 func makeAdmin(ctx context.Context, st *store.Store, email string, getPassword func() (string, error)) (created bool, err error) {
+	user, err := st.GetUserByEmail(ctx, email)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		user = nil
+	case err != nil:
+		return false, err
+	case user.Type != model.UserTypeMember:
+		return false, errServiceAccount
+	}
 	group, err := ensureAdminGroup(ctx, st)
 	if err != nil {
 		return false, err
 	}
-	user, err := st.GetUserByEmail(ctx, email)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
+	if user == nil {
 		pw, err := getPassword()
 		if err != nil {
 			return false, err
@@ -84,8 +96,6 @@ func makeAdmin(ctx context.Context, st *store.Store, email string, getPassword f
 			return false, err
 		}
 		created = true
-	case err != nil:
-		return false, err
 	}
 	return created, st.AddMember(ctx, user.ID, group.ID)
 }
@@ -191,6 +201,8 @@ func cmdResetPassword(args []string, _ io.Reader, stdout, stderr io.Writer) int 
 		return fail(stderr, errors.New("no account with that email"))
 	case err != nil:
 		return fail(stderr, err)
+	case user.Type != model.UserTypeMember:
+		return fail(stderr, errServiceAccount)
 	case !user.IsActive:
 		return fail(stderr, errors.New("that account is deactivated, so a reset link would not work"))
 	}

@@ -128,8 +128,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	s.afterLogin(w, r, user, sess)
 }
 
-// authenticate reports whether pw is the password of the active user with
-// the (normalised) email. It returns the user the email names even when ok
+// authenticate reports whether pw is the password of the active member
+// with the (normalised) email. It returns the user the email names even when ok
 // is false, and nil when it names none. A password is always verified, the
 // dummy hash standing in for a missing one, so timing does not reveal
 // whether the account exists. err is reserved for store failures and
@@ -159,7 +159,9 @@ func (s *Server) authenticate(ctx context.Context, email, pw string) (user *mode
 			s.d.Log.ErrorContext(ctx, "login: stored password hash cannot be checked", "user_id", user.ID, "error", err)
 		}
 	}
-	if user == nil || !match || !user.IsActive {
+	// A service account cannot use the login pages (spec §4), whatever its
+	// password; that is decided only after the check, so it takes as long.
+	if user == nil || !match || !user.IsActive || user.Type != model.UserTypeMember {
 		return user, false, nil
 	}
 	return user, true, nil

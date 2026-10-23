@@ -508,6 +508,20 @@ func TestAuthorizeIncompleteSessionIsNoSession(t *testing.T) {
 	assertError(t, env, clientRedirect(t, env.AuthorizeRaw(t, c, p), wikiRedirect), "login_required")
 }
 
+// A session whose user is not a member (here a member's account turned
+// into a service account) gets no code: service accounts cannot use the
+// login pages.
+func TestAuthorizeServiceAccountSessionIsNoSession(t *testing.T) {
+	env := testenv.New(t)
+	app := wikiApp(t, env)
+	c, u := signedIn(t, env)
+	u.Type = model.UserTypeService
+	if err := env.Store.UpdateUser(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	loginRedirect(t, env.AuthorizeRaw(t, c, authParams(app, wikiRedirect)), "wiki")
+}
+
 func TestAuthorizeMaxAgeForcesLogin(t *testing.T) {
 	env := testenv.New(t)
 	app := wikiApp(t, env)

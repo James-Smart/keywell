@@ -84,8 +84,9 @@ func (m *Manager) Update(ctx context.Context, sess *model.Session) error {
 }
 
 // Middleware loads the session and its user into the request context when
-// the cookie names a live session of an active user. Expired sessions and
-// sessions of inactive or deleted users are deleted and the cookie cleared.
+// the cookie names a live session of an active member. Expired sessions,
+// and sessions of inactive or deleted users or of service accounts, are
+// deleted and the cookie cleared.
 // LastSeenAt and ExpiresAt are written at most once per minute.
 func (m *Manager) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +99,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// load returns the live session named by id and its active user, or nils.
+// load returns the live session named by id and its active member, or nils.
 func (m *Manager) load(w http.ResponseWriter, r *http.Request, id string) (*model.Session, *model.User) {
 	ctx := r.Context()
 	sess, err := m.store.GetSession(ctx, id)
@@ -116,7 +117,9 @@ func (m *Manager) load(w http.ResponseWriter, r *http.Request, id string) (*mode
 		return nil, nil
 	}
 	user, err := m.store.GetUser(ctx, sess.UserID)
-	if errors.Is(err, store.ErrNotFound) || (err == nil && !user.IsActive) {
+	// Only active members may hold a session: service accounts cannot use
+	// the login pages.
+	if errors.Is(err, store.ErrNotFound) || (err == nil && (!user.IsActive || user.Type != model.UserTypeMember)) {
 		m.drop(w, r, sess.ID)
 		return nil, nil
 	}

@@ -192,6 +192,26 @@ func TestInactiveUserDropped(t *testing.T) {
 	assertGone(t, h.st, sess.ID)
 }
 
+// A service account cannot use the login pages, so a session it somehow
+// holds (say the account was a member's, turned into a service account) is
+// ended, not loaded.
+func TestServiceAccountSessionDropped(t *testing.T) {
+	h := newHarness(t, time.Hour, 24*time.Hour)
+	u := h.user(t, "door@example.org")
+	sess, c := h.start(t, u, true)
+
+	u.Type = model.UserTypeService
+	if err := h.st.UpdateUser(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	seen, resp := h.visit(t, c)
+	if seen != nil {
+		t.Fatal("service account loaded into context")
+	}
+	assertCleared(t, resp)
+	assertGone(t, h.st, sess.ID)
+}
+
 func TestEndClearsCookie(t *testing.T) {
 	h := newHarness(t, time.Hour, 24*time.Hour)
 	u := h.user(t, "end@example.org")

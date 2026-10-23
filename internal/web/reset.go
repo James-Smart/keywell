@@ -95,7 +95,7 @@ func (s *Server) resetRequestPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // resetRequest emails a reset link, in the background, when the address
-// belongs to an active user. The page that follows is the same, and comes
+// belongs to an active member. The page that follows is the same, and comes
 // as quickly, whatever happened (no account, an inactive one, throttled,
 // or the email failed), so it does not reveal which addresses have
 // accounts.
@@ -121,7 +121,7 @@ func (s *Server) resetRequest(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.serverError(w, r, "reset request: look up user", err)
 		return
-	case user.IsActive:
+	case user.IsActive && user.Type == model.UserTypeMember:
 		s.sendResetInBackground(ctx, user, model.ResetPurposeReset)
 	}
 	sent()
@@ -149,9 +149,9 @@ func (s *Server) sendResetInBackground(ctx context.Context, user *model.User, pu
 }
 
 // resetTarget returns the hash of the request's {token} and, when the token
-// is live and its user active, the token and user. Otherwise (no such
-// token, used, expired, or the user gone or inactive) it shows the expired
-// page and ok is false.
+// is live and its user an active member, the token and user. Otherwise (no
+// such token, used, expired, or the user gone, inactive or a service
+// account) it shows the expired page and ok is false.
 func (s *Server) resetTarget(w http.ResponseWriter, r *http.Request) (hash string, tok *model.ResetToken, user *model.User, ok bool) {
 	ctx := r.Context()
 	hash = secrets.HashToken(r.PathValue("token"))
@@ -160,7 +160,7 @@ func (s *Server) resetTarget(w http.ResponseWriter, r *http.Request) (hash strin
 		user, err = s.d.Store.GetUser(ctx, tok.UserID)
 	}
 	switch {
-	case errors.Is(err, store.ErrNotFound) || (err == nil && !user.IsActive):
+	case errors.Is(err, store.ErrNotFound) || (err == nil && (!user.IsActive || user.Type != model.UserTypeMember)):
 		s.resetExpired(w, r)
 	case err != nil:
 		s.serverError(w, r, "reset link: look up token", err)

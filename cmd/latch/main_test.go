@@ -442,6 +442,30 @@ func TestResetPasswordPrintsLink(t *testing.T) {
 	}
 }
 
+// A service account cannot sign in, so neither command gives it a way to:
+// each refuses on one line and changes nothing.
+func TestAdminCommandsRefuseServiceAccounts(t *testing.T) {
+	ctx := context.Background()
+	cfgPath := initInstall(t)
+	_, st := openInstallation(t, cfgPath)
+	svc := &model.User{Name: "Door", Type: model.UserTypeService, Username: "door", Email: "door@example.org", IsActive: true}
+	if err := st.CreateUser(ctx, svc); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := latch("", "reset-password", "--config", cfgPath, "door@example.org")
+	if code != 1 || stdout != "" || stderr != "latch: that is a service account, which cannot sign in\n" {
+		t.Errorf("reset-password: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = latch("", "create-admin", "--config", cfgPath, "--email", "door@example.org")
+	if code != 1 || stdout != "" || stderr != "latch: that is a service account, which cannot sign in\n" {
+		t.Errorf("create-admin: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if names := groupNames(t, st, svc); len(names) != 0 {
+		t.Errorf("service account's groups %v, want none", names)
+	}
+}
+
 func TestRotateKeys(t *testing.T) {
 	ctx := context.Background()
 	cfgPath := initInstall(t)
