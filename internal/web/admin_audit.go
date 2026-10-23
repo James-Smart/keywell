@@ -150,9 +150,10 @@ func (l *auditLookup) actor(e model.AuditEvent) (name, link string, err error) {
 	return userName(u), link, nil
 }
 
-// target names the target of e and links to its admin page. Both are ""
-// when it has no target or its type has no page, and link is "" when the
-// record is gone.
+// target names the target of e and links to its admin page. When the
+// record is gone, or its type has no page (an API token), the name is the
+// one the event kept in its detail (see keptName) and link is "". Both are
+// "" when it has no target.
 func (l *auditLookup) target(e model.AuditEvent) (name, link string, err error) {
 	if e.TargetID == "" {
 		return "", "", nil
@@ -160,24 +161,42 @@ func (l *auditLookup) target(e model.AuditEvent) (name, link string, err error) 
 	switch e.TargetType {
 	case "user", "service_account":
 		u, err := l.user(e.TargetID)
-		if err != nil || u == nil {
-			return "", "", err
+		if err != nil || u != nil {
+			if err != nil {
+				return "", "", err
+			}
+			return userName(u), userPage(u), nil
 		}
-		return userName(u), userPage(u), nil
 	case "group":
 		g, err := l.group(e.TargetID)
-		if err != nil || g == nil {
-			return "", "", err
+		if err != nil || g != nil {
+			if err != nil {
+				return "", "", err
+			}
+			return g.Name, "/admin/groups/" + g.ID, nil
 		}
-		return g.Name, "/admin/groups/" + g.ID, nil
 	case "application":
 		a, err := l.app(e.TargetID)
-		if err != nil || a == nil {
-			return "", "", err
+		if err != nil || a != nil {
+			if err != nil {
+				return "", "", err
+			}
+			return a.Name, "/admin/apps/" + a.ID, nil
 		}
-		return a.Name, "/admin/apps/" + a.ID, nil
 	}
-	return "", "", nil
+	return keptName(e.Detail), "", nil
+}
+
+// keptName is the name an event's detail kept for its target, so a deleted
+// record can still be named: its name, else its email, username or label
+// (an API token's). It is "" when the detail has none of them.
+func keptName(detail map[string]any) string {
+	for _, key := range []string{"name", "email", "username", "label"} {
+		if s, ok := detail[key].(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // subject names whatever id is (an account, group or application), for

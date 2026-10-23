@@ -88,6 +88,7 @@ func (s *Service) CreateMember(ctx context.Context, a Actor, in NewMember) (*mod
 	}
 	s.record(ctx, a, audit.UserCreate, targetUser, u.ID, "Added member "+displayName(u),
 		map[string]any{"name": u.Name, "email": u.Email, "username": u.Username, "groups": groupNames(groups)})
+	s.recordJoined(ctx, a, u, groups)
 	if in.Invite {
 		if err := s.emailPasswordLink(ctx, a, u, model.ResetPurposeInvite); err != nil {
 			return u, err
@@ -221,17 +222,25 @@ func (s *Service) SendPasswordEmail(ctx context.Context, a Actor, id string) (mo
 }
 
 // emailPasswordLink sends u an invitation or a reset link and records
-// user.invite or user.password.reset_sent. A failed send records nothing
-// and returns an *EmailError.
+// user.invite or user.password.reset_sent, with detail email_sent. A failed
+// send is recorded too, with email_sent false and a summary saying it
+// wasn't sent, and returns an *EmailError. (The Notifier removes the link
+// it made for an email that failed, so the member doesn't show as
+// invited.)
 func (s *Service) emailPasswordLink(ctx context.Context, a Actor, u *model.User, purpose model.ResetPurpose) error {
-	if err := s.d.Notifier.SendReset(ctx, u, purpose); err != nil {
+	err := s.d.Notifier.SendReset(ctx, u, purpose)
+	action, what := audit.UserResetSent, " a password reset link"
+	if purpose == model.ResetPurposeInvite {
+		action, what = audit.UserInvite, " an invitation"
+	}
+	summary := "Emailed " + displayName(u) + what
+	if err != nil {
+		summary = "Tried to email " + displayName(u) + what + ", but it wasn't sent"
+	}
+	s.record(ctx, a, action, targetUser, u.ID, summary, map[string]any{"email_sent": err == nil})
+	if err != nil {
 		return &EmailError{Err: err}
 	}
-	action, summary := audit.UserResetSent, "Emailed "+displayName(u)+" a password reset link"
-	if purpose == model.ResetPurposeInvite {
-		action, summary = audit.UserInvite, "Emailed "+displayName(u)+" an invitation"
-	}
-	s.record(ctx, a, action, targetUser, u.ID, summary, nil)
 	return nil
 }
 

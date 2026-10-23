@@ -75,6 +75,13 @@ func (s *Store) readResetToken(ctx context.Context, query string, args ...any) (
 	return &t, nil
 }
 
+// DeleteResetToken removes one reset or invite token by its hash. A token
+// that is already gone is not an error.
+func (s *Store) DeleteResetToken(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE token_hash = ?`, tokenHash)
+	return wrapWrite("store: delete reset token", err)
+}
+
 // DeleteSpentResetTokens removes reset and invite tokens that are used or
 // expired, and returns how many it removed.
 func (s *Store) DeleteSpentResetTokens(ctx context.Context) (int64, error) {

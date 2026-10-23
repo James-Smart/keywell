@@ -181,7 +181,7 @@
         },
         "responses": {
           "201": {
-            "description": "The new member. With invite true and an email that could not be sent, the member is still added and invite_error says so.",
+            "description": "The new member. With invite true and an email that could not be sent, the member is still added, with status needs_password, and invite_error says so.",
             "content": {
               "application/json": {
                 "schema": {

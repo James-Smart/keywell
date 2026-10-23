@@ -58,9 +58,48 @@ func (s *Service) CreateGroup(ctx context.Context, a Actor, in GroupInput) (*mod
 	if err := s.d.Store.CreateGroup(ctx, g); err != nil {
 		return nil, groupConflict(fmt.Errorf("admin: create group: %w", err))
 	}
-	s.record(ctx, a, audit.GroupCreate, targetGroup, g.ID, "Added group "+g.Name,
+	summary := "Added group " + g.Name
+	if g.IsAdmin {
+		summary += " with admin access"
+	}
+	if g.RequireTOTP {
+		summary += ", which requires two-step sign in"
+	}
+	s.record(ctx, a, audit.GroupCreate, targetGroup, g.ID, summary,
 		map[string]any{"name": g.Name, "is_admin": g.IsAdmin, "require_totp": g.RequireTOTP})
 	return g, nil
+}
+
+// groupUpdateSummary is the summary of a change to a group. A change to
+// whether it gives admin access or requires two-step sign in is named, as
+// those are what a group grants; other changes are only mentioned.
+func groupUpdateSummary(old, next *model.Group, changes changeSet) string {
+	name := next.Name
+	type phrase struct{ named, it string } // the change naming the group, and referring back to it
+	var phrases []phrase
+	switch {
+	case !old.IsAdmin && next.IsAdmin:
+		phrases = append(phrases, phrase{"Gave group " + name + " admin access", "gave it admin access"})
+	case old.IsAdmin && !next.IsAdmin:
+		phrases = append(phrases, phrase{"Took admin access away from group " + name, "took its admin access away"})
+	}
+	switch {
+	case !old.RequireTOTP && next.RequireTOTP:
+		phrases = append(phrases, phrase{"Made group " + name + " require two-step sign in", "made it require two-step sign in"})
+	case old.RequireTOTP && !next.RequireTOTP:
+		phrases = append(phrases, phrase{"Stopped group " + name + " requiring two-step sign in", "stopped it requiring two-step sign in"})
+	}
+	if len(phrases) == 0 {
+		return "Updated group " + name
+	}
+	summary := phrases[0].named
+	for _, p := range phrases[1:] {
+		summary += " and " + p.it
+	}
+	if len(changes) > len(phrases) { // each phrase is one changed field
+		summary += ", and updated its details"
+	}
+	return summary
 }
 
 // UpdateGroup makes the changes p asks for and returns the group as saved.
@@ -113,7 +152,7 @@ func (s *Service) UpdateGroup(ctx context.Context, a Actor, id string, patch Gro
 	if err := s.d.Store.UpdateGroup(ctx, &next); err != nil {
 		return nil, groupConflict(fmt.Errorf("admin: update group: %w", err))
 	}
-	s.record(ctx, a, audit.GroupUpdate, targetGroup, id, "Updated group "+next.Name, changes.detail())
+	s.record(ctx, a, audit.GroupUpdate, targetGroup, id, groupUpdateSummary(old, &next, changes), changes.detail())
 	return &next, nil
 }
 

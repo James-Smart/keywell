@@ -63,6 +63,27 @@ func TestHasActiveInviteToken(t *testing.T) {
 	check(u.ID, false)
 }
 
+// DeleteResetToken removes that one token, and is fine with one that is gone.
+func TestDeleteResetToken(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	u := mkUser(t, s, "d@example.org")
+	mkReset(t, s, "first", u.ID, model.ResetPurposeInvite, time.Now().Add(time.Hour))
+	mkReset(t, s, "second", u.ID, model.ResetPurposeInvite, time.Now().Add(time.Hour))
+	if err := s.DeleteResetToken(ctx, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PeekResetToken(ctx, "first"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("first still there: %v", err)
+	}
+	if _, err := s.PeekResetToken(ctx, "second"); err != nil {
+		t.Errorf("second gone: %v", err)
+	}
+	if err := s.DeleteResetToken(ctx, "first"); err != nil {
+		t.Errorf("deleting it again: %v", err)
+	}
+}
+
 // PeekResetToken finds an unused, unexpired token without using it up.
 func TestPeekResetToken(t *testing.T) {
 	ctx := context.Background()

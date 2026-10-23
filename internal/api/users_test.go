@@ -234,6 +234,10 @@ func TestAPIEmailFailures(t *testing.T) {
 	if msg == "" || strings.Contains(msg, "smtp") || strings.Contains(msg, "priya@example.org") {
 		t.Errorf("invite_error %q", msg)
 	}
+	// Ruling 16: no invitation went out, so they aren't shown as invited.
+	if body["status"] != "needs_password" {
+		t.Errorf("status %v, want needs_password", body["status"])
+	}
 	if !strings.Contains(logs.String(), "smtp refused") || strings.Contains(logs.String(), "priya@example.org") {
 		t.Errorf("log should hold the cause without the address:\n%s", logs.String())
 	}

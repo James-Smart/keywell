@@ -51,13 +51,39 @@ func TestCreateMemberInvite(t *testing.T) {
 			t.Errorf("%s: %+v", action, ev)
 		}
 	}
-	// The groups joined are part of the create event, not separate events.
 	if ev := oneEvent(t, st, audit.UserCreate); !reflect.DeepEqual(ev.Detail["groups"], []any{"Laser"}) ||
 		ev.Detail["email"] != "alex@example.org" {
 		t.Errorf("create detail %v", ev.Detail)
 	}
-	if evs := events(t, st, audit.GroupMemberAdd); len(evs) != 0 {
-		t.Errorf("group.member.add on create: %+v", evs)
+	// Each group joined is also an event of its own, as when groups change
+	// later, so ?action=group.member. finds every grant.
+	if ev := oneEvent(t, st, audit.GroupMemberAdd); ev.TargetID != u.ID || ev.ActorID != ada.ID ||
+		ev.Detail["group_id"] != laser.ID || ev.Detail["group_name"] != "Laser" || ev.Summary != "Added Alex Rivera to Laser" {
+		t.Errorf("group.member.add on create: %+v", ev)
+	}
+}
+
+// Joining an admin group on create says so in the summary.
+func TestCreateMemberInAdminGroup(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	ada, admins := mkAdmin(t, st)
+	laser := mkGroup(t, st, "Laser", false)
+	u, err := svc.CreateMember(ctx, actorFor(ada), admin.NewMember{Name: "Sam Lee", Email: "sam@example.org",
+		GroupIDs: []string{admins.ID, laser.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, ev := range events(t, st, audit.GroupMemberAdd) {
+		if ev.TargetID != u.ID {
+			t.Errorf("event about %s, want %s", ev.TargetID, u.ID)
+		}
+		got[ev.Detail["group_name"].(string)] = ev.Summary
+	}
+	want := map[string]string{"Admin": "Added Sam Lee to admin group Admin", "Laser": "Added Sam Lee to Laser"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("summaries %v, want %v", got, want)
 	}
 }
 
@@ -190,8 +216,15 @@ func TestCreateMemberInviteEmailFails(t *testing.T) {
 		t.Fatalf("user not stored: %v", err)
 	}
 	oneEvent(t, st, audit.UserCreate)
-	if evs := events(t, st, audit.UserInvite); len(evs) != 0 {
-		t.Errorf("invite recorded although the email failed: %+v", evs)
+	// Ruling 16: the attempt is recorded, saying the email wasn't sent, and
+	// the member still needs a password rather than showing as invited.
+	ev := oneEvent(t, st, audit.UserInvite)
+	if ev.TargetID != u.ID || ev.ActorID != ada.ID || ev.Detail["email_sent"] != false ||
+		ev.Summary != "Tried to email Alex Rivera an invitation, but it wasn't sent" {
+		t.Errorf("invite event %+v", ev)
+	}
+	if status, err := st.GetUserStatus(ctx, u); err != nil || status != model.UserStatusNeedsPassword {
+		t.Errorf("status %q, %v, want needs_password", status, err)
 	}
 }
 
@@ -509,7 +542,8 @@ func TestSendPasswordEmail(t *testing.T) {
 	if err != nil || purpose != model.ResetPurposeInvite {
 		t.Fatalf("no password: %q, %v", purpose, err)
 	}
-	if ev := oneEvent(t, st, audit.UserInvite); ev.TargetID != alex.ID || ev.ActorID != ada.ID {
+	if ev := oneEvent(t, st, audit.UserInvite); ev.TargetID != alex.ID || ev.ActorID != ada.ID ||
+		ev.Detail["email_sent"] != true || ev.Summary != "Emailed Alex Rivera an invitation" {
 		t.Errorf("invite event %+v", ev)
 	}
 
@@ -535,8 +569,19 @@ func TestSendPasswordEmail(t *testing.T) {
 	if !errors.As(err, &ee) || !errors.Is(err, smtpDown) {
 		t.Errorf("failing notifier: %T %v", err, err)
 	}
-	if n := len(events(t, st, audit.UserResetSent)); n != 1 {
-		t.Errorf("%d reset events after a failed send, want 1", n)
+	// Ruling 16: the failed attempt is recorded too, saying so.
+	var unsent []store.AuditRow
+	for _, ev := range events(t, st, audit.UserResetSent) {
+		if ev.Detail["email_sent"] == false {
+			unsent = append(unsent, ev)
+		}
+	}
+	if len(unsent) != 1 || unsent[0].Summary != "Tried to email Alex Rivera a password reset link, but it wasn't sent" ||
+		unsent[0].TargetID != alex.ID {
+		t.Errorf("failed attempts recorded %+v, want one", unsent)
+	}
+	if n := len(events(t, st, audit.UserResetSent)); n != 2 {
+		t.Errorf("%d reset events after a sent and a failed send, want 2", n)
 	}
 	n.Fail(nil)
 

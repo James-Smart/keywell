@@ -118,6 +118,40 @@ func TestAuditNamesAndLinks(t *testing.T) {
 	assertContains(t, rowWith(body, "Edit six"), "Door controller", `href="/admin/service-accounts/`+sa.ID+`"`)
 }
 
+// A target that no longer exists is named from what its event kept (a
+// delete keeps the name or email), without a link. An API token, which has
+// no page, is named by its label.
+func TestAuditNamesDeletedTargets(t *testing.T) {
+	env := testenv.New(t)
+	c, admin := env.AdminClient(t)
+	now := env.Clock.Now()
+	ev := func(action, targetType, summary string, detail map[string]any) {
+		addEvent(t, env, now, model.AuditEvent{ActorType: model.ActorUser, ActorID: admin.ID, Action: action,
+			TargetType: targetType, TargetID: "gone-" + summary, Summary: summary, Detail: detail})
+	}
+	ev("user.delete", "user", "Gone one", map[string]any{"email": "kim@example.org", "name": "Kim Ito"})
+	ev("user.delete", "user", "Gone two", map[string]any{"email": "nameless@example.org", "name": ""})
+	ev("group.delete", "group", "Gone three", map[string]any{"name": "Old laser"})
+	ev("app.delete", "application", "Gone four", map[string]any{"name": "Old wiki", "slug": "old-wiki"})
+	ev("service_account.delete", "service_account", "Gone five", map[string]any{"name": "Old door", "username": "olddoor"})
+	ev("api_token.revoke", "api_token", "Gone six", map[string]any{"label": "Deploy"})
+	ev("user.update", "user", "Gone seven", map[string]any{"changed": map[string]any{}})
+
+	_, body := env.Page(t, c, "/admin/audit")
+	for summary, name := range map[string]string{
+		"Gone one": "Kim Ito", "Gone two": "nameless@example.org", "Gone three": "Old laser",
+		"Gone four": "Old wiki", "Gone five": "Old door", "Gone six": "Deploy",
+	} {
+		about := between(rowWith(body, summary), "</small></td>", "</tr>")
+		if !strings.Contains(about, "<td>"+name+"</td>") {
+			t.Errorf("%s: About cell %q, want %q without a link", summary, about, name)
+		}
+	}
+	if about := between(rowWith(body, "Gone seven"), "</small></td>", "</tr>"); !strings.Contains(about, "<td></td>") {
+		t.Errorf("Gone seven: About cell %q, want empty", about)
+	}
+}
+
 func TestAuditFilterByTarget(t *testing.T) {
 	env := testenv.New(t)
 	c, admin := env.AdminClient(t)

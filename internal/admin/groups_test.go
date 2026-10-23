@@ -97,6 +97,87 @@ func TestCreateAndUpdateGroup(t *testing.T) {
 	}
 }
 
+// Changes to what a group grants are named in the summary, so they stand
+// out in the audit log.
+func TestGroupPrivilegeSummaries(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	ada, _ := mkAdmin(t, st)
+	a := actorFor(ada)
+
+	// assertSummary checks that some action event about targetID has the
+	// summary want. Each summary below is made once, so this needs no
+	// ordering between events recorded in the same instant.
+	assertSummary := func(action, targetID, want string) {
+		t.Helper()
+		var got []string
+		for _, ev := range events(t, st, action) {
+			if ev.TargetID == targetID {
+				if ev.Summary == want {
+					return
+				}
+				got = append(got, ev.Summary)
+			}
+		}
+		t.Errorf("%s about %s: summaries %q, want one %q", action, targetID, got, want)
+	}
+
+	creates := []struct {
+		in   admin.GroupInput
+		want string
+	}{
+		{admin.GroupInput{Name: "Laser"}, "Added group Laser"},
+		{admin.GroupInput{Name: "Trustees", IsAdmin: true}, "Added group Trustees with admin access"},
+		{admin.GroupInput{Name: "Keyholders", RequireTOTP: true}, "Added group Keyholders, which requires two-step sign in"},
+		{admin.GroupInput{Name: "Board", IsAdmin: true, RequireTOTP: true}, "Added group Board with admin access, which requires two-step sign in"},
+	}
+	ids := map[string]string{}
+	for _, c := range creates {
+		g, err := svc.CreateGroup(ctx, a, c.in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[g.Name] = g.ID
+		assertSummary(audit.GroupCreate, g.ID, c.want)
+	}
+
+	laser := ids["Laser"]
+	updates := []struct {
+		patch admin.GroupPatch
+		want  string
+	}{
+		{admin.GroupPatch{Description: ptr("Cutters")}, "Updated group Laser"},
+		{admin.GroupPatch{IsAdmin: ptr(true)}, "Gave group Laser admin access"},
+		{admin.GroupPatch{IsAdmin: ptr(false)}, "Took admin access away from group Laser"},
+		{admin.GroupPatch{RequireTOTP: ptr(true)}, "Made group Laser require two-step sign in"},
+		{admin.GroupPatch{RequireTOTP: ptr(false)}, "Stopped group Laser requiring two-step sign in"},
+		{admin.GroupPatch{IsAdmin: ptr(true), RequireTOTP: ptr(true)},
+			"Gave group Laser admin access and made it require two-step sign in"},
+		{admin.GroupPatch{Name: ptr("Laser Room"), IsAdmin: ptr(false)},
+			"Took admin access away from group Laser Room, and updated its details"},
+	}
+	for i, c := range updates {
+		if _, err := svc.UpdateGroup(ctx, a, laser, c.patch); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(events(t, st, audit.GroupUpdate)); n != i+1 {
+			t.Fatalf("after update %d: %d update events", i+1, n)
+		}
+		assertSummary(audit.GroupUpdate, laser, c.want)
+	}
+
+	// Joining or leaving an admin group is named as such.
+	sam := mkMember(t, st, "Sam Lee", "sam@example.org")
+	if err := svc.AddToGroup(ctx, a, sam.ID, ids["Trustees"]); err != nil {
+		t.Fatal(err)
+	}
+	assertSummary(audit.GroupMemberAdd, sam.ID, "Added Sam Lee to admin group Trustees")
+	if err := svc.RemoveFromGroup(ctx, a, sam.ID, ids["Trustees"]); err != nil {
+		t.Fatal(err)
+	}
+	assertSummary(audit.GroupMemberRemove, sam.ID, "Removed Sam Lee from admin group Trustees")
+}
+
 func TestLastAdminGroupRefused(t *testing.T) {
 	ctx := context.Background()
 	svc, st, _ := newService(t)

@@ -40,23 +40,31 @@ type resetSetData struct {
 // InviteTokenTTL). Only the token's hash is stored; the link is
 // issuer + "/reset/" + token.
 func IssueResetLink(ctx context.Context, st *store.Store, issuer string, userID string, purpose model.ResetPurpose) (link string, err error) {
+	link, _, err = issueResetLink(ctx, st, issuer, userID, purpose)
+	return link, err
+}
+
+// issueResetLink is IssueResetLink, also returning the stored hash of the
+// link's token.
+func issueResetLink(ctx context.Context, st *store.Store, issuer string, userID string, purpose model.ResetPurpose) (link, hash string, err error) {
 	ttl, err := resetTTL(purpose)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	token := secrets.RandomToken(32)
+	hash = secrets.HashToken(token)
 	now := time.Now().UTC()
 	err = st.CreateResetToken(ctx, &model.ResetToken{
-		TokenHash: secrets.HashToken(token),
+		TokenHash: hash,
 		UserID:    userID,
 		Purpose:   purpose,
 		CreatedAt: now,
 		ExpiresAt: now.Add(ttl),
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return issuer + "/reset/" + token, nil
+	return issuer + "/reset/" + token, hash, nil
 }
 
 func resetTTL(purpose model.ResetPurpose) (time.Duration, error) {
@@ -70,9 +78,11 @@ func resetTTL(purpose model.ResetPurpose) (time.Duration, error) {
 }
 
 // SendReset emails user a link to choose a password, as a reset or an
-// invitation by purpose, and records the request.
+// invitation by purpose, and records the request. When the email fails
+// the link is deleted again: nobody has it, and a live invite link would
+// make the member show as invited.
 func (s *Server) SendReset(ctx context.Context, user *model.User, purpose model.ResetPurpose) error {
-	link, err := IssueResetLink(ctx, s.d.Store, s.d.Cfg.Issuer(), user.ID, purpose)
+	link, hash, err := issueResetLink(ctx, s.d.Store, s.d.Cfg.Issuer(), user.ID, purpose)
 	if err != nil {
 		return err
 	}
@@ -83,6 +93,12 @@ func (s *Server) SendReset(ctx context.Context, user *model.User, purpose model.
 	}
 	msg.To = user.Email
 	if err := s.d.Mailer.Send(ctx, msg); err != nil {
+		// The send may have failed because ctx ran out; the delete must not.
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if derr := s.d.Store.DeleteResetToken(dctx, hash); derr != nil {
+			s.d.Log.ErrorContext(ctx, "delete unsent reset link", "user_id", user.ID, "purpose", string(purpose), "error", derr)
+		}
 		return fmt.Errorf("send %s email: %w", purpose, err)
 	}
 	s.auditUser(ctx, audit.PasswordResetRequested, user.ID, summary, map[string]any{"purpose": string(purpose)})

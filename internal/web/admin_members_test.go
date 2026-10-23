@@ -382,7 +382,16 @@ func TestAddMemberInviteEmailFails(t *testing.T) {
 	_, body := env.Page(t, c, resp.Header.Get("Location"))
 	assertContains(t, body,
 		html.EscapeString("Member added, but the invitation email couldn't be sent. Check the email settings on the Settings page, then use Send invite email."),
-		">Send invite email</button>")
+		">Send invite email</button>",
+		// Ruling 16: no invitation went out, so they still need a password.
+		`<span class="status status-needs_password">Needs password</span>`)
+	assertLacks(t, body, "Invited, not set up")
+	if n := liveResetTokens(t, env, sam.ID); n != 0 {
+		t.Errorf("%d live links after a failed invitation, want 0", n)
+	}
+	if events := auditEvents(t, env, "user.invite"); len(events) != 1 || events[0].Detail["email_sent"] != false {
+		t.Errorf("user.invite events %+v, want one failed attempt", events)
+	}
 
 	// Sending was the whole action, so failing again is an error.
 	resp, body = env.Submit(t, c, "/admin/members/"+sam.ID+"/send-email", nil)
@@ -390,8 +399,19 @@ func TestAddMemberInviteEmailFails(t *testing.T) {
 	assertContains(t, body,
 		`class="alert alert-error"`,
 		html.EscapeString("The email couldn't be sent. Check the email settings on the Settings page, then try again."),
-		`value="Sam Okafor"`)
+		`value="Sam Okafor"`, "Needs password")
 	assertLacks(t, body, "mailbox unavailable")
+	if n := liveResetTokens(t, env, sam.ID); n != 0 {
+		t.Errorf("%d live links after a failed send, want 0", n)
+	}
+
+	// A failed reset email for a member with a password leaves no link either.
+	alex := addMember(t, env, "Alex Rivera", "alex@example.org")
+	resp, _ = env.Submit(t, c, "/admin/members/"+alex.ID+"/send-email", nil)
+	assertStatus(t, resp, http.StatusBadGateway)
+	if n := liveResetTokens(t, env, alex.ID); n != 0 {
+		t.Errorf("%d live reset links after a failed send, want 0", n)
+	}
 }
 
 func TestEditMember(t *testing.T) {

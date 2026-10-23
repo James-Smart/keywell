@@ -53,6 +53,10 @@ func TestServiceAccountLifecycle(t *testing.T) {
 	if ev := oneEvent(t, st, audit.ServiceAccountCreate); ev.TargetType != "service_account" || ev.TargetID != sa.ID {
 		t.Errorf("create event %+v", ev)
 	}
+	if ev := oneEvent(t, st, audit.GroupMemberAdd); ev.TargetID != sa.ID || ev.Detail["group_id"] != laser.ID ||
+		ev.Summary != "Added Door to Laser" {
+		t.Errorf("group.member.add on create: %+v", ev)
+	}
 
 	if got := fields(t, errOf(svc.CreateServiceAccount(ctx, a, admin.ServiceAccountInput{Name: "Other", Username: "door"})))["username"]; got != "That username is taken." {
 		t.Errorf("taken message %q", got)
@@ -132,16 +136,24 @@ func TestCreateToken(t *testing.T) {
 		t.Errorf("stored %+v", stored)
 	}
 	ev := oneEvent(t, st, audit.APITokenCreate)
-	if ev.TargetType != "api_token" || ev.TargetID != tok.ID || ev.Detail["label"] != "CI" || ev.Detail["scope"] != "read" {
+	if ev.TargetType != "api_token" || ev.TargetID != tok.ID || ev.Detail["label"] != "CI" || ev.Detail["scope"] != "read" ||
+		ev.Summary != "Made read-only API token CI for Door" {
 		t.Errorf("event %+v", ev)
 	}
 	if s := fmt.Sprint(ev); strings.Contains(s, raw) || strings.Contains(s, secrets.HashToken(raw)) {
 		t.Error("event contains the token")
 	}
 
-	// No expiry is allowed.
+	// No expiry is allowed. The summary says when a token can change things.
 	if _, _, err := svc.CreateToken(ctx, a, sa.ID, admin.NewToken{Label: "Forever", Scope: model.APITokenScopeAdmin}); err != nil {
 		t.Error(err)
+	}
+	summaries := map[any]string{}
+	for _, ev := range events(t, st, audit.APITokenCreate) {
+		summaries[ev.Detail["label"]] = ev.Summary
+	}
+	if got := summaries["Forever"]; got != "Made full admin API token Forever for Door" {
+		t.Errorf("full admin summary %q", got)
 	}
 	before := countEvents(t, st)
 	for field, in := range map[string]admin.NewToken{

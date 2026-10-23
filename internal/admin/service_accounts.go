@@ -101,6 +101,7 @@ func (s *Service) CreateServiceAccount(ctx context.Context, a Actor, in ServiceA
 	}
 	s.record(ctx, a, audit.ServiceAccountCreate, targetServiceAccount, u.ID, "Added service account "+displayName(u),
 		map[string]any{"name": u.Name, "username": u.Username, "groups": groupNames(groups)})
+	s.recordJoined(ctx, a, u, groups)
 	return u, nil
 }
 
@@ -222,7 +223,11 @@ func (s *Service) CreateToken(ctx context.Context, a Actor, serviceAccountID str
 	if err := s.d.Store.CreateAPIToken(ctx, t); err != nil {
 		return nil, "", fmt.Errorf("admin: create API token: %w", err)
 	}
-	s.record(ctx, a, audit.APITokenCreate, targetAPIToken, t.ID, "Made API token "+label+" for "+displayName(sa),
+	kind := "read-only"
+	if t.Scope == model.APITokenScopeAdmin {
+		kind = "full admin"
+	}
+	s.record(ctx, a, audit.APITokenCreate, targetAPIToken, t.ID, "Made "+kind+" API token "+label+" for "+displayName(sa),
 		map[string]any{"label": label, "scope": string(t.Scope), "service_account_id": sa.ID})
 	return t, raw, nil
 }

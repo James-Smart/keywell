@@ -42,4 +42,20 @@ func TestFailedResetEmailLoggedWithRedactedCause(t *testing.T) {
 	if strings.Contains(strings.ToLower(got), "alex.member@example.org") {
 		t.Errorf("log contains the recipient's address:\n%s", got)
 	}
+	// Ruling 16: the link that was never emailed is not left behind.
+	if n := liveResetTokens(t, env, u.ID); n != 0 {
+		t.Errorf("%d live reset links after a failed send, want 0", n)
+	}
+}
+
+// liveResetTokens is how many unused, unexpired reset and invite links the
+// user has.
+func liveResetTokens(t *testing.T, env *testenv.Env, userID string) int {
+	t.Helper()
+	var n int
+	err := env.DB.QueryRow(`SELECT COUNT(*) FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

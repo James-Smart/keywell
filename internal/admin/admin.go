@@ -33,7 +33,9 @@ import (
 )
 
 // Notifier emails a member a link to choose a password. *web.Server
-// satisfies it; its SendReset records its own audit event for the member.
+// satisfies it; its SendReset records its own audit event for the member,
+// and when the email fails it removes the link it made, so an invitation
+// that never went out doesn't count as one.
 type Notifier interface {
 	SendReset(ctx context.Context, user *model.User, purpose model.ResetPurpose) error
 }
@@ -391,18 +393,30 @@ func (s *Service) setGroups(ctx context.Context, a Actor, u *model.User, current
 	for _, g := range removed {
 		s.recordMembership(ctx, a, audit.GroupMemberRemove, u, &g)
 	}
-	for _, g := range added {
-		s.recordMembership(ctx, a, audit.GroupMemberAdd, u, &g)
-	}
+	s.recordJoined(ctx, a, u, added)
 	return nil
 }
 
+// recordJoined records a group.member.add event for each group u joined,
+// whether on being added or later, so the log finds every grant the same
+// way.
+func (s *Service) recordJoined(ctx context.Context, a Actor, u *model.User, groups []model.Group) {
+	for i := range groups {
+		s.recordMembership(ctx, a, audit.GroupMemberAdd, u, &groups[i])
+	}
+}
+
 // recordMembership records u joining or leaving g: action is
-// audit.GroupMemberAdd or audit.GroupMemberRemove.
+// audit.GroupMemberAdd or audit.GroupMemberRemove. The summary names an
+// admin group as such, as joining one gives admin access.
 func (s *Service) recordMembership(ctx context.Context, a Actor, action string, u *model.User, g *model.Group) {
-	summary := "Added " + displayName(u) + " to " + g.Name
+	group := g.Name
+	if g.IsAdmin {
+		group = "admin group " + g.Name
+	}
+	summary := "Added " + displayName(u) + " to " + group
 	if action == audit.GroupMemberRemove {
-		summary = "Removed " + displayName(u) + " from " + g.Name
+		summary = "Removed " + displayName(u) + " from " + group
 	}
 	s.record(ctx, a, action, targetUser, u.ID, summary, map[string]any{"group_id": g.ID, "group_name": g.Name})
 }
