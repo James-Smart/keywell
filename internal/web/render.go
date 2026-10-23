@@ -81,15 +81,21 @@ func NewRenderer(cfg *config.Config, log *slog.Logger) (*Renderer, error) {
 // Render writes page name (without ".html") with the given status. The page
 // is rendered to a buffer first so a template error becomes a clean 500.
 func (rd *Renderer) Render(w http.ResponseWriter, r *http.Request, status int, name string, p Page) {
+	var user *model.User
+	if sess, u, ok := session.FromContext(r.Context()); ok && sess.TOTPPassed {
+		user = u
+	}
+	rd.render(w, r, status, name, p, user)
+}
+
+// render is Render showing user (nil for nobody) as signed in.
+func (rd *Renderer) render(w http.ResponseWriter, r *http.Request, status int, name string, p Page, user *model.User) {
 	t, ok := rd.pages[name]
 	if !ok {
 		rd.fail(w, r, fmt.Errorf("no template %q", name))
 		return
 	}
-	v := view{Page: p, Brand: rd.brand}
-	if sess, u, ok := session.FromContext(r.Context()); ok && sess.TOTPPassed {
-		v.User = u
-	}
+	v := view{Page: p, Brand: rd.brand, User: user}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "frame.html", v); err != nil {
 		rd.fail(w, r, fmt.Errorf("execute %s: %w", name, err))
@@ -112,6 +118,13 @@ func (rd *Renderer) RenderError(w http.ResponseWriter, r *http.Request, status i
 // appName.
 func (rd *Renderer) RenderNoAccess(w http.ResponseWriter, r *http.Request, appName string) {
 	rd.Render(w, r, http.StatusOK, "no_access", Page{Title: "No access", Data: struct{ AppName string }{appName}})
+}
+
+// RenderSignedOut writes the page shown once a member has signed out. It
+// never shows anyone as signed in, even when the request that just ended
+// the session still carries it.
+func (rd *Renderer) RenderSignedOut(w http.ResponseWriter, r *http.Request) {
+	rd.render(w, r, http.StatusOK, "signed_out", Page{Title: "Signed out"}, nil)
 }
 
 // fail logs a rendering problem and writes a bare 500; it cannot use a

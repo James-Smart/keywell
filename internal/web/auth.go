@@ -280,7 +280,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) signedOut(w http.ResponseWriter, r *http.Request) {
-	s.d.Renderer.Render(w, r, http.StatusOK, "signed_out", Page{Title: "Signed out"})
+	s.d.Renderer.RenderSignedOut(w, r)
 }
 
 // auditUser records action by the user with userID on their own account.

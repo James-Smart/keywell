@@ -207,12 +207,19 @@ func (p *Provider) redirectToClient(w http.ResponseWriter, r *http.Request, targ
 		params.Set("state", state)
 	}
 	params.Set("iss", p.issuer)
-	u := *target
+	http.Redirect(w, r, withQuery(*target, params), http.StatusFound)
+}
+
+// withQuery returns u with params added after any query it already has.
+func withQuery(u url.URL, params url.Values) string {
+	if len(params) == 0 {
+		return u.String()
+	}
 	if u.RawQuery != "" {
 		u.RawQuery += "&"
 	}
 	u.RawQuery += params.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	return u.String()
 }
 
 // badLink shows the error page for an authorization request that cannot

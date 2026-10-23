@@ -152,7 +152,10 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		return err
 	}
 	keys.WithAudit(rec)
-	prov := oidc.NewProvider(oidc.Deps{Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend})
+	sessions := session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies())
+	prov := oidc.NewProvider(oidc.Deps{
+		Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend, Sessions: sessions,
+	})
 	// Emails already under way (each bounded by its own timeout) finish
 	// before the database closes, however serve returns.
 	var background sync.WaitGroup
@@ -160,7 +163,7 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	handler := web.New(web.Deps{
 		Cfg:        cfg,
 		Store:      st,
-		Sessions:   session.NewManager(st, cfg.Sessions.Idle, cfg.Sessions.Absolute, cfg.SecureCookies()),
+		Sessions:   sessions,
 		Mailer:     mailer,
 		Audit:      rec,
 		Enc:        enc,

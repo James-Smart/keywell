@@ -31,9 +31,12 @@ const (
 	grantClientCredentials = "client_credentials"
 )
 
-// accessTokenType is the typ header of access tokens (RFC 9068 §2.1). ID
-// tokens carry "JWT", so one is never accepted in place of the other.
-const accessTokenType = "at+jwt"
+// The typ headers of access tokens (RFC 9068 §2.1) and ID tokens. They
+// differ, so one is never accepted in place of the other.
+const (
+	accessTokenType = "at+jwt"
+	idTokenType     = "JWT" // what KeyManager.Sign writes
+)
 
 // userIDClaim is a private access-token claim holding the Latch user ID.
 // sub depends on the application's subject mode and may be an email or an
@@ -516,41 +519,52 @@ func (p *Provider) ttl(app *model.Application, kind string) time.Duration {
 	return global
 }
 
-// parseAccessToken verifies raw as an access token from this issuer: a
-// compact RS256 JWS with typ at+jwt, signed by a key that still verifies,
-// with iss this issuer and exp in the future. The key is looked up on every
-// call, never cached, so a retired key stops working when its grace ends.
-// Numbers in the returned claims are json.Number.
+// parseAccessToken verifies raw as an access token from this issuer (see
+// verifyJWT) that has not expired. Numbers in the returned claims are
+// json.Number.
 func (p *Provider) parseAccessToken(raw string) (map[string]any, error) {
-	jws, err := jose.ParseSignedCompact(raw, []jose.SignatureAlgorithm{jose.RS256})
+	claims, err := p.verifyJWT(raw, accessTokenType)
 	if err != nil {
 		return nil, fmt.Errorf("access token: %w", err)
-	}
-	h := jws.Signatures[0].Header
-	if typ, _ := h.ExtraHeaders[jose.HeaderType].(string); typ != accessTokenType {
-		return nil, fmt.Errorf("access token: typ %q", typ)
-	}
-	pub, ok := p.d.Keys.PublicKey(h.KeyID)
-	if !ok {
-		return nil, fmt.Errorf("access token: no usable key %q", h.KeyID)
-	}
-	payload, err := jws.Verify(pub)
-	if err != nil {
-		return nil, fmt.Errorf("access token: %w", err)
-	}
-	dec := json.NewDecoder(bytes.NewReader(payload))
-	dec.UseNumber()
-	var claims map[string]any
-	if err := dec.Decode(&claims); err != nil {
-		return nil, fmt.Errorf("access token: claims: %w", err)
-	}
-	if claims["iss"] != p.issuer {
-		return nil, errors.New("access token: wrong issuer")
 	}
 	expNum, _ := claims["exp"].(json.Number)
 	exp, err := expNum.Int64()
 	if err != nil || !p.now().Before(time.Unix(exp, 0)) {
 		return nil, errors.New("access token: expired")
+	}
+	return claims, nil
+}
+
+// verifyJWT verifies raw as a token from this issuer: a compact RS256 JWS
+// with header typ, signed by a key that still verifies, with iss this
+// issuer. It does not check exp. The key is looked up on every call, never
+// cached, so a retired key stops working when its grace ends. Numbers in
+// the returned claims are json.Number.
+func (p *Provider) verifyJWT(raw, typ string) (map[string]any, error) {
+	jws, err := jose.ParseSignedCompact(raw, []jose.SignatureAlgorithm{jose.RS256})
+	if err != nil {
+		return nil, err
+	}
+	h := jws.Signatures[0].Header
+	if got, _ := h.ExtraHeaders[jose.HeaderType].(string); got != typ {
+		return nil, fmt.Errorf("typ %q, want %q", got, typ)
+	}
+	pub, ok := p.d.Keys.PublicKey(h.KeyID)
+	if !ok {
+		return nil, fmt.Errorf("no usable key %q", h.KeyID)
+	}
+	payload, err := jws.Verify(pub)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(payload))
+	dec.UseNumber()
+	var claims map[string]any
+	if err := dec.Decode(&claims); err != nil {
+		return nil, fmt.Errorf("claims: %w", err)
+	}
+	if claims["iss"] != p.issuer {
+		return nil, errors.New("wrong issuer")
 	}
 	return claims, nil
 }

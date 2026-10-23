@@ -179,7 +179,7 @@ func New(t *testing.T, opts ...Option) *Env {
 	}
 	keys.WithAudit(rec)
 	prov := oidc.NewProvider(oidc.Deps{
-		Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend, Now: clock.Now,
+		Cfg: cfg, Store: st, Keys: keys, Audit: rec, Log: log, Renderer: rend, Sessions: sessions, Now: clock.Now,
 	})
 
 	h := web.New(web.Deps{

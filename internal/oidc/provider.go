@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 type Renderer interface {
 	RenderError(w http.ResponseWriter, r *http.Request, status int, title, msg string)
 	RenderNoAccess(w http.ResponseWriter, r *http.Request, appName string)
+	RenderSignedOut(w http.ResponseWriter, r *http.Request)
 }
 
 // Deps are the collaborators the OpenID Connect endpoints use.
@@ -26,7 +28,12 @@ type Deps struct {
 	Audit    *audit.Recorder
 	Log      *slog.Logger
 	Renderer Renderer
-	Now      func() time.Time // nil means time.Now
+	// Sessions ends the browser's session at logout. It is satisfied by
+	// *session.Manager.
+	Sessions interface {
+		End(ctx context.Context, w http.ResponseWriter, r *http.Request) error
+	}
+	Now func() time.Time // nil means time.Now
 }
 
 // Provider serves the OpenID Connect endpoints.
@@ -59,9 +66,8 @@ func (p *Provider) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("/oauth/revoke", p.revoke)
 	mux.HandleFunc("GET /oauth/userinfo", p.userinfo)
 	mux.HandleFunc("POST /oauth/userinfo", p.userinfo)
-	// Not implemented yet, but it answers, so every address in the
-	// discovery document resolves.
-	mux.HandleFunc("/oauth/logout", unavailable)
+	mux.HandleFunc("GET /oauth/logout", p.logout)
+	mux.HandleFunc("POST /oauth/logout", p.logout)
 }
 
 func (p *Provider) now() time.Time { return p.d.Now().UTC() }
@@ -114,11 +120,6 @@ func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
 
 func (p *Provider) jwks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, "public, max-age=3600", p.d.Keys.JWKS())
-}
-
-// unavailable answers an endpoint that is not implemented yet.
-func unavailable(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, "no-store", map[string]string{"error": "temporarily_unavailable"})
 }
 
 // writeJSON writes v as a JSON response with the given status and
