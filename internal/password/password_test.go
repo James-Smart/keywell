@@ -162,6 +162,9 @@ func TestVerifyUnder100ms(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing test skipped in -short mode")
 	}
+	if raceEnabled {
+		t.Skip("timing test skipped under the race detector")
+	}
 	h, err := password.Hash(pw)
 	if err != nil {
 		t.Fatal(err)
