@@ -109,6 +109,96 @@ func metadataJSON(m map[string]any) map[string]any {
 	return m
 }
 
+// userJSON is a member. It has no password hash, TOTP secret or any other
+// secret.
+type userJSON struct {
+	ID                    string         `json:"id"`
+	Email                 string         `json:"email"`
+	Username              string         `json:"username"`
+	Name                  string         `json:"name"`
+	Status                string         `json:"status"`
+	IsActive              bool           `json:"is_active"`
+	IsAdmin               bool           `json:"is_admin"` // in any group with is_admin
+	Groups                []string       `json:"groups"`
+	Metadata              map[string]any `json:"metadata"`
+	TOTPEnrolled          bool           `json:"totp_enrolled"`
+	ImportedFromAuthentik bool           `json:"imported_from_authentik"`
+	LastLoginAt           *time.Time     `json:"last_login_at"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
+}
+
+// newUserJSON makes the JSON of a member from its record, status and groups.
+func newUserJSON(u *model.User, status model.UserStatus, groups []model.Group) userJSON {
+	admin := false
+	for _, g := range groups {
+		admin = admin || g.IsAdmin
+	}
+	return userJSON{
+		ID:                    u.ID,
+		Email:                 u.Email,
+		Username:              u.Username,
+		Name:                  u.Name,
+		Status:                string(status),
+		IsActive:              u.IsActive,
+		IsAdmin:               admin,
+		Groups:                groupNames(groups),
+		Metadata:              metadataJSON(u.Metadata),
+		TOTPEnrolled:          u.TOTPEnrolled(),
+		ImportedFromAuthentik: u.AuthentikUUID != "" || u.AuthentikPK != nil,
+		LastLoginAt:           utcOrNil(u.LastLoginAt),
+		CreatedAt:             u.CreatedAt.UTC(),
+		UpdatedAt:             u.UpdatedAt.UTC(),
+	}
+}
+
+// groupJSON is a group.
+type groupJSON struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	IsAdmin     bool           `json:"is_admin"`
+	RequireTOTP bool           `json:"require_totp"`
+	Metadata    map[string]any `json:"metadata"`
+	MemberCount int            `json:"member_count"` // members and service accounts
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
+// newGroupJSON makes the JSON of a group with its number of members.
+func newGroupJSON(g *model.Group, memberCount int) groupJSON {
+	return groupJSON{
+		ID:          g.ID,
+		Name:        g.Name,
+		Description: g.Description,
+		IsAdmin:     g.IsAdmin,
+		RequireTOTP: g.RequireTOTP,
+		Metadata:    metadataJSON(g.Metadata),
+		MemberCount: memberCount,
+		CreatedAt:   g.CreatedAt.UTC(),
+		UpdatedAt:   g.UpdatedAt.UTC(),
+	}
+}
+
+// groupMemberJSON is one line of a group's member list: a member or a
+// service account.
+type groupMemberJSON struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"` // "member" or "service_account"
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+}
+
+// newGroupMemberJSON makes the line of a user in a group's member list.
+func newGroupMemberJSON(u *model.User) groupMemberJSON {
+	kind := "member"
+	if u.Type == model.UserTypeService {
+		kind = "service_account"
+	}
+	return groupMemberJSON{ID: u.ID, Type: kind, Name: u.Name, Email: u.Email, Username: u.Username}
+}
+
 // utcOrNil returns t in UTC, or nil for nil.
 func utcOrNil(t *time.Time) *time.Time {
 	if t == nil {

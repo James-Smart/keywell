@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"latch/internal/admin"
+	"latch/internal/model"
 	"latch/internal/store"
 )
 
@@ -30,6 +31,9 @@ const (
 	msgEmailFailed        = "The email couldn't be sent. Check the email settings on the Settings page, then try again."
 	msgInternal           = "Something went wrong on our side. Please try again in a moment."
 	msgWholeNumber        = "Use a whole number of 1 or more."
+	msgInviteNotSent      = "The member was added, but the invitation email couldn't be sent. Check the email settings on the Settings page, then send it again with reset-email."
+	msgGroupsRequired     = "Send the complete list of groups, as names or IDs."
+	msgStatusUnknown      = "Use active, invited, needs_password, disabled, no_2fa or admins."
 )
 
 // errorJSON is the body of every error response.
@@ -81,6 +85,46 @@ func (h *handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 		h.d.Log.ErrorContext(r.Context(), "api: request failed", "method", r.Method, "path", r.URL.Path, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal", msgInternal)
 	}
+}
+
+// logUnsent logs why an email to member u was not sent, without their
+// address, for whoever fixes the email settings. fail and the admin
+// service leave this to the handler.
+func (h *handler) logUnsent(r *http.Request, what string, u *model.User, err error) {
+	h.d.Log.ErrorContext(r.Context(), what, "user_id", u.ID, "error", redactAddress(err.Error(), u.Email))
+}
+
+// failUnsent logs why an email to u was not sent, then answers 502
+// email_failed.
+func (h *handler) failUnsent(w http.ResponseWriter, r *http.Request, what string, u *model.User, err error) {
+	h.logUnsent(r, what, u, err)
+	h.fail(w, r, err)
+}
+
+// redactAddress replaces address in msg, as given or in lower case, with
+// "[recipient]".
+func redactAddress(msg, address string) string {
+	if address == "" {
+		return msg
+	}
+	msg = strings.ReplaceAll(msg, address, "[recipient]")
+	return strings.ReplaceAll(msg, strings.ToLower(address), "[recipient]")
+}
+
+// metadataPatch reads the metadata of a request body: nil when the field
+// is absent or null (leave it alone, or use the default), else the object.
+// A value that isn't an object is answered 422 invalid, naming metadata,
+// and ok is false.
+func (h *handler) metadataPatch(w http.ResponseWriter, r *http.Request, raw json.RawMessage) (m *map[string]any, ok bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, true
+	}
+	parsed, invalid := admin.ParseMetadata(string(raw))
+	if invalid != nil {
+		h.fail(w, r, invalid)
+		return nil, false
+	}
+	return &parsed, true
 }
 
 // decode reads the request body, which must be one JSON object with only

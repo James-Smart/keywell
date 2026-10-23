@@ -55,6 +55,24 @@ type route struct {
 var routes = []route{
 	{http.MethodGet, "/openapi.json", (*handler).openAPI}, // public: served before authentication
 	{http.MethodGet, "/me", (*handler).me},
+	{http.MethodGet, "/users", (*handler).listUsers},
+	{http.MethodPost, "/users", (*handler).createUser},
+	{http.MethodGet, "/users/{id}", (*handler).getUser},
+	{http.MethodPatch, "/users/{id}", (*handler).patchUser},
+	{http.MethodDelete, "/users/{id}", (*handler).deleteUser},
+	{http.MethodPost, "/users/{id}/reset-email", (*handler).resetEmail},
+	{http.MethodPost, "/users/{id}/password", (*handler).setUserPassword},
+	{http.MethodPost, "/users/{id}/totp/clear", (*handler).clearUserTOTP},
+	{http.MethodPost, "/users/{id}/sessions/revoke", (*handler).revokeUserSessions},
+	{http.MethodPut, "/users/{id}/groups", (*handler).setUserGroups},
+	{http.MethodPost, "/users/{id}/groups/{group}", (*handler).addUserGroup},
+	{http.MethodDelete, "/users/{id}/groups/{group}", (*handler).removeUserGroup},
+	{http.MethodGet, "/groups", (*handler).listGroups},
+	{http.MethodPost, "/groups", (*handler).createGroup},
+	{http.MethodGet, "/groups/{id}", (*handler).getGroup},
+	{http.MethodPatch, "/groups/{id}", (*handler).patchGroup},
+	{http.MethodDelete, "/groups/{id}", (*handler).deleteGroup},
+	{http.MethodGet, "/groups/{id}/members", (*handler).listGroupMembers},
 }
 
 // handler holds what the API's handlers share.
