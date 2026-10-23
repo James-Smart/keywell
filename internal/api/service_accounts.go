@@ -155,9 +155,7 @@ func (h *handler) listTokens(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	total := len(tokens)
-	tokens = tokens[min((page-1)*perPage, total):]
-	tokens = tokens[:min(perPage, len(tokens))]
+	tokens, total := pageOf(tokens, page, perPage)
 	out := make([]tokenJSON, len(tokens))
 	for i := range tokens {
 		out[i] = newTokenJSON(&tokens[i])

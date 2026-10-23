@@ -1274,21 +1274,21 @@
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "id_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "refresh_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "launch_url": {
                     "type": "string"
@@ -1410,7 +1410,7 @@
       "patch": {
         "operationId": "patchApp",
         "summary": "Change an application",
-        "description": "Send only the fields to change; a null field is left alone. Changing client_type to confidential makes a secret, which is in the response and can't be shown again. Changing it to public removes the secret. Replacing icon_url deletes the old icon file if the app uploaded it.",
+        "description": "Send only the fields to change; a field left out is kept. Sending null for a lifetime goes back to the global default, and null for service_account_id turns machine sign-in off. Changing client_type to confidential makes a secret, which is in the response and can't be shown again. Changing it to public removes the secret. Replacing icon_url deletes the old icon file if the app uploaded it.",
         "parameters": [
           {
             "name": "id",
@@ -1479,21 +1479,21 @@
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "id_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "refresh_token_ttl": {
                     "type": [
                       "integer",
                       "null"
                     ],
-                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, leave it out to keep it, and send null or 0 to go back to the default."
                   },
                   "launch_url": {
                     "type": "string"

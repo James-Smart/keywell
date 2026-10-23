@@ -34,6 +34,8 @@ const (
 	msgInviteNotSent      = "The member was added, but the invitation email couldn't be sent. Check the email settings on the Settings page, then send it again with reset-email."
 	msgGroupsRequired     = "Send the complete list of groups, as names or IDs."
 	msgStatusUnknown      = "Use active, invited, needs_password, disabled, no_2fa or admins."
+	msgBadSeconds         = "Use a whole number of seconds, or null for the default."
+	msgBadServiceAccount  = "Send a service account ID, or null for none."
 	msgBadTime            = "Use a date and time like 2026-03-01T09:00:00Z, or a date like 2026-03-01."
 	msgBadExpiry          = "Use a date and time like 2026-03-01T09:00:00Z, or leave it out for no expiry."
 )
@@ -181,6 +183,16 @@ func newList[T any](items []T, page, perPage, total int) listJSON[T] {
 		items = []T{}
 	}
 	return listJSON[T]{Items: items, Page: page, PerPage: perPage, Total: total}
+}
+
+// pageOf returns the given page of s, which is all of a list held in
+// memory, and the length of s. A page past the end is empty. page and
+// perPage must come from paging, which caps page so the arithmetic here
+// cannot overflow.
+func pageOf[T any](s []T, page, perPage int) (items []T, total int) {
+	total = len(s)
+	s = s[min((page-1)*perPage, total):]
+	return s[:min(perPage, len(s))], total
 }
 
 // paging reads ?page= and ?per_page=, whole numbers of 1 or more: page

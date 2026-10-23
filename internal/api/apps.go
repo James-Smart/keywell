@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -110,9 +111,7 @@ func (h *handler) listApps(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	total := len(apps)
-	apps = apps[min((page-1)*perPage, total):]
-	apps = apps[:min(perPage, len(apps))]
+	apps, total := pageOf(apps, page, perPage)
 	out := make([]appJSON, len(apps))
 	for i := range apps {
 		out[i] = newAppJSON(&apps[i], names)
@@ -170,8 +169,9 @@ func (h *handler) getApp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// patchApp answers PATCH /apps/{id}. A null field is left alone, like an
-// absent one; a lifetime of 0 goes back to the global default. The
+// patchApp answers PATCH /apps/{id}. A field left out is kept. As in POST,
+// null for a lifetime (or 0) means the global default, and null for
+// service_account_id means none; other fields treat null as absent. The
 // response has a client_secret when the app became confidential.
 func (h *handler) patchApp(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -182,14 +182,15 @@ func (h *handler) patchApp(w http.ResponseWriter, r *http.Request) {
 		PostLogoutRedirectURIs *[]string `json:"post_logout_redirect_uris"`
 		AllowedGroups          *[]string `json:"allowed_groups"`
 		SubjectMode            *string   `json:"subject_mode"`
-		AccessTokenTTL         *int64    `json:"access_token_ttl"`
-		IDTokenTTL             *int64    `json:"id_token_ttl"`
-		RefreshTokenTTL        *int64    `json:"refresh_token_ttl"`
 		LaunchURL              *string   `json:"launch_url"`
 		IconURL                *string   `json:"icon_url"`
 		Description            *string   `json:"description"`
 		ShowTile               *bool     `json:"show_tile"`
-		ServiceAccountID       *string   `json:"service_account_id"`
+		// Raw, to tell null (reset) from absent (leave alone).
+		AccessTokenTTL   json.RawMessage `json:"access_token_ttl"`
+		IDTokenTTL       json.RawMessage `json:"id_token_ttl"`
+		RefreshTokenTTL  json.RawMessage `json:"refresh_token_ttl"`
+		ServiceAccountID json.RawMessage `json:"service_account_id"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -202,7 +203,7 @@ func (h *handler) patchApp(w http.ResponseWriter, r *http.Request) {
 		Name: in.Name, Slug: in.Slug,
 		RedirectURIs: in.RedirectURIs, PostLogoutRedirectURIs: in.PostLogoutRedirectURIs,
 		LaunchURL: in.LaunchURL, IconURL: in.IconURL, Description: in.Description,
-		ShowTile: in.ShowTile, ServiceAccountID: in.ServiceAccountID,
+		ShowTile: in.ShowTile,
 	}
 	if in.ClientType != nil {
 		v := model.ClientType(*in.ClientType)
@@ -212,14 +213,37 @@ func (h *handler) patchApp(w http.ResponseWriter, r *http.Request) {
 		v := model.SubjectMode(*in.SubjectMode)
 		patch.SubjectMode = &v
 	}
+	bad := map[string]string{}
 	for _, t := range []struct {
-		in  *int64
-		out **time.Duration
-	}{{in.AccessTokenTTL, &patch.AccessTokenTTL}, {in.IDTokenTTL, &patch.IDTokenTTL}, {in.RefreshTokenTTL, &patch.RefreshTokenTTL}} {
-		if t.in != nil {
-			d := duration(t.in)
-			*t.out = &d
+		field string
+		raw   json.RawMessage
+		out   **time.Duration
+	}{
+		{"access_token_ttl", in.AccessTokenTTL, &patch.AccessTokenTTL},
+		{"id_token_ttl", in.IDTokenTTL, &patch.IDTokenTTL},
+		{"refresh_token_ttl", in.RefreshTokenTTL, &patch.RefreshTokenTTL},
+	} {
+		if len(t.raw) == 0 {
+			continue // absent: leave alone
 		}
+		var secs *int64 // null: the global default
+		if err := json.Unmarshal(t.raw, &secs); err != nil {
+			bad[t.field] = msgBadSeconds
+			continue
+		}
+		d := duration(secs)
+		*t.out = &d
+	}
+	if len(in.ServiceAccountID) > 0 {
+		var id string // null: machine sign-in off
+		if err := json.Unmarshal(in.ServiceAccountID, &id); err != nil {
+			bad["service_account_id"] = msgBadServiceAccount
+		}
+		patch.ServiceAccountID = &id
+	}
+	if len(bad) > 0 {
+		writeInvalid(w, bad)
+		return
 	}
 	if in.AllowedGroups != nil {
 		ids, ok := h.groupIDs(w, r, *in.AllowedGroups)

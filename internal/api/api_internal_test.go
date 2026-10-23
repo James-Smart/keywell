@@ -139,3 +139,26 @@ func TestListItemsNeverNull(t *testing.T) {
 		t.Errorf("got %s, want %s", out, want)
 	}
 }
+
+func TestPageOf(t *testing.T) {
+	nums := []int{1, 2, 3, 4, 5}
+	for _, tc := range []struct {
+		name          string
+		in            []int
+		page, perPage int
+		want          []int
+		total         int
+	}{
+		{"empty", nil, 1, 50, nil, 0},
+		{"first page", nums, 1, 2, []int{1, 2}, 5},
+		{"last partial page", nums, 3, 2, []int{5}, 5},
+		{"past the end", nums, 4, 2, nil, 5},
+		{"max page", nums, maxPage, maxPerPage, nil, 5},
+		{"everything", nums, 1, maxPerPage, nums, 5},
+	} {
+		got, total := pageOf(tc.in, tc.page, tc.perPage)
+		if total != tc.total || len(got) != len(tc.want) || (len(got) > 0 && got[0] != tc.want[0]) {
+			t.Errorf("%s: got %v, %d; want %v, %d", tc.name, got, total, tc.want, tc.total)
+		}
+	}
+}

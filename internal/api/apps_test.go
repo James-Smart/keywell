@@ -48,8 +48,12 @@ func TestAPIApps(t *testing.T) {
 	if _, has := body["client_secret"]; resp.StatusCode != 200 || has || len(body["redirect_uris"].([]any)) != 2 {
 		t.Errorf("patch: %d %v", resp.StatusCode, body)
 	}
-	if body["access_token_ttl"] != float64(600) {
-		t.Errorf("null ttl in a PATCH should leave it alone: %v", body["access_token_ttl"])
+	if body["access_token_ttl"] != nil {
+		t.Errorf("null ttl in a PATCH should reset it: %v", body["access_token_ttl"])
+	}
+	body, resp = env.API(t, raw, http.MethodPatch, apiApps+"/"+id, map[string]any{"access_token_ttl": 600})
+	if resp.StatusCode != 200 || body["access_token_ttl"] != float64(600) {
+		t.Errorf("set ttl: %d %v", resp.StatusCode, body)
 	}
 	body, resp = env.API(t, raw, http.MethodPatch, apiApps+"/"+id, map[string]any{"access_token_ttl": 0})
 	if resp.StatusCode != 200 || body["access_token_ttl"] != nil {
@@ -79,6 +83,43 @@ func TestAPIApps(t *testing.T) {
 	}
 	body, resp = env.API(t, raw, http.MethodGet, apiApps+"/"+id, nil)
 	assertError(t, body, resp, 404, "not_found")
+}
+
+// Ruling 12: in an app PATCH, absent leaves lifetimes and service_account_id
+// alone, and null resets them.
+func TestAPIAppPatchNull(t *testing.T) {
+	env := testenv.New(t)
+	raw, acct := env.APIToken(t, "door", model.APITokenScopeAdmin)
+	body, resp := env.API(t, raw, http.MethodPost, apiApps, map[string]any{
+		"name": "Wiki", "client_type": "confidential", "redirect_uris": []string{"https://a.example.org/cb"},
+		"access_token_ttl": 600, "id_token_ttl": 700, "refresh_token_ttl": 800, "service_account_id": acct.ID})
+	if resp.StatusCode != 201 || body["service_account_id"] != acct.ID {
+		t.Fatalf("create: %d %v", resp.StatusCode, body)
+	}
+	url := apiApps + "/" + body["id"].(string)
+
+	body, resp = env.API(t, raw, http.MethodPatch, url, map[string]any{"description": "x"})
+	if resp.StatusCode != 200 || body["access_token_ttl"] != float64(600) || body["id_token_ttl"] != float64(700) ||
+		body["refresh_token_ttl"] != float64(800) || body["service_account_id"] != acct.ID {
+		t.Errorf("absent should leave alone: %d %v", resp.StatusCode, body)
+	}
+	for _, field := range []string{"access_token_ttl", "id_token_ttl", "refresh_token_ttl", "service_account_id"} {
+		body, resp = env.API(t, raw, http.MethodPatch, url, map[string]any{field: nil})
+		if resp.StatusCode != 200 || body[field] != nil {
+			t.Errorf("null %s: %d %v", field, resp.StatusCode, body)
+		}
+	}
+	body, resp = env.API(t, raw, http.MethodGet, url, nil)
+	if body["access_token_ttl"] != nil || body["id_token_ttl"] != nil || body["refresh_token_ttl"] != nil || body["service_account_id"] != nil {
+		t.Errorf("after nulls: %v", body)
+	}
+	body, resp = env.API(t, raw, http.MethodPatch, url, map[string]any{"access_token_ttl": "soon"})
+	assertError(t, body, resp, 422, "invalid")
+	if _, ok := fieldsOf(body)["access_token_ttl"]; !ok {
+		t.Errorf("fields %v", body)
+	}
+	body, resp = env.API(t, raw, http.MethodPatch, url, map[string]any{"service_account_id": 5})
+	assertError(t, body, resp, 422, "invalid")
 }
 
 // stringsOf returns the strings of body[key], which is an array.

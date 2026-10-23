@@ -52,9 +52,7 @@ func (h *handler) listGroups(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	total := len(rows)
-	rows = rows[min((page-1)*perPage, total):]
-	rows = rows[:min(perPage, len(rows))]
+	rows, total := pageOf(rows, page, perPage)
 	out := make([]groupJSON, len(rows))
 	for i, row := range rows {
 		out[i] = newGroupJSON(&row.Group, row.MemberCount)
