@@ -122,3 +122,104 @@ func (s *Store) RemoveMember(ctx context.Context, userID, groupID string) error 
 	}
 	return nil
 }
+
+// ErrLastAdminGroup is returned when a change would leave no group with is_admin.
+var ErrLastAdminGroup = errors.New("store: last admin group")
+
+// lastAdminOK is true when the group may stop being an admin group or be
+// deleted: it is not one, or another admin group exists. It reads the row
+// the enclosing statement targets, so the check and the write are one statement.
+const lastAdminOK = `(is_admin = 0 OR (SELECT COUNT(*) FROM groups WHERE is_admin = 1) > 1)`
+
+// GroupRow is a group with its member count.
+type GroupRow struct {
+	model.Group
+	MemberCount int // members and service accounts
+}
+
+// ListGroupsWithCounts returns every group ordered by name with its member count.
+func (s *Store) ListGroupsWithCounts(ctx context.Context) ([]GroupRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+groupCols+`,
+		(SELECT COUNT(*) FROM memberships m WHERE m.group_id = groups.id)
+		FROM groups ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("store: list groups with counts: %w", err)
+	}
+	defer rows.Close()
+	var out []GroupRow
+	for rows.Next() {
+		var n int
+		g, err := scanGroup(extraScan{rows, []any{&n}})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, GroupRow{*g, n})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: list groups with counts: %w", err)
+	}
+	return out, nil
+}
+
+// UpdateGroup writes the group's name, description, flags and metadata. It
+// returns ErrNotFound if the group is gone, ErrConflict if the name is taken,
+// and ErrLastAdminGroup if it would remove is_admin from the only admin group.
+func (s *Store) UpdateGroup(ctx context.Context, g *model.Group) error {
+	meta, err := marshalMeta(g.Metadata)
+	if err != nil {
+		return err
+	}
+	g.UpdatedAt = time.Now().UTC()
+	q := `UPDATE groups SET name=?, description=?, is_admin=?, require_totp=?, metadata=?, updated_at=? WHERE id=?`
+	if !g.IsAdmin {
+		q += ` AND ` + lastAdminOK
+	}
+	res, err := s.db.ExecContext(ctx, q, g.Name, g.Description, boolInt(g.IsAdmin), boolInt(g.RequireTOTP),
+		meta, formatTime(g.UpdatedAt), g.ID)
+	return s.guardedResult(ctx, "store: update group", g.ID, res, err)
+}
+
+// DeleteGroup removes the group; memberships and application grants go with
+// it. It returns ErrNotFound if the group is gone and ErrLastAdminGroup if it
+// is the only admin group.
+func (s *Store) DeleteGroup(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM groups WHERE id = ? AND `+lastAdminOK, id)
+	return s.guardedResult(ctx, "store: delete group", id, res, err)
+}
+
+// guardedResult reports the outcome of a group write guarded by lastAdminOK.
+// When no row changed, the row is read back: gone means ErrNotFound, still
+// there means the guard refused.
+func (s *Store) guardedResult(ctx context.Context, op, id string, res sql.Result, err error) error {
+	err = oneRow(op, res, err)
+	if !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if _, err := s.GetGroup(ctx, id); err != nil {
+		return err
+	}
+	return ErrLastAdminGroup
+}
+
+// ReplaceUserGroups makes groupIDs the user's complete set of memberships in
+// one transaction. An unknown group fails the foreign key and leaves the
+// previous memberships in place.
+func (s *Store) ReplaceUserGroups(ctx context.Context, userID string, groupIDs []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: replace user groups: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memberships WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("store: replace user groups: %w", err)
+	}
+	for _, g := range groupIDs {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?,?)`, userID, g); err != nil {
+			return fmt.Errorf("store: replace user groups: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: replace user groups: %w", err)
+	}
+	return nil
+}

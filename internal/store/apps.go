@@ -274,6 +274,19 @@ func (s *Store) UpdateApplication(ctx context.Context, a *model.Application) err
 	return tx.Commit()
 }
 
+// DeleteApplication removes the application; its authorization codes, refresh
+// tokens and group grants go with it. ErrNotFound if it is already gone.
+func (s *Store) DeleteApplication(ctx context.Context, id string) error {
+	n, err := s.deleteRows(ctx, "store: delete application", `DELETE FROM applications WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListTileApplicationsForUser returns tiles the user may launch: ShowTile with a
 // launch URL, and either no group restriction or membership of an allowed group.
 func (s *Store) ListTileApplicationsForUser(ctx context.Context, userID string) ([]model.Application, error) {

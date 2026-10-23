@@ -165,3 +165,35 @@ func TestListTileApplicationsForUser(t *testing.T) {
 		t.Fatalf("group ids not loaded: %+v", apps[1])
 	}
 }
+
+func TestDeleteApplication(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	u, a := oauthFixture(t, s)
+	g := mkGroup(t, s, "G")
+	a.AllowedGroupIDs = []string{g.ID}
+	if err := s.UpdateApplication(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := s.CreateAuthCode(ctx, &model.AuthCode{CodeHash: "c", ApplicationID: a.ID, UserID: u.ID, SessionID: "s",
+		RedirectURI: "https://x/cb", Scope: "openid", AuthTime: now, ExpiresAt: now.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateRefreshToken(ctx, &model.RefreshToken{TokenHash: "r", FamilyID: "f", ApplicationID: a.ID, UserID: u.ID,
+		Scope: "openid", AuthTime: now, CreatedAt: now, ExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteApplication(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, tbl := range []string{"auth_codes", "refresh_tokens", "application_groups"} {
+		var n int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM `+tbl+` WHERE application_id = ?`, a.ID).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("%s: n=%d err=%v", tbl, n, err)
+		}
+	}
+	if err := s.DeleteApplication(ctx, a.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second delete: %v", err)
+	}
+}

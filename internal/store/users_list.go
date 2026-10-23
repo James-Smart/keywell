@@ -54,20 +54,27 @@ const statusExpr = `CASE
 // likeEscaper makes a search string literal inside LIKE ... ESCAPE '\'.
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
+// normPaging applies the paging defaults shared by the list filters: Page < 1
+// means 1, perPage 0 (or less) means 50, and perPage is capped at 500.
+func normPaging(page, perPage int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 50
+	}
+	if perPage > 500 {
+		perPage = 500
+	}
+	return page, perPage
+}
+
 // ListUsers returns one page of users matching f, ordered by name, then
 // email, then id, each with its status and groups.
 func (s *Store) ListUsers(ctx context.Context, f UserFilter) (UserPage, error) {
 	const op = "store: list users"
-	page := UserPage{Page: f.Page, PerPage: f.PerPage}
-	if page.Page < 1 {
-		page.Page = 1
-	}
-	if page.PerPage < 1 {
-		page.PerPage = 50
-	}
-	if page.PerPage > 500 {
-		page.PerPage = 500
-	}
+	page := UserPage{}
+	page.Page, page.PerPage = normPaging(f.Page, f.PerPage)
 	now := formatTime(time.Now())
 
 	var conds []string
