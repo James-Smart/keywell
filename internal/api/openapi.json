@@ -1162,6 +1162,1110 @@
           }
         }
       }
+    },
+    "/apps": {
+      "get": {
+        "operationId": "listApps",
+        "summary": "List applications",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of applications, ordered by name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/List"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/App"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createApp",
+        "summary": "Add an application",
+        "description": "The response of a confidential app has its client_secret, which can't be shown again.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "description": "Lower-case letters, numbers and hyphens. Made from the name when empty."
+                  },
+                  "client_type": {
+                    "type": "string",
+                    "enum": [
+                      "confidential",
+                      "public"
+                    ]
+                  },
+                  "redirect_uris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "post_logout_redirect_uris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allowed_groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Group names or IDs. Empty means any active member."
+                  },
+                  "subject_mode": {
+                    "type": "string",
+                    "enum": [
+                      "id",
+                      "email",
+                      "username",
+                      "authentik_uuid",
+                      "authentik_uid",
+                      "authentik_pk"
+                    ],
+                    "description": "Defaults to id."
+                  },
+                  "access_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "id_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "refresh_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "launch_url": {
+                    "type": "string"
+                  },
+                  "icon_url": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "show_tile": {
+                    "type": "boolean"
+                  },
+                  "service_account_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "The ID of the service account the app signs in as by itself. Only apps with a secret can."
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "client_type",
+                  "redirect_uris"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new application, with client_secret when it keeps a secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/App"
+                    },
+                    {
+                      "properties": {
+                        "client_secret": {
+                          "type": "string",
+                          "description": "Only in this response. It can't be shown again."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/apps/{id}": {
+      "get": {
+        "operationId": "getApp",
+        "summary": "Get an application",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The application's ID, or slug:<slug>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The application. It never includes the client secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/App"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchApp",
+        "summary": "Change an application",
+        "description": "Send only the fields to change; a null field is left alone. Changing client_type to confidential makes a secret, which is in the response and can't be shown again. Changing it to public removes the secret. Replacing icon_url deletes the old icon file if the app uploaded it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The application's ID, or slug:<slug>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "description": "Lower-case letters, numbers and hyphens. Made from the name when empty."
+                  },
+                  "client_type": {
+                    "type": "string",
+                    "enum": [
+                      "confidential",
+                      "public"
+                    ]
+                  },
+                  "redirect_uris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "post_logout_redirect_uris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allowed_groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Group names or IDs. Empty means any active member."
+                  },
+                  "subject_mode": {
+                    "type": "string",
+                    "enum": [
+                      "id",
+                      "email",
+                      "username",
+                      "authentik_uuid",
+                      "authentik_uid",
+                      "authentik_pk"
+                    ],
+                    "description": "Defaults to id."
+                  },
+                  "access_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "id_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "refresh_token_ttl": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Seconds, from 60 to 86400 (a refresh token can last up to the longest refresh lifetime in the settings). Leave out, or send 0, for the global default. In a PATCH, null leaves it alone and 0 goes back to the default."
+                  },
+                  "launch_url": {
+                    "type": "string"
+                  },
+                  "icon_url": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "show_tile": {
+                    "type": "boolean"
+                  },
+                  "service_account_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "The ID of the service account the app signs in as by itself. Only apps with a secret can."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The application, with client_secret when it became confidential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/App"
+                    },
+                    {
+                      "properties": {
+                        "client_secret": {
+                          "type": "string",
+                          "description": "Only in this response. It can't be shown again."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteApp",
+        "summary": "Delete an application",
+        "description": "Also deletes the app's uploaded icon file.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The application's ID, or slug:<slug>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted. There is no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/apps/{id}/rotate-secret": {
+      "post": {
+        "operationId": "rotateAppSecret",
+        "summary": "Make a new client secret",
+        "description": "The old secret stops working at once. Only apps that keep a secret have one; others get 409.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The application's ID, or slug:<slug>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new secret. It can't be shown again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "client_secret"
+                  ],
+                  "properties": {
+                    "client_secret": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/service-accounts": {
+      "get": {
+        "operationId": "listServiceAccounts",
+        "summary": "List service accounts",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Only service accounts whose name or username contains this text.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of service accounts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/List"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/ServiceAccount"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createServiceAccount",
+        "summary": "Add a service account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Group names or IDs. In a PATCH this is the complete list."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Any JSON object, at most 8192 bytes."
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "username"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new service account. It has no tokens yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/service-accounts/{id}": {
+      "get": {
+        "operationId": "getServiceAccount",
+        "summary": "Get a service account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The service account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccount"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchServiceAccount",
+        "summary": "Change a service account",
+        "description": "Send only the fields to change.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Group names or IDs. In a PATCH this is the complete list."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Any JSON object, at most 8192 bytes."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The service account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteServiceAccount",
+        "summary": "Delete a service account",
+        "description": "Its tokens stop working at once. A token can delete its own account.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted. There is no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/service-accounts/{id}/tokens": {
+      "get": {
+        "operationId": "listTokens",
+        "summary": "List a service account's tokens",
+        "description": "Newest first. The tokens themselves are never shown.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/List"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/Token"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createToken",
+        "summary": "Make an API token",
+        "description": "The response has the token, which can't be shown again.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "scope"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "read"
+                    ]
+                  },
+                  "expires_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "RFC 3339, in the future. Leave out for a token that doesn't expire."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new token and its raw value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Token"
+                    },
+                    {
+                      "properties": {
+                        "token": {
+                          "type": "string",
+                          "description": "Only in this response. It can't be shown again."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/service-accounts/{id}/tokens/{tid}": {
+      "delete": {
+        "operationId": "deleteToken",
+        "summary": "Revoke an API token",
+        "description": "The token stops working at once.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The service account's ID, or username:<name>.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tid",
+            "in": "path",
+            "required": true,
+            "description": "The token's ID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked. There is no body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "operationId": "listAudit",
+        "summary": "Read the audit log",
+        "description": "Every event, newest first. Repeated failed sign-ins are not combined.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Events from this time on. RFC 3339, or a date (YYYY-MM-DD, UTC).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Events before this time. RFC 3339, or a date (YYYY-MM-DD, UTC), which includes that whole day.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "description": "Only events by this actor ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Only actions starting with this, such as user. or login.failure.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Only events about this target ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Only events whose summary contains this text.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of events, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/List"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/AuditEvent"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1230,7 +2334,7 @@
           "icon_url": { "type": "string" },
           "description": { "type": "string" },
           "show_tile": { "type": "boolean", "description": "Shown on members' home page." },
-          "service_account_id": { "type": "string", "description": "The service account the app signs in as by itself. Empty when it can't." },
+          "service_account_id": { "type": ["string", "null"], "description": "The service account the app signs in as by itself. Null when it can't." },
           "client_secret": { "type": "string", "description": "Only in the response that made it. It can't be shown again." },
           "created_at": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" }

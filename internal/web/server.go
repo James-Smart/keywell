@@ -124,7 +124,7 @@ func New(d Deps) http.Handler {
 	root.Handle("GET /static/", staticFiles())
 	root.HandleFunc("GET /static/logo", s.logo)
 	root.HandleFunc("GET /icons/{name}", s.serveIcon)
-	root.Handle("/api/", api.New(api.Deps{Admin: s.admin, Store: d.Store, Log: d.Log, Now: s.d.Now}))
+	root.Handle("/api/", api.New(api.Deps{Admin: s.admin, Store: d.Store, Log: d.Log, Now: s.d.Now, DataDir: d.Cfg.DataDir}))
 	root.Handle("/", d.Sessions.Middleware(pages))
 
 	var h http.Handler = root

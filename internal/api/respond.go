@@ -34,6 +34,8 @@ const (
 	msgInviteNotSent      = "The member was added, but the invitation email couldn't be sent. Check the email settings on the Settings page, then send it again with reset-email."
 	msgGroupsRequired     = "Send the complete list of groups, as names or IDs."
 	msgStatusUnknown      = "Use active, invited, needs_password, disabled, no_2fa or admins."
+	msgBadTime            = "Use a date and time like 2026-03-01T09:00:00Z, or a date like 2026-03-01."
+	msgBadExpiry          = "Use a date and time like 2026-03-01T09:00:00Z, or leave it out for no expiry."
 )
 
 // errorJSON is the body of every error response.

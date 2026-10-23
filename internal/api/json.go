@@ -199,6 +199,111 @@ func newGroupMemberJSON(u *model.User) groupMemberJSON {
 	return groupMemberJSON{ID: u.ID, Type: kind, Name: u.Name, Email: u.Email, Username: u.Username}
 }
 
+// appJSON is an application. The client secret is never part of it; the
+// responses that make or replace one add it.
+type appJSON struct {
+	ID                     string    `json:"id"`
+	Name                   string    `json:"name"`
+	Slug                   string    `json:"slug"`
+	ClientID               string    `json:"client_id"`
+	ClientType             string    `json:"client_type"`
+	RedirectURIs           []string  `json:"redirect_uris"`
+	PostLogoutRedirectURIs []string  `json:"post_logout_redirect_uris"`
+	AllowedGroups          []string  `json:"allowed_groups"` // group names; empty means any active member
+	SubjectMode            string    `json:"subject_mode"`
+	AccessTokenTTL         *int64    `json:"access_token_ttl"` // seconds; null is the global default
+	IDTokenTTL             *int64    `json:"id_token_ttl"`
+	RefreshTokenTTL        *int64    `json:"refresh_token_ttl"`
+	LaunchURL              string    `json:"launch_url"`
+	IconURL                string    `json:"icon_url"`
+	Description            string    `json:"description"`
+	ShowTile               bool      `json:"show_tile"`
+	ServiceAccountID       *string   `json:"service_account_id"` // null when the app can't sign in by itself
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+// newAppJSON makes the JSON of an application. groupNameByID maps group IDs
+// to names; an allowed group missing from it is left out.
+func newAppJSON(a *model.Application, groupNameByID map[string]string) appJSON {
+	allowed := make([]string, 0, len(a.AllowedGroupIDs))
+	for _, id := range a.AllowedGroupIDs {
+		if name, ok := groupNameByID[id]; ok {
+			allowed = append(allowed, name)
+		}
+	}
+	var serviceAccount *string
+	if a.ServiceAccountID != "" {
+		serviceAccount = &a.ServiceAccountID
+	}
+	return appJSON{
+		ID:                     a.ID,
+		Name:                   a.Name,
+		Slug:                   a.Slug,
+		ClientID:               a.ClientID,
+		ClientType:             string(a.ClientType),
+		RedirectURIs:           nonNil(a.RedirectURIs),
+		PostLogoutRedirectURIs: nonNil(a.PostLogoutRedirectURIs),
+		AllowedGroups:          allowed,
+		SubjectMode:            string(a.SubjectMode),
+		AccessTokenTTL:         seconds(a.AccessTokenTTL),
+		IDTokenTTL:             seconds(a.IDTokenTTL),
+		RefreshTokenTTL:        seconds(a.RefreshTokenTTL),
+		LaunchURL:              a.LaunchURL,
+		IconURL:                a.IconURL,
+		Description:            a.Description,
+		ShowTile:               a.ShowTile,
+		ServiceAccountID:       serviceAccount,
+		CreatedAt:              a.CreatedAt.UTC(),
+		UpdatedAt:              a.UpdatedAt.UTC(),
+	}
+}
+
+// nonNil returns s, or an empty slice for nil, so JSON shows [] not null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// seconds returns d in whole seconds, or nil for 0 (the global default).
+func seconds(d time.Duration) *int64 {
+	if d == 0 {
+		return nil
+	}
+	s := int64(d / time.Second)
+	return &s
+}
+
+// auditEventJSON is one audit event, as stored.
+type auditEventJSON struct {
+	ID         string         `json:"id"`
+	At         time.Time      `json:"at"`
+	ActorType  string         `json:"actor_type"`
+	ActorID    string         `json:"actor_id"`
+	Action     string         `json:"action"`
+	TargetType string         `json:"target_type"`
+	TargetID   string         `json:"target_id"`
+	Summary    string         `json:"summary"`
+	Detail     map[string]any `json:"detail"`
+}
+
+// newAuditEventJSON makes the JSON of an audit event.
+func newAuditEventJSON(e *model.AuditEvent) auditEventJSON {
+	return auditEventJSON{
+		ID:         e.ID,
+		At:         e.At.UTC(),
+		ActorType:  string(e.ActorType),
+		ActorID:    e.ActorID,
+		Action:     e.Action,
+		TargetType: e.TargetType,
+		TargetID:   e.TargetID,
+		Summary:    e.Summary,
+		Detail:     metadataJSON(e.Detail),
+	}
+}
+
 // utcOrNil returns t in UTC, or nil for nil.
 func utcOrNil(t *time.Time) *time.Time {
 	if t == nil {

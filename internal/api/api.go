@@ -31,6 +31,9 @@ type Deps struct {
 	Store *store.Store
 	Log   *slog.Logger
 	Now   func() time.Time // nil = time.Now; also the rate limiter's clock
+	// DataDir is the data directory, where app icon files live: deleting an
+	// app, or giving it another icon, removes the icon file it owned.
+	DataDir string
 }
 
 // prefix is the base path; route paths are relative to it.
@@ -73,6 +76,21 @@ var routes = []route{
 	{http.MethodPatch, "/groups/{id}", (*handler).patchGroup},
 	{http.MethodDelete, "/groups/{id}", (*handler).deleteGroup},
 	{http.MethodGet, "/groups/{id}/members", (*handler).listGroupMembers},
+	{http.MethodGet, "/apps", (*handler).listApps},
+	{http.MethodPost, "/apps", (*handler).createApp},
+	{http.MethodGet, "/apps/{id}", (*handler).getApp},
+	{http.MethodPatch, "/apps/{id}", (*handler).patchApp},
+	{http.MethodDelete, "/apps/{id}", (*handler).deleteApp},
+	{http.MethodPost, "/apps/{id}/rotate-secret", (*handler).rotateAppSecret},
+	{http.MethodGet, "/service-accounts", (*handler).listServiceAccounts},
+	{http.MethodPost, "/service-accounts", (*handler).createServiceAccount},
+	{http.MethodGet, "/service-accounts/{id}", (*handler).getServiceAccount},
+	{http.MethodPatch, "/service-accounts/{id}", (*handler).patchServiceAccount},
+	{http.MethodDelete, "/service-accounts/{id}", (*handler).deleteServiceAccount},
+	{http.MethodGet, "/service-accounts/{id}/tokens", (*handler).listTokens},
+	{http.MethodPost, "/service-accounts/{id}/tokens", (*handler).createToken},
+	{http.MethodDelete, "/service-accounts/{id}/tokens/{tid}", (*handler).deleteToken},
+	{http.MethodGet, "/audit", (*handler).listAudit},
 }
 
 // handler holds what the API's handlers share.
