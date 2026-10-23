@@ -41,7 +41,36 @@ type User struct {
 	AuthentikPK                 *int64
 	AuthentikUUID, AuthentikUID string
 	LastLoginAt                 *time.Time
+	Description                 string // service accounts; "" for members
 	CreatedAt, UpdatedAt        time.Time
+}
+
+// UserStatus is a member's state, derived from their record and never stored.
+type UserStatus string
+
+const (
+	UserStatusActive        UserStatus = "active"
+	UserStatusInvited       UserStatus = "invited"        // no password, an unused unexpired invite link exists
+	UserStatusNeedsPassword UserStatus = "needs_password" // no password, no such link
+	UserStatusDisabled      UserStatus = "disabled"       // !IsActive, whatever else is true
+)
+
+type APITokenScope string
+
+const (
+	APITokenScopeAdmin APITokenScope = "admin"
+	APITokenScopeRead  APITokenScope = "read"
+)
+
+// APIToken is a bearer token for the admin API, held by a service account.
+type APIToken struct {
+	ID, ServiceAccountID, Label string
+	TokenHash                   string // secrets.HashToken(raw)
+	Scope                       APITokenScope
+	CreatedByUserID             string // the admin or service account that made it
+	CreatedAt                   time.Time
+	LastUsedAt                  *time.Time
+	ExpiresAt                   *time.Time // nil = never
 }
 
 // HasPassword reports whether the user has any password hash.

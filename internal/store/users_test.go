@@ -231,3 +231,99 @@ func TestTouchLastLogin(t *testing.T) {
 		t.Fatalf("last login %v want %v", got.LastLoginAt, at)
 	}
 }
+
+func TestUserDescriptionRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	u := &model.User{Name: "Door", Type: model.UserTypeService, Username: "door", IsActive: true, Description: "Door controller"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetUser(ctx, u.ID)
+	if err != nil || got.Description != "Door controller" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	got.Description = "Front door"
+	if err := s.UpdateUser(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetUser(ctx, u.ID)
+	if err != nil || got.Description != "Front door" {
+		t.Fatalf("after update %+v, %v", got, err)
+	}
+}
+
+func TestDeleteUserCascades(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	now := time.Now().UTC()
+	count := func(q string, args ...any) int {
+		t.Helper()
+		var n int
+		if err := s.db.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	u := mkUser(t, s, "gone@example.org")
+	g := mkGroup(t, s, "g")
+	if err := s.AddMember(ctx, u.ID, g.ID); err != nil {
+		t.Fatal(err)
+	}
+	mkSession(t, s, "sess", u.ID, now.Add(time.Hour))
+	mkReset(t, s, "reset", u.ID, model.ResetPurposeReset, now.Add(time.Hour))
+	if err := s.ReplaceRecoveryCodes(ctx, u.ID, []string{"c1"}); err != nil {
+		t.Fatal(err)
+	}
+	svc := &model.User{Name: "svc", Type: model.UserTypeService, Username: "svc", IsActive: true}
+	if err := s.CreateUser(ctx, svc); err != nil {
+		t.Fatal(err)
+	}
+	app := &model.Application{Name: "App", Slug: "app", ClientID: "app", ClientType: model.ClientTypePublic,
+		SubjectMode: model.SubjectModeID, ServiceAccountID: svc.ID}
+	if err := s.CreateApplication(ctx, app); err != nil {
+		t.Fatal(err)
+	}
+	rt := &model.RefreshToken{TokenHash: "rt", FamilyID: "f", ApplicationID: app.ID, UserID: u.ID,
+		AuthTime: now, CreatedAt: now, ExpiresAt: now.Add(time.Hour), AbsoluteExpiresAt: now.Add(time.Hour)}
+	if err := s.CreateRefreshToken(ctx, rt); err != nil {
+		t.Fatal(err)
+	}
+	tok := &model.APIToken{ServiceAccountID: svc.ID, Label: "t", TokenHash: "h", Scope: model.APITokenScopeRead}
+	if err := s.CreateAPIToken(ctx, tok); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertAuditEvent(ctx, &model.AuditEvent{ActorType: model.ActorUser, ActorID: u.ID, Action: "x", TargetID: svc.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.DeleteUser(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, tbl := range []string{"memberships", "sessions", "refresh_tokens", "password_reset_tokens", "recovery_codes"} {
+		if n := count(`SELECT COUNT(*) FROM `+tbl+` WHERE user_id = ?`, u.ID); n != 0 {
+			t.Errorf("%s: %d rows remain", tbl, n)
+		}
+	}
+	if _, err := s.GetUser(ctx, u.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("user remains: %v", err)
+	}
+	if err := s.DeleteUser(ctx, u.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second delete: %v", err)
+	}
+
+	if err := s.DeleteUser(ctx, svc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(`SELECT COUNT(*) FROM api_tokens WHERE service_account_id = ?`, svc.ID); n != 0 {
+		t.Errorf("api_tokens: %d rows remain", n)
+	}
+	got, err := s.GetApplication(ctx, app.ID)
+	if err != nil || got.ServiceAccountID != "" {
+		t.Fatalf("app after account delete: %+v, %v", got, err)
+	}
+	if n := count(`SELECT COUNT(*) FROM audit_events`); n != 1 {
+		t.Errorf("audit_events: %d, want 1", n)
+	}
+}

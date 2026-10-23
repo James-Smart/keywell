@@ -14,7 +14,7 @@ import (
 
 const userCols = `id, name, type, COALESCE(email,''), COALESCE(username,''), password_hash,
 	legacy_password_hash, is_active, metadata, totp_secret_enc, totp_confirmed_at, authentik_pk,
-	COALESCE(authentik_uuid,''), COALESCE(authentik_uid,''), last_login_at, created_at, updated_at`
+	COALESCE(authentik_uuid,''), COALESCE(authentik_uid,''), last_login_at, description, created_at, updated_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*model.User, error) {
 	var (
@@ -27,7 +27,7 @@ func scanUser(row interface{ Scan(...any) error }) (*model.User, error) {
 	)
 	err := row.Scan(&u.ID, &u.Name, &u.Type, &u.Email, &u.Username, &u.PasswordHash,
 		&u.LegacyPasswordHash, &active, &meta, &u.TOTPSecretEnc, &totpAt, &pk,
-		&u.AuthentikUUID, &u.AuthentikUID, &lastLogin, &createdAt, &updatedAt)
+		&u.AuthentikUUID, &u.AuthentikUID, &lastLogin, &u.Description, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -87,13 +87,13 @@ func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 	_, err = s.db.ExecContext(ctx, `INSERT INTO users
 		(id, name, type, email, username, password_hash, legacy_password_hash, is_active, metadata,
 		 totp_secret_enc, totp_confirmed_at, authentik_pk, authentik_uuid, authentik_uid,
-		 last_login_at, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 last_login_at, description, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		u.ID, u.Name, string(u.Type), nullIfEmpty(u.Email), nullIfEmpty(u.Username),
 		u.PasswordHash, u.LegacyPasswordHash, boolInt(u.IsActive), meta,
 		u.TOTPSecretEnc, nullTime(u.TOTPConfirmedAt), nullPK(u.AuthentikPK),
 		nullIfEmpty(u.AuthentikUUID), nullIfEmpty(u.AuthentikUID),
-		nullTime(u.LastLoginAt), formatTime(u.CreatedAt), formatTime(u.UpdatedAt))
+		nullTime(u.LastLoginAt), u.Description, formatTime(u.CreatedAt), formatTime(u.UpdatedAt))
 	return wrapWrite("store: create user", err)
 }
 
@@ -125,11 +125,19 @@ func (s *Store) UpdateUser(ctx context.Context, u *model.User) error {
 	u.Email = strings.TrimSpace(u.Email)
 	u.UpdatedAt = time.Now().UTC()
 	res, err := s.db.ExecContext(ctx, `UPDATE users SET name=?, email=?, username=?, type=?, is_active=?,
-		metadata=?, authentik_pk=?, authentik_uuid=?, authentik_uid=?, updated_at=? WHERE id=?`,
+		metadata=?, authentik_pk=?, authentik_uuid=?, authentik_uid=?, description=?, updated_at=? WHERE id=?`,
 		u.Name, nullIfEmpty(u.Email), nullIfEmpty(u.Username), string(u.Type), boolInt(u.IsActive),
 		meta, nullPK(u.AuthentikPK), nullIfEmpty(u.AuthentikUUID), nullIfEmpty(u.AuthentikUID),
-		formatTime(u.UpdatedAt), u.ID)
+		u.Description, formatTime(u.UpdatedAt), u.ID)
 	return oneRow("store: update user", res, err)
+}
+
+// DeleteUser removes the user and, by cascade, their memberships, sessions,
+// tokens, codes and API tokens. Applications naming it as their service
+// account lose that link; audit events stay. ErrNotFound if there is no such user.
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id=?`, id)
+	return oneRow("store: delete user", res, err)
 }
 
 // oneRow converts an exec result into ErrNotFound when no row was affected.
@@ -161,8 +169,8 @@ func (s *Store) SetTOTP(ctx context.Context, userID string, secretEnc []byte, co
 	return oneRow("store: set totp", res, err)
 }
 
-// ClearTOTP removes TOTP enrolment, the last TOTP step claimed and the
-// user's recovery codes.
+// ClearTOTP removes TOTP enrolment, the last TOTP step claimed, the user's
+// recovery codes and any enrolment in progress in their sessions.
 func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -177,6 +185,10 @@ func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id=?`, userID); err != nil {
 		return fmt.Errorf("store: clear recovery codes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM totp_enrolments
+		WHERE session_id IN (SELECT id FROM sessions WHERE user_id=?)`, userID); err != nil {
+		return fmt.Errorf("store: clear totp enrolments: %w", err)
 	}
 	return tx.Commit()
 }

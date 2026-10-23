@@ -154,3 +154,27 @@ func TestTOTPEnrolmentEndsWithSession(t *testing.T) {
 		t.Fatalf("enrolment outlived its session: %v", err)
 	}
 }
+
+func TestClearTOTPDeletesEnrolments(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	u := mkUser(t, s, "clear@example.org")
+	other := mkUser(t, s, "other@example.org")
+	mkSession(t, s, "sess", u.ID, time.Now().Add(time.Hour))
+	mkSession(t, s, "osess", other.ID, time.Now().Add(time.Hour))
+	if err := s.PutTOTPEnrolment(ctx, "sess", []byte("secret")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutTOTPEnrolment(ctx, "osess", []byte("secret")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClearTOTP(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.GetTOTPEnrolment(ctx, "sess"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("enrolment survived ClearTOTP: %v", err)
+	}
+	if _, _, err := s.GetTOTPEnrolment(ctx, "osess"); err != nil {
+		t.Fatalf("another user's enrolment was removed: %v", err)
+	}
+}
