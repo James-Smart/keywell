@@ -769,7 +769,9 @@ func (p *Provider) revoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// revokeRefreshToken revokes raw if it is a refresh token issued to app.
+// revokeRefreshToken revokes raw, and every token rotated from the same
+// grant (its family), if it is a refresh token issued to app. A client
+// revoking a copy it held before a rotation still ends the live token.
 func (p *Provider) revokeRefreshToken(ctx context.Context, app *model.Application, raw string) error {
 	if raw == "" {
 		return &oauthError{"invalid_request", "token is required"}
@@ -784,7 +786,7 @@ func (p *Provider) revokeRefreshToken(ctx context.Context, app *model.Applicatio
 	if rt.ApplicationID != app.ID {
 		return nil
 	}
-	if err := p.d.Store.RevokeRefreshToken(ctx, rt.TokenHash); err != nil {
+	if err := p.d.Store.RevokeRefreshTokenFamily(ctx, rt.FamilyID); err != nil {
 		return fmt.Errorf("revoke: %w", err)
 	}
 	return nil

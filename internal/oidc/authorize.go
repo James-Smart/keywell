@@ -110,6 +110,10 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		p.d.Audit.Record(ctx, model.AuditEvent{ActorType: actorType, ActorID: actorID,
 			Action: audit.AuthorizeDenied, TargetType: "application", TargetID: app.ID,
 			Summary: "Turned away from " + app.Name + ": not in an allowed group"})
+		if req.promptNone { // the application asked for no page to be shown
+			fail(&oauthError{"access_denied", "you don't have access to this application"})
+			return
+		}
 		p.d.Renderer.RenderNoAccess(w, r, app.Name)
 		return
 	}

@@ -486,6 +486,27 @@ func TestAuthorizeGroupDenied(t *testing.T) {
 	}
 }
 
+// With prompt=none the application asked for no page to be shown, so a
+// member outside its groups is sent back with access_denied (and still
+// recorded), not shown the no-access page.
+func TestAuthorizePromptNoneGroupDenied(t *testing.T) {
+	env := testenv.New(t)
+	doors := env.CreateGroup(t, "Doors", false, false)
+	app := wikiApp(t, env, doors.ID)
+	c, u := signedIn(t, env) // in Members, not Doors
+	p := authParams(app, wikiRedirect)
+	p.Set("prompt", "none")
+
+	assertError(t, env, clientRedirect(t, env.AuthorizeRaw(t, c, p), wikiRedirect), "access_denied")
+	if n := countRows(t, env, `SELECT COUNT(*) FROM auth_codes`); n != 0 {
+		t.Errorf("%d codes issued, want none", n)
+	}
+	if n := countRows(t, env, `SELECT COUNT(*) FROM audit_events WHERE action=? AND actor_id=? AND target_id=?`,
+		audit.AuthorizeDenied, u.ID, app.ID); n != 1 {
+		t.Errorf("%d %s events, want 1", n, audit.AuthorizeDenied)
+	}
+}
+
 func TestAuthorizePromptNoneWithoutSession(t *testing.T) {
 	env := testenv.New(t)
 	app := wikiApp(t, env)

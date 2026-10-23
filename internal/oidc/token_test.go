@@ -446,6 +446,32 @@ func TestRefreshRotatesAndDetectsReuse(t *testing.T) {
 	}
 }
 
+// Revoking a refresh token ends its whole family: revoking with a token
+// already rotated (as a client holding a stale copy would) also stops its
+// live successor.
+func TestRevokeEndsTheFamily(t *testing.T) {
+	env := testenv.New(t)
+	app := wikiApp(t, env)
+	c, _ := signedIn(t, env)
+	code, _, _ := env.Authorize(t, c, app, false)
+	first, resp := env.Exchange(t, app, wikiSecret, code, "", wikiRedirect)
+	tokenOK(t, resp, first)
+	stale := str(t, first, "refresh_token")
+	second, resp := env.Refresh(t, app, wikiSecret, stale)
+	tokenOK(t, resp, second)
+	live := str(t, second, "refresh_token")
+
+	body, resp := env.PostAsClient(t, "/oauth/revoke", app, wikiSecret, url.Values{"token": {stale}})
+	if resp.StatusCode != http.StatusOK || body != nil {
+		t.Fatalf("revoke: status %d body %v, want 200 and no body", resp.StatusCode, body)
+	}
+	if storedRefresh(t, env, live).RevokedAt == nil {
+		t.Error("the live successor was not revoked")
+	}
+	body, resp = env.Refresh(t, app, wikiSecret, live)
+	tokenFails(t, resp, body, 400, "invalid_grant")
+}
+
 func TestRefreshSlidesUpToAbsoluteLimit(t *testing.T) {
 	env := testenv.New(t)
 	app := wikiApp(t, env)
