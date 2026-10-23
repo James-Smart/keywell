@@ -35,16 +35,19 @@
         <form method="post" action="/admin/members/{{.Member.ID}}/send-email">
           <button type="submit" class="button-secondary">{{if .Member.HasPassword}}Send password reset email{{else}}Send invite email{{end}}</button>
         </form>
+        {{- /* Setting your own here would sign you out of this session too. */}}
+        {{- if not .Own}}
         <details class="reveal"{{if .Errors.password}} open{{end}}>
           <summary>Set password manually</summary>
           <form method="post" action="/admin/members/{{.Member.ID}}/password">
             <label for="password">New password</label>
-            <input id="password" name="password" type="password" autocomplete="new-password" required{{if .Errors.password}} aria-invalid="true" aria-describedby="password-error"{{else}} aria-describedby="password-hint"{{end}}>
+            <input id="password" name="password" type="password" autocomplete="new-password" required minlength="{{.MinLength}}"{{if .Errors.password}} aria-invalid="true" aria-describedby="password-error"{{else}} aria-describedby="password-hint"{{end}}>
             {{- template "admin-field-error" .Errors.For "password"}}
             <p class="hint" id="password-hint">At least {{.MinLength}} characters. They'll be signed out everywhere.</p>
             <button type="submit">Set password</button>
           </form>
         </details>
+        {{- end}}
         {{- if .Member.TOTPEnrolled}}
         {{- template "admin-confirm" .ClearTOTP}}
         {{- end}}

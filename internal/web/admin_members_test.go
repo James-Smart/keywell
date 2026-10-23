@@ -274,6 +274,9 @@ func TestAddMemberInvite(t *testing.T) {
 	if d := between(body, "<details", ">"); d == "" || strings.Contains(d, "open") {
 		t.Errorf("metadata disclosure %q, want closed", d)
 	}
+	// The password field is hidden while an invitation is chosen, and a
+	// hidden field the browser finds invalid blocks the form silently.
+	assertLacks(t, body, "minlength")
 
 	resp, _ = env.Submit(t, c, "/admin/members", url.Values{
 		"name": {"Sam Okafor"}, "email": {"sam@example.org"}, "username": {""},
@@ -489,7 +492,8 @@ func TestMemberActions(t *testing.T) {
 		"Disable account", "Delete member", "Type their email address to confirm")
 	assertLacks(t, body, "Send password reset email", "Clear two-step sign in", "Enable account")
 	_, body = env.Page(t, c, base)
-	assertContains(t, body, ">Send password reset email</button>")
+	assertContains(t, body, ">Send password reset email</button>",
+		`name="password" type="password" autocomplete="new-password" required minlength="10"`)
 	assertLacks(t, body, "Send invite email")
 
 	resp, _ := env.Submit(t, c, "/admin/members/"+priya.ID+"/send-email", nil)
@@ -509,7 +513,10 @@ func TestMemberActions(t *testing.T) {
 	sid := jarSession(t, env, alexClient)
 	resp, body = env.Submit(t, c, base+"/password", url.Values{"password": {"short"}})
 	assertStatus(t, resp, http.StatusUnprocessableEntity)
-	assertContains(t, body, "Use at least 10 characters.", `id="password-error"`)
+	// The message is beside the field, far down a phone's page, so the top
+	// says what failed too.
+	assertContains(t, body, "Use at least 10 characters.", `id="password-error"`,
+		`<p class="alert alert-error" role="alert">`+html.EscapeString("The password wasn't set. See Set password manually below.")+"</p>")
 	assertLacks(t, body, `value="short"`)
 	if d := between(body, `<details class="reveal"`, ">"); !strings.Contains(d, "open") {
 		t.Errorf("set password disclosure %q, want open to show the message", d)
@@ -570,16 +577,19 @@ func TestDeleteMemberConfirm(t *testing.T) {
 	alex := addMember(t, env, "Alex Rivera", "alex@example.org")
 	base := "/admin/members/" + alex.ID
 
+	notDeleted := `<p class="alert alert-error" role="alert">` +
+		html.EscapeString("The member wasn't deleted. See Delete member below.") + "</p>"
 	resp, body := env.Submit(t, c, base+"/delete", url.Values{"confirm": {"wrong@example.org"}})
 	assertStatus(t, resp, http.StatusUnprocessableEntity)
-	assertContains(t, body, "Type the email address exactly to confirm.", `value="Alex Rivera"`)
+	assertContains(t, body, "Type the email address exactly to confirm.", `value="Alex Rivera"`, notDeleted)
 	if d := between(body, `<details class="confirm" open`, "Delete member"); d == "" {
 		t.Error("the delete confirmation is not open to show the message")
 	}
 	getUser(t, env, alex.ID)
 
-	resp, _ = env.Submit(t, c, base+"/delete", url.Values{"confirm": {""}})
+	resp, body = env.Submit(t, c, base+"/delete", url.Values{"confirm": {""}})
 	assertStatus(t, resp, http.StatusUnprocessableEntity)
+	assertContains(t, body, notDeleted)
 	getUser(t, env, alex.ID)
 
 	resp, _ = env.Submit(t, c, base+"/delete", url.Values{"confirm": {" ALEX@example.org "}})
@@ -605,17 +615,23 @@ func TestAdminCannotLockThemselvesOut(t *testing.T) {
 	c, admin := env.AdminClient(t)
 	base := "/admin/members/" + admin.ID
 
+	// Ruling 7: setting their own password here would also end this very
+	// session, so the page leaves it out as well; signing out stays.
 	_, body := env.Page(t, c, base)
-	assertContains(t, body, "This is your account.", "Change your own password from")
-	assertLacks(t, body, `action="`+base+`/disable"`, `action="`+base+`/delete"`, "Disable account", "Delete member")
+	assertContains(t, body, "This is your account.", "Change your own password from", `action="`+base+`/sign-out"`)
+	assertLacks(t, body, `action="`+base+`/disable"`, `action="`+base+`/delete"`, `action="`+base+`/password"`,
+		"Disable account", "Delete member", "Set password manually")
 	alex := addMember(t, env, "Alex Rivera", "alex@example.org")
 	_, body = env.Page(t, c, "/admin/members/"+alex.ID)
-	assertContains(t, body, `action="/admin/members/`+alex.ID+`/disable"`, `action="/admin/members/`+alex.ID+`/delete"`)
+	assertContains(t, body, `action="/admin/members/`+alex.ID+`/disable"`, `action="/admin/members/`+alex.ID+`/delete"`,
+		`action="/admin/members/`+alex.ID+`/password"`)
 	assertLacks(t, body, "This is your account.")
 
+	// A refusal's own message is the alert, not the action's summary.
 	resp, body := env.Submit(t, c, base+"/disable", nil)
 	assertStatus(t, resp, http.StatusConflict)
-	assertContains(t, body, html.EscapeString("You can't disable your own account."), `class="alert alert-error"`)
+	assertContains(t, body, `<p class="alert alert-error" role="alert">`+html.EscapeString("You can't disable your own account.")+"</p>")
+	assertLacks(t, body, html.EscapeString("The account wasn't disabled."))
 	resp, body = env.Submit(t, c, base+"/delete", url.Values{"confirm": {admin.Email}})
 	assertStatus(t, resp, http.StatusConflict)
 	assertContains(t, body, html.EscapeString("You can't delete your own account."))

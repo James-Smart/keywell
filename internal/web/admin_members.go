@@ -47,6 +47,20 @@ const (
 	msgConfirmEmail   = "Type the email address exactly to confirm."
 )
 
+// Page.Error summaries of the member actions that failed, naming the
+// action and where to look; see adminFailure.pageError. Only setting a
+// password and deleting take input, so only their summaries point below;
+// the others back up messages the service always gives.
+const (
+	msgNotSent        = "The email wasn't sent."
+	msgPasswordNotSet = "The password wasn't set. See Set password manually below."
+	msgTOTPNotCleared = "Two-step sign in wasn't cleared."
+	msgNotSignedOut   = "They weren't signed out."
+	msgNotDisabled    = "The account wasn't disabled."
+	msgNotEnabled     = "The account wasn't enabled."
+	msgNotDeleted     = "The member wasn't deleted. See Delete member below."
+)
+
 // membersData is what admin_members.html shows.
 type membersData struct {
 	Query, Status string // the search and filter, as applied
@@ -350,22 +364,25 @@ func (s *Server) saveMember(w http.ResponseWriter, r *http.Request) {
 
 // memberAction makes the change do on the member the path names and
 // returns to their page with notice. When it fails, their page is shown
-// again saying why.
-func (s *Server) memberAction(w http.ResponseWriter, r *http.Request, what, notice string,
+// again saying why, with summary at the top for a validation error; see
+// memberActionFailed.
+func (s *Server) memberAction(w http.ResponseWriter, r *http.Request, what, notice, summary string,
 	do func(ctx context.Context, a admin.Actor, id string) error) {
 	id := r.PathValue("id")
 	if err := do(r.Context(), adminActor(r), id); err != nil {
-		s.memberActionFailed(w, r, what, err)
+		s.memberActionFailed(w, r, what, summary, err)
 		return
 	}
 	redirectNotice(w, r, "/admin/members/"+id, notice)
 }
 
 // memberActionFailed shows the member page again, as stored, after an
-// action on the member failed with err; see adminFailed.
-func (s *Server) memberActionFailed(w http.ResponseWriter, r *http.Request, what string, err error) {
+// action on the member failed with err (see adminFailed): the messages
+// beside the action's fields, and at the top the failure's own message,
+// or summary when it has none.
+func (s *Server) memberActionFailed(w http.ResponseWriter, r *http.Request, what, summary string, err error) {
 	if fail, ok := s.adminFailed(w, r, what, err); ok {
-		s.showMember(w, r, fail.Status, Page{Error: fail.Message}, nil, fail.Fields)
+		s.showMember(w, r, fail.Status, Page{Error: fail.pageError(summary)}, nil, fail.Fields)
 	}
 }
 
@@ -383,7 +400,7 @@ func (s *Server) sendMemberEmail(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &unsent) {
 			s.logUnsent(r.Context(), "members: send password email", u, err)
 		}
-		s.memberActionFailed(w, r, "members: send password email", err)
+		s.memberActionFailed(w, r, "members: send password email", msgNotSent, err)
 		return
 	}
 	notice := "reset_sent"
@@ -397,30 +414,31 @@ func (s *Server) sendMemberEmail(w http.ResponseWriter, r *http.Request) {
 // everywhere.
 func (s *Server) setMemberPassword(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
-	s.memberAction(w, r, "members: set password", "password_set", func(ctx context.Context, a admin.Actor, id string) error {
-		return s.admin.SetMemberPassword(ctx, a, id, password)
-	})
+	s.memberAction(w, r, "members: set password", "password_set", msgPasswordNotSet,
+		func(ctx context.Context, a admin.Actor, id string) error {
+			return s.admin.SetMemberPassword(ctx, a, id, password)
+		})
 }
 
 // clearMemberTOTP removes the member's two-step sign in.
 func (s *Server) clearMemberTOTP(w http.ResponseWriter, r *http.Request) {
-	s.memberAction(w, r, "members: clear two-step sign in", "totp_cleared", s.admin.ClearMemberTOTP)
+	s.memberAction(w, r, "members: clear two-step sign in", "totp_cleared", msgTOTPNotCleared, s.admin.ClearMemberTOTP)
 }
 
 // signOutMember ends the member's sessions everywhere.
 func (s *Server) signOutMember(w http.ResponseWriter, r *http.Request) {
-	s.memberAction(w, r, "members: sign out everywhere", "signed_out", s.admin.SignOutEverywhere)
+	s.memberAction(w, r, "members: sign out everywhere", "signed_out", msgNotSignedOut, s.admin.SignOutEverywhere)
 }
 
 // disableMember disables the member, which signs them out everywhere. An
 // admin cannot disable their own account.
 func (s *Server) disableMember(w http.ResponseWriter, r *http.Request) {
-	s.memberAction(w, r, "members: disable", "disabled", s.setMemberActive(false))
+	s.memberAction(w, r, "members: disable", "disabled", msgNotDisabled, s.setMemberActive(false))
 }
 
 // enableMember lets a disabled member sign in again.
 func (s *Server) enableMember(w http.ResponseWriter, r *http.Request) {
-	s.memberAction(w, r, "members: enable", "enabled", s.setMemberActive(true))
+	s.memberAction(w, r, "members: enable", "enabled", msgNotEnabled, s.setMemberActive(true))
 }
 
 // setMemberActive is the change that enables (active) or disables a
@@ -441,11 +459,12 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request) {
 	}
 	confirm := strings.TrimSpace(r.PostFormValue("confirm"))
 	if u.Email == "" || !strings.EqualFold(confirm, u.Email) {
-		s.renderMember(w, r, u, http.StatusUnprocessableEntity, Page{}, nil, fieldErrors{"confirm": msgConfirmEmail})
+		s.renderMember(w, r, u, http.StatusUnprocessableEntity, Page{Error: msgNotDeleted}, nil,
+			fieldErrors{"confirm": msgConfirmEmail})
 		return
 	}
 	if err := s.admin.DeleteMember(r.Context(), adminActor(r), u.ID); err != nil {
-		s.memberActionFailed(w, r, "members: delete", err)
+		s.memberActionFailed(w, r, "members: delete", msgNotDeleted, err)
 		return
 	}
 	redirectNotice(w, r, "/admin/members", "deleted")

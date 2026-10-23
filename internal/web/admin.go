@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -29,6 +30,11 @@ import (
 //     messages beside the fields for an *admin.ValidationError, 409 and
 //     Page.Error for an *admin.RefusedError, 502 and Page.Error for an
 //     *admin.EmailError.
+//   - An action on a record's page (a small form among its actions) that
+//     fails always says so at the top: Page.Error is the adminFailure's
+//     pageError, with a summary of its own for a validation error, and
+//     the action's own check that fails (such as a mistyped confirmation)
+//     uses such a summary too.
 //   - An *admin.EmailError is a failure only when sending the email was
 //     the whole action, such as a "Send password reset email" button.
 //     When the change itself was made and only its email failed (as when
@@ -87,6 +93,14 @@ type adminFailure struct {
 	Message string            // Page.Error; "" for a validation error
 	Fields  map[string]string // field name -> message; nil unless a validation error
 }
+
+// pageError is Page.Error for a page shown again after an action on it
+// failed: f's own message (a refusal, an unsent email) or, for a
+// validation error, summary. A summary is one line naming the action and
+// where to look, such as "The password wasn't set. See Set password
+// manually below.": the field's message may sit far down the page,
+// inside the action's disclosure, where nobody sees it after the reload.
+func (f adminFailure) pageError(summary string) string { return cmp.Or(f.Message, summary) }
 
 // adminFailureFor maps an error from the admin service to what the page
 // shows: 422 and Fields for an *admin.ValidationError, 409 and its message
