@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	pqtotp "github.com/pquerna/otp/totp"
+
 	"latch/internal/audit"
 	"latch/internal/model"
 	"latch/internal/secrets"
@@ -227,6 +229,13 @@ func TestDiscoveryDocument(t *testing.T) {
 	}
 	if doc["authorization_response_iss_parameter_supported"] != true {
 		t.Errorf("authorization_response_iss_parameter_supported = %v, want true", doc["authorization_response_iss_parameter_supported"])
+	}
+	// Request objects are not supported, and clients are told so rather
+	// than left to the defaults (request_uri defaults to true).
+	for _, field := range []string{"request_parameter_supported", "request_uri_parameter_supported"} {
+		if v, ok := doc[field]; !ok || v != false {
+			t.Errorf("%s = %v (present %v), want false", field, v, ok)
+		}
 	}
 
 	jwksURI, _ := doc["jwks_uri"].(string)
@@ -515,19 +524,53 @@ func TestAuthorizePromptNoneWithoutSession(t *testing.T) {
 	assertError(t, env, clientRedirect(t, env.AuthorizeRaw(t, env.Client(t), p), wikiRedirect), "login_required")
 }
 
-// A session still waiting for its second step counts as no session.
-func TestAuthorizeIncompleteSessionIsNoSession(t *testing.T) {
+// A session still waiting for its second step gets no code. It is sent to
+// that step, which then returns to the request; with prompt=none the
+// application hears login_required.
+func TestAuthorizeIncompleteSessionGoesToTOTPStep(t *testing.T) {
 	env := testenv.New(t)
 	app := wikiApp(t, env)
 	u := env.CreateUser(t, "alex@example.org", testPW, "Members")
-	env.EnrolTOTP(t, u)
+	secret := env.EnrolTOTP(t, u)
 	c := env.Client(t)
 	env.Login(t, c, u.Email, testPW) // password accepted, code not yet entered
 
 	p := authParams(app, wikiRedirect)
-	loginRedirect(t, env.AuthorizeRaw(t, c, p), "wiki")
-	p.Set("prompt", "none")
-	assertError(t, env, clientRedirect(t, env.AuthorizeRaw(t, c, p), wikiRedirect), "login_required")
+	none := url.Values{}
+	for k, v := range p {
+		none[k] = v
+	}
+	none.Set("prompt", "none")
+	assertError(t, env, clientRedirect(t, env.AuthorizeRaw(t, c, none), wikiRedirect), "login_required")
+
+	resp := env.AuthorizeRaw(t, c, p)
+	resp.Body.Close()
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := loc.Query().Get("next")
+	nu, err := url.Parse(next)
+	if resp.StatusCode != http.StatusSeeOther || loc.Path != "/login/totp" || err != nil ||
+		nu.Path != "/oauth/authorize" || nu.Query().Get("state") != "st-123" || nu.Query().Get("client_id") != app.ClientID {
+		t.Fatalf("status %d Location %q, want 303 to /login/totp with next the request", resp.StatusCode, loc)
+	}
+
+	code, err := pqtotp.GenerateCode(secret, env.Clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = c.PostForm(env.TS.URL+"/login/totp", url.Values{"code": {code}, "next": {next}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != next {
+		t.Fatalf("TOTP step: status %d Location %q, want 303 back to %q", resp.StatusCode, resp.Header.Get("Location"), next)
+	}
+	if q := clientRedirect(t, get(t, c, env.TS.URL+next), wikiRedirect); q.Get("code") == "" {
+		t.Error("no code after the TOTP step")
+	}
 }
 
 // A session whose user is not a member (here a member's account turned

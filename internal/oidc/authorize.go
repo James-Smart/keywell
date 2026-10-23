@@ -48,7 +48,8 @@ var errServer = &oauthError{"server_error", "something went wrong on our side, t
 // problems are shown on an error page and the browser is never sent
 // anywhere; after that they go back to the application as error redirects.
 // A member signed in with every login step passed, recently enough, gets a
-// code; anyone else is sent to sign in and returns here.
+// code; a session waiting for its second step is sent to finish it, and
+// anyone else to sign in, and they return here.
 func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
@@ -91,11 +92,16 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 	// drops anyone else's session.
 	ok = ok && user.Type == model.UserTypeMember
 	if !ok || !sess.TOTPPassed || req.promptLogin || req.tooOld(p.now(), sess.CreatedAt) {
-		if req.promptNone {
+		switch {
+		case req.promptNone:
 			fail(&oauthError{"login_required", "the member must sign in"})
-			return
+		case ok && !sess.TOTPPassed && !req.promptLogin && !req.tooOld(p.now(), sess.CreatedAt):
+			// The password is accepted and the second step still to do:
+			// do it (or enrol), then come back.
+			http.Redirect(w, r, "/login/totp?next="+url.QueryEscape(returnAddress(params)), http.StatusSeeOther)
+		default:
+			redirectToLogin(w, r, app, params)
 		}
-		redirectToLogin(w, r, app, params)
 		return
 	}
 
@@ -193,6 +199,13 @@ func parseAuthRequest(app *model.Application, params url.Values) (*authRequest, 
 // them gives nothing away, since anyone can drop them from the request;
 // an application that must know checks auth_time in the ID token.
 func redirectToLogin(w http.ResponseWriter, r *http.Request, app *model.Application, params url.Values) {
+	next := returnAddress(params)
+	http.Redirect(w, r, "/login?next="+url.QueryEscape(next)+"&app="+url.QueryEscape(app.Slug), http.StatusSeeOther)
+}
+
+// returnAddress is the authorization request with params to come back to
+// after signing in, without max_age and prompt=login (see redirectToLogin).
+func returnAddress(params url.Values) string {
 	back := maps.Clone(params)
 	back.Del("max_age")
 	prompts := slices.DeleteFunc(strings.Fields(back.Get("prompt")), func(v string) bool { return v == "login" })
@@ -201,8 +214,7 @@ func redirectToLogin(w http.ResponseWriter, r *http.Request, app *model.Applicat
 	} else {
 		back.Set("prompt", strings.Join(prompts, " "))
 	}
-	next := "/oauth/authorize?" + back.Encode()
-	http.Redirect(w, r, "/login?next="+url.QueryEscape(next)+"&app="+url.QueryEscape(app.Slug), http.StatusSeeOther)
+	return "/oauth/authorize?" + back.Encode()
 }
 
 // redirectToClient sends the browser back to the application's redirect

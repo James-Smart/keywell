@@ -101,6 +101,10 @@ type discoveryDocument struct {
 	ClaimsSupported                   []string `json:"claims_supported"`
 	// RFC 9207: authorization responses carry iss.
 	AuthorizationResponseISSParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+	// Request objects are not supported. Both are always false, written out
+	// because request_uri_parameter_supported defaults to true.
+	RequestParameterSupported    bool `json:"request_parameter_supported"`
+	RequestURIParameterSupported bool `json:"request_uri_parameter_supported"`
 }
 
 func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
