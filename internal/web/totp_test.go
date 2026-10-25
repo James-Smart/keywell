@@ -695,6 +695,58 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 	}
 }
 
+// Recovery codes imported from Authentik are stored as the hash of the exact
+// token and work once, case-sensitively, at the TOTP step and when turning
+// two-step sign in off.
+func TestImportedRecoveryCode(t *testing.T) {
+	env := testenv.New(t)
+	ctx := context.Background()
+	u := env.CreateUser(t, "alex@example.org", testPW)
+	secret := env.EnrolTOTP(t, u)
+	if err := env.Store.ReplaceRecoveryCodes(ctx, u.ID, []string{
+		secrets.HashToken("RecoveryAAA1"), secrets.HashToken("AbCdEfGhJk"),
+		secrets.HashToken("RecoveryBBB2"), secrets.HashToken("RecoveryCCC3"), secrets.HashToken("mnpqr-stuvw"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	step := func(code string) *http.Response {
+		c := env.Client(t)
+		env.Login(t, c, "alex@example.org", testPW)
+		resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {code}})
+		return resp
+	}
+	refused := func(name, code string) {
+		t.Helper()
+		if resp := step(code); resp.StatusCode != http.StatusOK {
+			t.Errorf("%s: status %d; want the page again", name, resp.StatusCode)
+		}
+	}
+
+	assertRedirect(t, step("RecoveryAAA1"), "/")
+	refused("wrong case", "recoveryaaa1")
+	refused("reused", "RecoveryAAA1")
+	refused("not a code", "RecoveryZZZ9")
+	// A 10-character token normalises into Latch's format but is still found
+	// as an imported code; exact case only.
+	refused("10-char wrong case", "abcdefghjk")
+	assertRedirect(t, step(" AbCdEfGhJk "), "/")
+	refused("10-char reused", "AbCdEfGhJk")
+	// A Latch-format code and a 6-digit TOTP code still work.
+	assertRedirect(t, step("mnpqr-stuvw"), "/")
+	assertRedirect(t, step(validCode(t, env, secret)), "/")
+
+	// Turning two-step sign in off accepts an imported code.
+	c := env.Client(t)
+	env.Login(t, c, "alex@example.org", testPW)
+	resp, _ := post(t, env, c, "/login/totp", url.Values{"code": {"RecoveryCCC3"}})
+	assertRedirect(t, resp, "/")
+	resp, _ = post(t, env, c, "/account/totp/disable", url.Values{"password": {testPW}, "code": {"RecoveryBBB2"}})
+	assertRedirect(t, resp, "/account/totp")
+	if getUser(t, env, u.ID).TOTPEnrolled() {
+		t.Fatal("still enrolled")
+	}
+}
+
 func TestDisableRefusedWhenGroupRequiresTOTP(t *testing.T) {
 	env := testenv.New(t)
 	env.CreateGroup(t, "Admin", true, true)

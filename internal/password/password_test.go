@@ -136,6 +136,58 @@ func TestMalformedHashesFail(t *testing.T) {
 	}
 }
 
+func TestCheckStored(t *testing.T) {
+	native, err := password.Hash(pw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, enc := range append([]string{native}, legacyVectors...) {
+		if err := password.CheckStored(enc); err != nil {
+			t.Errorf("CheckStored(%.20q) = %v; want nil", enc, err)
+		}
+	}
+	for _, enc := range []string{"", "!abc"} {
+		if err := password.CheckStored(enc); !errors.Is(err, password.ErrUnusable) {
+			t.Errorf("CheckStored(%q) = %v; want ErrUnusable", enc, err)
+		}
+	}
+	for _, enc := range []string{"md5$abc$def", "bcrypt$2b$12$uq70YScYbDqF0tdvP3Yhtu.PIe3/Xobf8UlszETQiO/sTqMtfUVgq"} {
+		if err := password.CheckStored(enc); !errors.Is(err, password.ErrUnsupported) {
+			t.Errorf("CheckStored(%q) = %v; want ErrUnsupported", enc, err)
+		}
+	}
+	err = password.CheckStored("pbkdf2_sha256$abc$salt$hash")
+	if err == nil || errors.Is(err, password.ErrUnusable) || errors.Is(err, password.ErrUnsupported) {
+		t.Errorf("CheckStored(bad pbkdf2) = %v; want a malformed error", err)
+	}
+}
+
+// Legacy hashes asking for more than the ceilings are refused as malformed,
+// by CheckStored and by Verify, without computing anything.
+func TestLegacyCeilings(t *testing.T) {
+	long := base64.StdEncoding.EncodeToString(make([]byte, 65))
+	for _, c := range []struct{ name, enc string }{
+		{"scrypt_work", "scrypt$16384$salt$8$64$aGFzaA=="},
+		{"scrypt_work_overflow", "scrypt$1073741824$salt$1073741824$1073741824$aGFzaA=="},
+		{"pbkdf2_len", "pbkdf2_sha256$1000$salt$" + long},
+		{"bcrypt_cost", "bcrypt_sha256$$2b$15$uq70YScYbDqF0tdvP3Yhtu.PIe3/Xobf8UlszETQiO/sTqMtfUVgq"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if err := password.CheckStored(c.enc); err == nil || !strings.Contains(err.Error(), "malformed") {
+				t.Errorf("CheckStored = %v; want a malformed-hash error", err)
+			}
+			start := time.Now()
+			ok, err := password.Verify(pw, c.enc)
+			if ok || err == nil || !strings.Contains(err.Error(), "malformed") {
+				t.Errorf("Verify = %v, %v; want false and a malformed-hash error", ok, err)
+			}
+			if d := time.Since(start); d > 50*time.Millisecond {
+				t.Errorf("Verify took %v; want under 50ms", d)
+			}
+		})
+	}
+}
+
 // A stored hash whose cost would take over a gigabyte of memory, or an
 // unreasonable time, to check is refused as malformed without hashing.
 func TestCostCeilings(t *testing.T) {

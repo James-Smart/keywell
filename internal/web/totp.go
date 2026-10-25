@@ -39,6 +39,12 @@ const (
 // a code prompt is treated as a six-digit TOTP code.
 var recoveryCodeRE = regexp.MustCompile(`^[a-z2-9]{5}-[a-z2-9]{5}$`)
 
+// importedRecoveryRE matches the shape of a recovery code imported from
+// Authentik (a static token, 7 to 100 letters and digits). Such a code is
+// stored as the hash of the exact token, so it is matched case-sensitively.
+// A 6-digit TOTP code is too short to match.
+var importedRecoveryRE = regexp.MustCompile(`^[A-Za-z0-9]{7,100}$`)
+
 // loginTOTPData is what login_totp.html shows.
 type loginTOTPData struct{ Next string }
 
@@ -132,8 +138,20 @@ func (s *Server) awaitingCode(w http.ResponseWriter, r *http.Request, next strin
 // enrolment) does not match: no code is accepted twice (RFC 6238 §5.2).
 // factor says which kind of code it was taken for: "totp" or "recovery".
 func (s *Server) checkCode(ctx context.Context, user *model.User, code string) (factor string, ok bool, err error) {
+	imported := strings.TrimSpace(code)
+	isImported := importedRecoveryRE.MatchString(imported)
 	if rc := totp.NormalizeRecoveryCode(code); recoveryCodeRE.MatchString(rc) {
 		ok, err := s.d.Store.ConsumeRecoveryCode(ctx, user.ID, secrets.HashToken(rc))
+		if ok || err != nil || !isImported {
+			return "recovery", ok, err
+		}
+		// A 10-character token from a non-default Authentik stage looks like
+		// a Latch code once normalised, so try it as typed too.
+		ok, err = s.d.Store.ConsumeRecoveryCode(ctx, user.ID, secrets.HashToken(imported))
+		return "recovery", ok, err
+	}
+	if isImported {
+		ok, err := s.d.Store.ConsumeRecoveryCode(ctx, user.ID, secrets.HashToken(imported))
 		return "recovery", ok, err
 	}
 	secret, err := s.openSecret(user.TOTPSecretEnc)

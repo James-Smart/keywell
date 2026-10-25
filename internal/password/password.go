@@ -54,7 +54,9 @@ const (
 	maxArgonMemory = 1 << 20 // KiB: 1 GiB
 	maxArgonTime   = 16
 	maxPBKDF2Iter  = 10_000_000
-	maxScryptBytes = 1 << 30 // 128·N·r: 1 GiB
+	maxPBKDF2Len   = 64      // bytes of decoded hash
+	maxScryptWork  = 1 << 22 // N·r·p; memory is 128·N·r bytes, so at most 512 MiB at p=1
+	maxBcryptCost  = 14
 )
 
 var (
@@ -144,13 +146,32 @@ func Hash(password string) (string, error) {
 // or "!"-prefixed hash (no password set) and ErrUnsupported for an unknown
 // format; other errors mean the stored hash is malformed.
 func Verify(password, encoded string) (bool, error) {
+	check, err := prepare(encoded)
+	if err != nil {
+		return false, err
+	}
+	return check(password)
+}
+
+// CheckStored reports whether Verify could check a password against
+// encoded: nil if so, otherwise the error Verify would return for it
+// (ErrUnusable, ErrUnsupported, or a malformed-hash error, including a hash
+// asking for more cost than the ceilings allow). It computes no hash.
+func CheckStored(encoded string) error {
+	_, err := prepare(encoded)
+	return err
+}
+
+// prepare parses encoded and checks it against the ceilings without
+// hashing anything.
+func prepare(encoded string) (checker, error) {
 	switch {
 	case encoded == "" || strings.HasPrefix(encoded, "!"):
-		return false, ErrUnusable
+		return nil, ErrUnusable
 	case strings.HasPrefix(encoded, nativePrefix):
-		return verifyArgon2(password, strings.Split(encoded[1:], "$"), "argon2id")
+		return prepareArgon2(strings.Split(encoded[1:], "$"), "argon2id")
 	default:
-		return verifyLegacy(password, encoded)
+		return prepareLegacy(encoded)
 	}
 }
 
@@ -183,27 +204,27 @@ var commonSet = sync.OnceValue(func() map[string]struct{} {
 	return set
 })
 
-// verifyArgon2 checks password against the fields of an argon2 PHC string
+// prepareArgon2 parses the fields of an argon2 PHC string
 // after its leading "$" or Django "argon2$" prefix:
 // variant, "v=19", "m=M,t=T,p=P", salt, hash (unpadded base64).
-func verifyArgon2(password string, f []string, variants ...string) (bool, error) {
+func prepareArgon2(f []string, variants ...string) (checker, error) {
 	if len(f) != 5 {
-		return false, malformed("argon2")
+		return nil, malformed("argon2")
 	}
 	variant := f[0]
 	if !slices.Contains(variants, variant) {
-		return false, fmt.Errorf("%w: %s", ErrUnsupported, variant)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupported, variant)
 	}
 	key := argon2.IDKey
 	if variant == "argon2i" {
 		key = argon2.Key
 	}
 	if f[1] != fmt.Sprintf("v=%d", argon2.Version) {
-		return false, fmt.Errorf("%w: %s version", ErrUnsupported, variant)
+		return nil, fmt.Errorf("%w: %s version", ErrUnsupported, variant)
 	}
 	params := strings.Split(f[2], ",")
 	if len(params) != 3 {
-		return false, malformed(variant)
+		return nil, malformed(variant)
 	}
 	m, okM := param(params[0], "m=", 32)
 	t, okT := param(params[1], "t=", 32)
@@ -212,10 +233,12 @@ func verifyArgon2(password string, f []string, variants ...string) (bool, error)
 	want, errH := b64.DecodeString(f[4])
 	if !okM || !okT || !okP || t == 0 || p == 0 || errS != nil || errH != nil || len(want) == 0 ||
 		m > maxArgonMemory || t > maxArgonTime {
-		return false, malformed(variant)
+		return nil, malformed(variant)
 	}
-	got := key([]byte(password), salt, uint32(t), uint32(m), uint8(p), uint32(len(want)))
-	return subtle.ConstantTimeCompare(got, want) == 1, nil
+	return func(password string) (bool, error) {
+		got := key([]byte(password), salt, uint32(t), uint32(m), uint8(p), uint32(len(want)))
+		return subtle.ConstantTimeCompare(got, want) == 1, nil
+	}, nil
 }
 
 // param parses "<prefix><unsigned int>" that fits in bits.
