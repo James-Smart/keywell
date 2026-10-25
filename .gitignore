@@ -1,3 +1,7 @@
 .superpowers/
 dev-data/
 /latch
+dev/authentik/.env
+dev/authentik/data/
+dev/authentik/certs/
+dev/authentik/custom-templates/
