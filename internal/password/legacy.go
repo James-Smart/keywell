@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -78,9 +79,11 @@ func prepareScrypt(fields string) (checker, error) {
 	if errors.Join(errN, errR, errP, errH) != nil || len(want) == 0 {
 		return nil, malformed("scrypt")
 	}
-	// N·r·p against the ceiling, compared by division so it cannot
-	// overflow. scrypt.Key itself refuses an N that is not a power of two.
-	if n < 1 || r < 1 || p < 1 || n > maxScryptWork/r/p {
+	// scrypt.Key refuses an N that is not a power of two above 1. N·r·p is
+	// compared by division so it cannot overflow; once it is within the
+	// ceiling each factor is at most 1<<22 and the memory sum fits an int.
+	if n < 2 || n&(n-1) != 0 || r < 1 || p < 1 || n > maxScryptWork/r/p ||
+		128*r*(n+p+2) > maxScryptMem {
 		return nil, malformed("scrypt")
 	}
 	salt := []byte(f[1])
@@ -93,10 +96,17 @@ func prepareScrypt(fields string) (checker, error) {
 	}, nil
 }
 
+// bcryptRE is the full 60-character bcrypt layout: version, two-digit cost,
+// then 22 characters of salt and 31 of hash in bcrypt's alphabet.
+var bcryptRE = regexp.MustCompile(`^\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$`)
+
 // prepareBcryptSHA256 parses a complete bcrypt string ("$2b$..."). Django
 // feeds bcrypt the lower-case hex SHA-256 of the password, which keeps
 // passwords longer than bcrypt's 72-byte limit significant.
 func prepareBcryptSHA256(bcryptHash string) (checker, error) {
+	if !bcryptRE.MatchString(bcryptHash) {
+		return nil, malformed("bcrypt_sha256")
+	}
 	cost, err := bcrypt.Cost([]byte(bcryptHash))
 	if err != nil || cost > maxBcryptCost {
 		return nil, malformed("bcrypt_sha256")

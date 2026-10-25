@@ -50,12 +50,15 @@ const nativePrefix = "$argon2id$"
 // refused as malformed, never checked: one sign-in against it could take a
 // gigabyte or more of memory, or many seconds of CPU. Native hashes cost
 // 64 MiB and 3 passes; the legacy formats' defaults are far below these.
+// For scrypt, N·r·p bounds the CPU work and 128·r·(N+p+2) the memory
+// (scrypt.Key holds v = 128·N·r, B = 128·r·p and xy = 256·r bytes at once).
 const (
 	maxArgonMemory = 1 << 20 // KiB: 1 GiB
 	maxArgonTime   = 16
 	maxPBKDF2Iter  = 10_000_000
 	maxPBKDF2Len   = 64      // bytes of decoded hash
-	maxScryptWork  = 1 << 22 // N·r·p; memory is 128·N·r bytes, so at most 512 MiB at p=1
+	maxScryptWork  = 1 << 22 // N·r·p: CPU work
+	maxScryptMem   = 1 << 28 // bytes, 128·r·(N+p+2): 256 MiB held at once
 	maxBcryptCost  = 14
 )
 

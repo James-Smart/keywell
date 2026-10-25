@@ -722,8 +722,9 @@ func TestImportedRecoveryCode(t *testing.T) {
 		}
 	}
 
-	assertRedirect(t, step("RecoveryAAA1"), "/")
+	// A wrong-case try does not use the code up.
 	refused("wrong case", "recoveryaaa1")
+	assertRedirect(t, step("RecoveryAAA1"), "/")
 	refused("reused", "RecoveryAAA1")
 	refused("not a code", "RecoveryZZZ9")
 	// A 10-character token normalises into Latch's format but is still found

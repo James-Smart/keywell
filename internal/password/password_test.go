@@ -108,27 +108,30 @@ func TestUnusableAndUnsupported(t *testing.T) {
 // match. An empty hash part must be caught before hashing: argon2 and scrypt
 // panic on a zero key length, and an empty derived key would compare equal
 // to it.
+var malformedHashes = []string{
+	"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$",
+	"$argon2id$v=19$m=65536,t=0,p=4$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"$argon2id$v=19$m=65536,t=3,p=0$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"$argon2id$v=19$m=65536,t=3$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$!!!",
+	"$argon2id$v=16$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"argon2$argon2d$v=19$m=512,t=2,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"pbkdf2_sha256$870000$salt$",
+	"pbkdf2_sha256$0$salt$aGFzaA==",
+	"pbkdf2_sha256$870000$salt",
+	"pbkdf2_sha1$abc$salt$aGFzaA==",
+	"scrypt$16384$salt$8$1$",
+	"scrypt$1000$salt$8$1$aGFzaA==",
+	"scrypt$16384$salt$8$aGFzaA==",
+	"scrypt$16384$salt$0$1$aGFzaA==",
+	"scrypt$16384$salt$8$0$aGFzaA==",
+	"bcrypt_sha256$$2b$12$short",
+	"bcrypt_sha256$",
+	"bcrypt_sha256$$2b$12$uq70YScYbDqF0tdvP3Yh!u.PIe3/Xobf8UlszETQiO/sTqMtfUVgq",
+}
+
 func TestMalformedHashesFail(t *testing.T) {
-	for _, enc := range []string{
-		"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$",
-		"$argon2id$v=19$m=65536,t=0,p=4$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
-		"$argon2id$v=19$m=65536,t=3,p=0$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
-		"$argon2id$v=19$m=65536,t=3$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
-		"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$!!!",
-		"$argon2id$v=16$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
-		"argon2$argon2d$v=19$m=512,t=2,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
-		"pbkdf2_sha256$870000$salt$",
-		"pbkdf2_sha256$0$salt$aGFzaA==",
-		"pbkdf2_sha256$870000$salt",
-		"pbkdf2_sha1$abc$salt$aGFzaA==",
-		"scrypt$16384$salt$8$1$",
-		"scrypt$1000$salt$8$1$aGFzaA==",
-		"scrypt$16384$salt$8$aGFzaA==",
-		"scrypt$16384$salt$0$1$aGFzaA==",
-		"scrypt$16384$salt$8$0$aGFzaA==",
-		"bcrypt_sha256$$2b$12$short",
-		"bcrypt_sha256$",
-	} {
+	for _, enc := range malformedHashes {
 		ok, err := password.Verify(pw, enc)
 		if ok || err == nil {
 			t.Errorf("Verify(%q) = %v, %v; want false, error", enc, ok, err)
@@ -156,6 +159,11 @@ func TestCheckStored(t *testing.T) {
 			t.Errorf("CheckStored(%q) = %v; want ErrUnsupported", enc, err)
 		}
 	}
+	for _, enc := range malformedHashes {
+		if err := password.CheckStored(enc); err == nil {
+			t.Errorf("CheckStored(%q) = nil; want an error, as Verify returns one", enc)
+		}
+	}
 	err = password.CheckStored("pbkdf2_sha256$abc$salt$hash")
 	if err == nil || errors.Is(err, password.ErrUnusable) || errors.Is(err, password.ErrUnsupported) {
 		t.Errorf("CheckStored(bad pbkdf2) = %v; want a malformed error", err)
@@ -168,6 +176,8 @@ func TestLegacyCeilings(t *testing.T) {
 	long := base64.StdEncoding.EncodeToString(make([]byte, 65))
 	for _, c := range []struct{ name, enc string }{
 		{"scrypt_work", "scrypt$16384$salt$8$64$aGFzaA=="},
+		{"scrypt_memory_r", "scrypt$2$salt$2097152$1$aGFzaA=="},
+		{"scrypt_memory_p", "scrypt$2$salt$1$2097152$aGFzaA=="},
 		{"scrypt_work_overflow", "scrypt$1073741824$salt$1073741824$1073741824$aGFzaA=="},
 		{"pbkdf2_len", "pbkdf2_sha256$1000$salt$" + long},
 		{"bcrypt_cost", "bcrypt_sha256$$2b$15$uq70YScYbDqF0tdvP3Yhtu.PIe3/Xobf8UlszETQiO/sTqMtfUVgq"},

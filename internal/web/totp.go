@@ -35,8 +35,9 @@ const (
 	qrSize            = 256
 )
 
-// recoveryCodeRE matches a normalised recovery code; anything else typed at
-// a code prompt is treated as a six-digit TOTP code.
+// recoveryCodeRE matches a normalised Latch recovery code. Anything else
+// typed at a code prompt that looks like an imported Authentik token
+// (importedRecoveryRE) is tried as one; the rest is treated as a TOTP code.
 var recoveryCodeRE = regexp.MustCompile(`^[a-z2-9]{5}-[a-z2-9]{5}$`)
 
 // importedRecoveryRE matches the shape of a recovery code imported from
