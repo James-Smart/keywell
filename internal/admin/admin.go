@@ -234,6 +234,21 @@ func (p problems) metadata(m map[string]any) map[string]any {
 	return m
 }
 
+// MemberProblems checks a member's name, email, username and metadata with
+// the member pages' rules, for values that come from elsewhere, such as an
+// import. It returns the message for each field that breaks a rule, keyed
+// "name", "email", "username" and "metadata"; none means the member pages
+// would accept them. An empty username is allowed. It does not check that
+// the email or username is free.
+func MemberProblems(name, email, username string, metadata map[string]any) map[string]string {
+	p := problems{}
+	p.name(name)
+	p.email(email)
+	p.username(username, "")
+	p.metadata(metadata)
+	return p
+}
+
 // ParseMetadata reads metadata as typed into a form or sent to the API.
 // Blank text is {}. Anything else must be a JSON object whose stored,
 // compact form is at most 8192 bytes; otherwise the error has a message

@@ -320,6 +320,33 @@ func TestParseMetadata(t *testing.T) {
 	}
 }
 
+// MemberProblems applies the member pages' checks, with their messages, to
+// values that did not come from a form, such as an imported member.
+func TestMemberProblems(t *testing.T) {
+	if got := admin.MemberProblems(" Alex Rivera ", " alex@example.org ", "alex",
+		map[string]any{"member_number": 42}); len(got) != 0 {
+		t.Errorf("valid member: %v", got)
+	}
+	if got := admin.MemberProblems("Alex", "alex@example.org", "", nil); len(got) != 0 {
+		t.Errorf("no username and nil metadata: %v", got)
+	}
+	got := admin.MemberProblems(strings.Repeat("n", 201), "not an email", "alex rivera",
+		map[string]any{"notes": strings.Repeat("x", 8200)})
+	want := map[string]string{
+		"name":     "Use at most 200 characters.",
+		"email":    "Enter an email address, like alex@example.org.",
+		"username": "Usernames can't contain spaces.",
+		"metadata": "Metadata is too long. Keep it under 8 KB.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MemberProblems = %v, want %v", got, want)
+	}
+	if got := admin.MemberProblems("", "a@b@c", strings.Repeat("u", 151), nil); got["name"] != "Enter a name." ||
+		got["email"] != want["email"] || got["username"] != "Use at most 150 characters." {
+		t.Errorf("empty name, two @, long username: %v", got)
+	}
+}
+
 func TestTokenActorInAudit(t *testing.T) {
 	ctx := context.Background()
 	svc, st, _ := newService(t)
