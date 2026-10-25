@@ -2,7 +2,7 @@
 # Run by up.sh through `ak shell`. Uses natural keys, so it is safe to run twice.
 from datetime import datetime, timezone
 
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 
 from authentik.core.models import Application, Group, User, UserTypes
 from authentik.flows.models import Flow
@@ -63,13 +63,15 @@ for username, email, name, utype, active, pw, groups in USERS:
         {"email": email, "name": name, "type": UserTypes(utype), "is_active": active, "attributes": attrs},
     )
     if pw == "unusable":
-        user.set_unusable_password()
+        # Django's unusable password has a random suffix; set it only once.
+        if not user.password.startswith("!"):
+            user.set_unusable_password()
     elif pw is not None:
         # Hash only if the stored hash is not already this password under this
         # hasher; make_password salts randomly, so rehashing would change rows.
         text, hasher = pw
         want = hasher or "pbkdf2_sha256"
-        if not (user.password.startswith(want + "$") and user.check_password(text)):
+        if not (user.password.startswith(want + "$") and check_password(text, user.password, setter=None)):
             user.password = make_password(text, hasher=hasher or "default")
     user.save()
     user.groups.set(groups)
