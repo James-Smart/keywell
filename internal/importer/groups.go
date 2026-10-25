@@ -92,6 +92,11 @@ func (r *run) planGroups() {
 		case g.latch == nil && named.AuthentikUUID != "":
 			r.block("Authentik group %s has the same name as Latch group %s, which is linked to a different "+
 				"Authentik group. Rename the Latch group on its page, then import again.", src.Name, named.Name)
+		case g.latch == nil && named.IsAdmin:
+			// Ruling J: adopting a Latch-only admin group would let the
+			// import remove Latch's own admins from it.
+			r.block(`Authentik's group "%s" has the same name as Latch's admin group. `+
+				"Rename one of them before importing.", src.Name)
 		case g.latch == nil:
 			g.latch = named
 		case named.ID != g.latch.ID:

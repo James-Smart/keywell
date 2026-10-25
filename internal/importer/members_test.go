@@ -645,7 +645,8 @@ func TestImportBlocksConflicts(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(e *env) *Snap
-		want  []string // each appears in one Blocking line
+		want  []string     // each appears in one Blocking line
+		check func(e *env) // more checks after the run; may be nil
 	}{{
 		name: "emails differ only in case",
 		setup: func(e *env) *Snap {
@@ -728,6 +729,22 @@ func TestImportBlocksConflicts(t *testing.T) {
 			return s
 		},
 		want: []string{"two groups called Laser"},
+	}, {
+		// Ruling J: adopting Latch's own admin group would let the import
+		// remove Latch's admins from it.
+		name: "group named like Latch's admin group",
+		setup: func(e *env) *Snap {
+			s := NewSnap()
+			s.Join(s.User("sam", "sam@x.org"), s.Group("Admin"))
+			return s
+		},
+		want: []string{`Authentik's group "Admin" has the same name as Latch's admin group. ` +
+			"Rename one of them before importing."},
+		check: func(e *env) {
+			if got := e.groupsOf("ada@example.org"); !slices.Equal(got, []string{"Admin"}) {
+				e.t.Errorf("the Latch admin is in %v, want Admin", got)
+			}
+		},
 	}}
 	for _, tc := range cases {
 		for _, dry := range []bool{true, false} {
@@ -762,6 +779,9 @@ func TestImportBlocksConflicts(t *testing.T) {
 				}
 				if after := e.dump(); after != before {
 					t.Errorf("database changed:\n%s\n---\n%s", before, after)
+				}
+				if tc.check != nil {
+					tc.check(e)
 				}
 				var text strings.Builder
 				if err := rep.WriteText(&text); err != nil || !strings.HasPrefix(text.String(),
