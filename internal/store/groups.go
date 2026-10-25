@@ -56,7 +56,7 @@ func (s *Store) CreateGroup(ctx context.Context, g *model.Group) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO groups
+	_, err = s.q.ExecContext(ctx, `INSERT INTO groups
 		(id, name, description, is_admin, require_totp, metadata, authentik_uuid, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?)`,
 		g.ID, g.Name, g.Description, boolInt(g.IsAdmin), boolInt(g.RequireTOTP), meta,
@@ -66,16 +66,16 @@ func (s *Store) CreateGroup(ctx context.Context, g *model.Group) error {
 
 // GetGroup returns the group with the given id.
 func (s *Store) GetGroup(ctx context.Context, id string) (*model.Group, error) {
-	return scanGroup(s.db.QueryRowContext(ctx, `SELECT `+groupCols+` FROM groups WHERE id = ?`, id))
+	return scanGroup(s.q.QueryRowContext(ctx, `SELECT `+groupCols+` FROM groups WHERE id = ?`, id))
 }
 
 // GetGroupByName returns the group with the given exact name.
 func (s *Store) GetGroupByName(ctx context.Context, name string) (*model.Group, error) {
-	return scanGroup(s.db.QueryRowContext(ctx, `SELECT `+groupCols+` FROM groups WHERE name = ?`, name))
+	return scanGroup(s.q.QueryRowContext(ctx, `SELECT `+groupCols+` FROM groups WHERE name = ?`, name))
 }
 
 func (s *Store) queryGroups(ctx context.Context, query string, args ...any) ([]model.Group, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: list groups: %w", err)
 	}
@@ -107,7 +107,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]model.G
 
 // AddMember adds the user to the group; adding twice is a no-op.
 func (s *Store) AddMember(ctx context.Context, userID, groupID string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?,?)`, userID, groupID)
+	_, err := s.q.ExecContext(ctx, `INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?,?)`, userID, groupID)
 	if err != nil {
 		return fmt.Errorf("store: add member: %w", err)
 	}
@@ -116,7 +116,7 @@ func (s *Store) AddMember(ctx context.Context, userID, groupID string) error {
 
 // RemoveMember removes the user from the group.
 func (s *Store) RemoveMember(ctx context.Context, userID, groupID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM memberships WHERE user_id=? AND group_id=?`, userID, groupID)
+	_, err := s.q.ExecContext(ctx, `DELETE FROM memberships WHERE user_id=? AND group_id=?`, userID, groupID)
 	if err != nil {
 		return fmt.Errorf("store: remove member: %w", err)
 	}
@@ -144,7 +144,7 @@ type GroupRow struct {
 
 // ListGroupsWithCounts returns every group ordered by name with its member count.
 func (s *Store) ListGroupsWithCounts(ctx context.Context) ([]GroupRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+groupCols+`,
+	rows, err := s.q.QueryContext(ctx, `SELECT `+groupCols+`,
 		(SELECT COUNT(*) FROM memberships m WHERE m.group_id = groups.id)
 		FROM groups ORDER BY name`)
 	if err != nil {
@@ -175,12 +175,12 @@ func (s *Store) UpdateGroup(ctx context.Context, g *model.Group) error {
 		return err
 	}
 	g.UpdatedAt = time.Now().UTC()
-	q := `UPDATE groups SET name=?, description=?, is_admin=?, require_totp=?, metadata=?, updated_at=? WHERE id=?`
+	q := `UPDATE groups SET name=?, description=?, is_admin=?, require_totp=?, metadata=?, authentik_uuid=?, updated_at=? WHERE id=?`
 	if !g.IsAdmin {
 		q += ` AND ` + lastAdminOK
 	}
-	res, err := s.db.ExecContext(ctx, q, g.Name, g.Description, boolInt(g.IsAdmin), boolInt(g.RequireTOTP),
-		meta, formatTime(g.UpdatedAt), g.ID)
+	res, err := s.q.ExecContext(ctx, q, g.Name, g.Description, boolInt(g.IsAdmin), boolInt(g.RequireTOTP),
+		meta, nullIfEmpty(g.AuthentikUUID), formatTime(g.UpdatedAt), g.ID)
 	return s.guardedResult(ctx, "store: update group", g.ID, res, err)
 }
 
@@ -196,14 +196,14 @@ const soleAppGroup = `EXISTS (SELECT 1 FROM application_groups ag WHERE ag.group
 // is the only admin group, and ErrSoleAppGroup if it is the only group an
 // application lets in. The checks and the delete are one statement.
 func (s *Store) DeleteGroup(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM groups WHERE id = ? AND `+lastAdminOK+` AND NOT `+soleAppGroup, id)
+	res, err := s.q.ExecContext(ctx, `DELETE FROM groups WHERE id = ? AND `+lastAdminOK+` AND NOT `+soleAppGroup, id)
 	err = s.guardedResult(ctx, "store: delete group", id, res, err)
 	if !errors.Is(err, ErrLastAdminGroup) {
 		return err
 	}
 	// One of two guards refused; say which.
 	var sole bool
-	if qerr := s.db.QueryRowContext(ctx, `SELECT `+soleAppGroup+` FROM groups WHERE id = ?`, id).Scan(&sole); qerr != nil {
+	if qerr := s.q.QueryRowContext(ctx, `SELECT `+soleAppGroup+` FROM groups WHERE id = ?`, id).Scan(&sole); qerr != nil {
 		return fmt.Errorf("store: delete group: %w", qerr)
 	}
 	if sole {
@@ -230,21 +230,15 @@ func (s *Store) guardedResult(ctx context.Context, op, id string, res sql.Result
 // one transaction. An unknown group fails the foreign key and leaves the
 // previous memberships in place.
 func (s *Store) ReplaceUserGroups(ctx context.Context, userID string, groupIDs []string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("store: replace user groups: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memberships WHERE user_id = ?`, userID); err != nil {
-		return fmt.Errorf("store: replace user groups: %w", err)
-	}
-	for _, g := range groupIDs {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?,?)`, userID, g); err != nil {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM memberships WHERE user_id = ?`, userID); err != nil {
 			return fmt.Errorf("store: replace user groups: %w", err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("store: replace user groups: %w", err)
-	}
-	return nil
+		for _, g := range groupIDs {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?,?)`, userID, g); err != nil {
+				return fmt.Errorf("store: replace user groups: %w", err)
+			}
+		}
+		return nil
+	})
 }

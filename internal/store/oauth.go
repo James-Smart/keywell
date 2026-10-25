@@ -12,7 +12,7 @@ import (
 
 // CreateAuthCode stores a new authorization code (already hashed).
 func (s *Store) CreateAuthCode(ctx context.Context, c *model.AuthCode) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_codes
+	_, err := s.q.ExecContext(ctx, `INSERT INTO auth_codes
 		(code_hash, application_id, user_id, session_id, redirect_uri, scope, nonce,
 		 code_challenge, code_challenge_method, auth_time, expires_at, used_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -25,7 +25,7 @@ func (s *Store) CreateAuthCode(ctx context.Context, c *model.AuthCode) error {
 // It returns ErrNotFound if the code is missing, already used or expired.
 func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*model.AuthCode, error) {
 	now := formatTime(time.Now())
-	res, err := s.db.ExecContext(ctx, `UPDATE auth_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL AND expires_at > ?`,
+	res, err := s.q.ExecContext(ctx, `UPDATE auth_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL AND expires_at > ?`,
 		now, codeHash, now)
 	if err != nil {
 		return nil, fmt.Errorf("store: consume auth code: %w", err)
@@ -42,7 +42,7 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*model.Au
 		authTime, expiresAt string
 		usedAt              sql.NullString
 	)
-	err = s.db.QueryRowContext(ctx, `SELECT code_hash, application_id, user_id, session_id, redirect_uri, scope, nonce,
+	err = s.q.QueryRowContext(ctx, `SELECT code_hash, application_id, user_id, session_id, redirect_uri, scope, nonce,
 		code_challenge, code_challenge_method, auth_time, expires_at, used_at FROM auth_codes WHERE code_hash=?`, codeHash).
 		Scan(&c.CodeHash, &c.ApplicationID, &c.UserID, &c.SessionID, &c.RedirectURI, &c.Scope, &c.Nonce,
 			&c.CodeChallenge, &c.CodeChallengeMethod, &authTime, &expiresAt, &usedAt)
@@ -66,7 +66,7 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*model.Au
 
 // CreateRefreshToken stores a new refresh token (already hashed).
 func (s *Store) CreateRefreshToken(ctx context.Context, t *model.RefreshToken) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO refresh_tokens
+	_, err := s.q.ExecContext(ctx, `INSERT INTO refresh_tokens
 		(token_hash, family_id, application_id, user_id, scope, nonce, auth_time, created_at,
 		 expires_at, absolute_expires_at, revoked_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -82,7 +82,7 @@ func (s *Store) GetRefreshToken(ctx context.Context, tokenHash string) (*model.R
 		authTime, createdAt, expiresAt, absoluteExpiresAt string
 		revokedAt                                         sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT token_hash, family_id, application_id, user_id, scope, nonce,
+	err := s.q.QueryRowContext(ctx, `SELECT token_hash, family_id, application_id, user_id, scope, nonce,
 		auth_time, created_at, expires_at, absolute_expires_at, revoked_at FROM refresh_tokens WHERE token_hash=?`, tokenHash).
 		Scan(&t.TokenHash, &t.FamilyID, &t.ApplicationID, &t.UserID, &t.Scope, &t.Nonce,
 			&authTime, &createdAt, &expiresAt, &absoluteExpiresAt, &revokedAt)
@@ -107,7 +107,7 @@ func (s *Store) GetRefreshToken(ctx context.Context, tokenHash string) (*model.R
 }
 
 func (s *Store) revokeWhere(ctx context.Context, op, col, val string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at=? WHERE `+col+`=? AND revoked_at IS NULL`,
+	_, err := s.q.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at=? WHERE `+col+`=? AND revoked_at IS NULL`,
 		formatTime(time.Now()), val)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
@@ -125,7 +125,7 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error 
 // concurrent calls for one token at most one returns true.
 func (s *Store) RevokeRefreshTokenIfActive(ctx context.Context, tokenHash string, now time.Time) (bool, error) {
 	at := formatTime(now)
-	res, err := s.db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at=?
+	res, err := s.q.ExecContext(ctx, `UPDATE refresh_tokens SET revoked_at=?
 		WHERE token_hash=? AND revoked_at IS NULL AND expires_at > ?`, at, tokenHash, at)
 	if err != nil {
 		return false, fmt.Errorf("store: revoke active refresh token: %w", err)

@@ -84,7 +84,7 @@ func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO users
+	_, err = s.q.ExecContext(ctx, `INSERT INTO users
 		(id, name, type, email, username, password_hash, legacy_password_hash, is_active, metadata,
 		 totp_secret_enc, totp_confirmed_at, authentik_pk, authentik_uuid, authentik_uid,
 		 last_login_at, description, created_at, updated_at)
@@ -98,7 +98,7 @@ func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 }
 
 func (s *Store) getUserWhere(ctx context.Context, where string, arg any) (*model.User, error) {
-	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE `+where, arg))
+	return scanUser(s.q.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE `+where, arg))
 }
 
 // GetUser returns the user with the given id.
@@ -124,7 +124,7 @@ func (s *Store) UpdateUser(ctx context.Context, u *model.User) error {
 	}
 	u.Email = strings.TrimSpace(u.Email)
 	u.UpdatedAt = time.Now().UTC()
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET name=?, email=?, username=?, type=?, is_active=?,
+	res, err := s.q.ExecContext(ctx, `UPDATE users SET name=?, email=?, username=?, type=?, is_active=?,
 		metadata=?, authentik_pk=?, authentik_uuid=?, authentik_uid=?, description=?, updated_at=? WHERE id=?`,
 		u.Name, nullIfEmpty(u.Email), nullIfEmpty(u.Username), string(u.Type), boolInt(u.IsActive),
 		meta, nullPK(u.AuthentikPK), nullIfEmpty(u.AuthentikUUID), nullIfEmpty(u.AuthentikUID),
@@ -136,7 +136,7 @@ func (s *Store) UpdateUser(ctx context.Context, u *model.User) error {
 // tokens, codes and API tokens. Applications naming it as their service
 // account lose that link; audit events stay. ErrNotFound if there is no such user.
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id=?`, id)
+	res, err := s.q.ExecContext(ctx, `DELETE FROM users WHERE id=?`, id)
 	return oneRow("store: delete user", res, err)
 }
 
@@ -157,14 +157,14 @@ func oneRow(op string, res sql.Result, err error) error {
 
 // SetPassword stores a native hash and clears any legacy hash.
 func (s *Store) SetPassword(ctx context.Context, userID, phcHash string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash=?, legacy_password_hash='', updated_at=? WHERE id=?`,
+	res, err := s.q.ExecContext(ctx, `UPDATE users SET password_hash=?, legacy_password_hash='', updated_at=? WHERE id=?`,
 		phcHash, formatTime(time.Now()), userID)
 	return oneRow("store: set password", res, err)
 }
 
 // SetTOTP stores the sealed TOTP secret and confirmation time.
 func (s *Store) SetTOTP(ctx context.Context, userID string, secretEnc []byte, confirmedAt *time.Time) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET totp_secret_enc=?, totp_confirmed_at=?, updated_at=? WHERE id=?`,
+	res, err := s.q.ExecContext(ctx, `UPDATE users SET totp_secret_enc=?, totp_confirmed_at=?, updated_at=? WHERE id=?`,
 		secretEnc, nullTime(confirmedAt), formatTime(time.Now()), userID)
 	return oneRow("store: set totp", res, err)
 }
@@ -172,25 +172,22 @@ func (s *Store) SetTOTP(ctx context.Context, userID string, secretEnc []byte, co
 // ClearTOTP removes TOTP enrolment, the last TOTP step claimed, the user's
 // recovery codes and any enrolment in progress in their sessions.
 func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("store: clear totp: %w", err)
-	}
-	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=NULL, totp_confirmed_at=NULL, totp_last_step=NULL,
-		updated_at=? WHERE id=?`,
-		formatTime(time.Now()), userID)
-	if err := oneRow("store: clear totp", res, err); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id=?`, userID); err != nil {
-		return fmt.Errorf("store: clear recovery codes: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM totp_enrolments
-		WHERE session_id IN (SELECT id FROM sessions WHERE user_id=?)`, userID); err != nil {
-		return fmt.Errorf("store: clear totp enrolments: %w", err)
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret_enc=NULL, totp_confirmed_at=NULL, totp_last_step=NULL,
+			updated_at=? WHERE id=?`,
+			formatTime(time.Now()), userID)
+		if err := oneRow("store: clear totp", res, err); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id=?`, userID); err != nil {
+			return fmt.Errorf("store: clear recovery codes: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM totp_enrolments
+			WHERE session_id IN (SELECT id FROM sessions WHERE user_id=?)`, userID); err != nil {
+			return fmt.Errorf("store: clear totp enrolments: %w", err)
+		}
+		return nil
+	})
 }
 
 // ClaimTOTPStep records that the user's TOTP code for time step (Unix time
@@ -199,7 +196,7 @@ func (s *Store) ClearTOTP(ctx context.Context, userID string) error {
 // atomic, so of two concurrent claims of one step at most one succeeds. An
 // unknown user claims nothing.
 func (s *Store) ClaimTOTPStep(ctx context.Context, userID string, step int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET totp_last_step=?
+	res, err := s.q.ExecContext(ctx, `UPDATE users SET totp_last_step=?
 		WHERE id=? AND COALESCE(totp_last_step, -1) < ?`, step, userID, step)
 	if err != nil {
 		return false, fmt.Errorf("store: claim totp step: %w", err)
@@ -213,21 +210,18 @@ func (s *Store) ClaimTOTPStep(ctx context.Context, userID string, step int64) (b
 
 // TouchLastLogin records a successful login time.
 func (s *Store) TouchLastLogin(ctx context.Context, userID string, at time.Time) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET last_login_at=? WHERE id=?`, formatTime(at), userID)
+	res, err := s.q.ExecContext(ctx, `UPDATE users SET last_login_at=? WHERE id=?`, formatTime(at), userID)
 	return oneRow("store: touch last login", res, err)
 }
 
 // ReplaceRecoveryCodes atomically swaps the user's recovery codes for codeHashes.
 func (s *Store) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("store: replace recovery codes: %w", err)
-	}
-	defer tx.Rollback()
-	if err := replaceRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		if err := replaceRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // replaceRecoveryCodes swaps the user's recovery codes within tx.
@@ -246,7 +240,7 @@ func replaceRecoveryCodes(ctx context.Context, tx *sql.Tx, userID string, codeHa
 
 // ConsumeRecoveryCode marks an unused code as used; it reports whether one was consumed.
 func (s *Store) ConsumeRecoveryCode(ctx context.Context, userID, codeHash string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL`,
+	res, err := s.q.ExecContext(ctx, `UPDATE recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL`,
 		formatTime(time.Now()), userID, codeHash)
 	if err != nil {
 		return false, fmt.Errorf("store: consume recovery code: %w", err)
@@ -261,7 +255,7 @@ func (s *Store) ConsumeRecoveryCode(ctx context.Context, userID, codeHash string
 // CountUnusedRecoveryCodes returns how many recovery codes the user has left.
 func (s *Store) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM recovery_codes WHERE user_id=? AND used_at IS NULL`, userID).Scan(&n)
+	err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM recovery_codes WHERE user_id=? AND used_at IS NULL`, userID).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("store: count recovery codes: %w", err)
 	}

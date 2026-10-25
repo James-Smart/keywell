@@ -109,7 +109,7 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) (UserPage, error) {
 		where = ` WHERE ` + strings.Join(conds, ` AND `)
 	}
 
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`+where, args...).Scan(&page.Total); err != nil {
+	if err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`+where, args...).Scan(&page.Total); err != nil {
 		return UserPage{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -121,7 +121,7 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) (UserPage, error) {
 		LIMIT ? OFFSET ?`
 	qargs := append([]any{now}, args...)
 	qargs = append(qargs, page.PerPage, (page.Page-1)*page.PerPage)
-	rows, err := s.db.QueryContext(ctx, query, qargs...)
+	rows, err := s.q.QueryContext(ctx, query, qargs...)
 	if err != nil {
 		return UserPage{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -182,7 +182,7 @@ func (s *Store) loadRowGroups(ctx context.Context, page *UserPage, byID map[stri
 	for _, r := range page.Rows {
 		args = append(args, r.ID)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT m.user_id, `+groupCols+` FROM memberships m
+	rows, err := s.q.QueryContext(ctx, `SELECT m.user_id, `+groupCols+` FROM memberships m
 		JOIN groups ON groups.id = m.group_id WHERE m.user_id IN (`+marks+`) ORDER BY groups.name`, args...)
 	if err != nil {
 		return fmt.Errorf("store: list user groups: %w", err)
@@ -208,7 +208,7 @@ func (s *Store) loadRowGroups(ctx context.Context, page *UserPage, byID map[stri
 // from the database; ErrNotFound if the user no longer exists.
 func (s *Store) GetUserStatus(ctx context.Context, u *model.User) (model.UserStatus, error) {
 	var status string
-	err := s.db.QueryRowContext(ctx, `SELECT `+statusExpr+` FROM users WHERE users.id = ?`,
+	err := s.q.QueryRowContext(ctx, `SELECT `+statusExpr+` FROM users WHERE users.id = ?`,
 		formatTime(time.Now()), u.ID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound

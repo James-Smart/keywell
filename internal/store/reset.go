@@ -12,7 +12,7 @@ import (
 
 // CreateResetToken stores a new reset or invite token (already hashed).
 func (s *Store) CreateResetToken(ctx context.Context, t *model.ResetToken) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO password_reset_tokens
+	_, err := s.q.ExecContext(ctx, `INSERT INTO password_reset_tokens
 		(token_hash, user_id, purpose, created_at, expires_at, used_at) VALUES (?,?,?,?,?,?)`,
 		t.TokenHash, t.UserID, string(t.Purpose), formatTime(t.CreatedAt), formatTime(t.ExpiresAt), nullTime(t.UsedAt))
 	return wrapWrite("store: create reset token", err)
@@ -22,7 +22,7 @@ func (s *Store) CreateResetToken(ctx context.Context, t *model.ResetToken) error
 // It returns ErrNotFound if the token is missing, already used or expired.
 func (s *Store) ConsumeResetToken(ctx context.Context, tokenHash string) (*model.ResetToken, error) {
 	now := formatTime(time.Now())
-	res, err := s.db.ExecContext(ctx, `UPDATE password_reset_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at > ?`,
+	res, err := s.q.ExecContext(ctx, `UPDATE password_reset_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at > ?`,
 		now, tokenHash, now)
 	if err != nil {
 		return nil, fmt.Errorf("store: consume reset token: %w", err)
@@ -54,7 +54,7 @@ func (s *Store) readResetToken(ctx context.Context, query string, args ...any) (
 		purpose, createdAt, expiresAt string
 		usedAt                        sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, query, args...).
+	err := s.q.QueryRowContext(ctx, query, args...).
 		Scan(&t.TokenHash, &t.UserID, &purpose, &createdAt, &expiresAt, &usedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -78,7 +78,7 @@ func (s *Store) readResetToken(ctx context.Context, query string, args ...any) (
 // DeleteResetToken removes one reset or invite token by its hash. A token
 // that is already gone is not an error.
 func (s *Store) DeleteResetToken(ctx context.Context, tokenHash string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE token_hash = ?`, tokenHash)
+	_, err := s.q.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE token_hash = ?`, tokenHash)
 	return wrapWrite("store: delete reset token", err)
 }
 
@@ -92,7 +92,7 @@ func (s *Store) DeleteSpentResetTokens(ctx context.Context) (int64, error) {
 // HasActiveInviteToken reports whether the user has an unused, unexpired invite token.
 func (s *Store) HasActiveInviteToken(ctx context.Context, userID string) (bool, error) {
 	var ok bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM password_reset_tokens
+	err := s.q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM password_reset_tokens
 		WHERE user_id=? AND purpose='invite' AND used_at IS NULL AND expires_at > ?)`,
 		userID, formatTime(time.Now())).Scan(&ok)
 	if err != nil {

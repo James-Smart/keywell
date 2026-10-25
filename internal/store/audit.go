@@ -23,7 +23,7 @@ func (s *Store) InsertAuditEvent(ctx context.Context, e *model.AuditEvent) error
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO audit_events
+	_, err = s.q.ExecContext(ctx, `INSERT INTO audit_events
 		(id, at, actor_type, actor_id, action, target_type, target_id, summary, detail)
 		VALUES (?,?,?,?,?,?,?,?,?)`,
 		e.ID, formatTime(e.At), string(e.ActorType), e.ActorID, e.Action, e.TargetType, e.TargetID, e.Summary, detail)
@@ -103,12 +103,12 @@ func (s *Store) ListAuditEvents(ctx context.Context, f AuditFilter) (AuditPage, 
 		group = `CASE WHEN action = 'login.failure' THEN target_id || '|' || substr(at, 1, 13) ELSE id END`
 	}
 
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.q.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM (SELECT 1 FROM audit_events`+where+` GROUP BY `+group+`)`, args...).Scan(&page.Total); err != nil {
 		return AuditPage{}, fmt.Errorf("%s: %w", op, err)
 	}
 	qargs := append(args, page.PerPage, (page.Page-1)*page.PerPage)
-	rows, err := s.db.QueryContext(ctx, `SELECT id, MAX(at), actor_type, actor_id, action, target_type, target_id,
+	rows, err := s.q.QueryContext(ctx, `SELECT id, MAX(at), actor_type, actor_id, action, target_type, target_id,
 		summary, detail, COUNT(*) FROM audit_events`+where+` GROUP BY `+group+`
 		ORDER BY MAX(at) DESC, id DESC LIMIT ? OFFSET ?`, qargs...)
 	if err != nil {

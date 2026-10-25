@@ -14,7 +14,7 @@ func (s *Store) InsertSigningKey(ctx context.Context, k *model.SigningKey) error
 	if k.CreatedAt.IsZero() {
 		k.CreatedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO signing_keys (kid, alg, private_key_enc, public_key_pem, created_at, retired_at)
+	_, err := s.q.ExecContext(ctx, `INSERT INTO signing_keys (kid, alg, private_key_enc, public_key_pem, created_at, retired_at)
 		VALUES (?,?,?,?,?,?)`,
 		k.KID, k.Alg, k.PrivateKeyEnc, k.PublicKeyPEM, formatTime(k.CreatedAt), nullTime(k.RetiredAt))
 	return wrapWrite("store: insert signing key", err)
@@ -22,7 +22,7 @@ func (s *Store) InsertSigningKey(ctx context.Context, k *model.SigningKey) error
 
 // ListSigningKeys returns all keys, newest first, including retired ones.
 func (s *Store) ListSigningKeys(ctx context.Context) ([]model.SigningKey, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT kid, alg, private_key_enc, public_key_pem, created_at, retired_at
+	rows, err := s.q.QueryContext(ctx, `SELECT kid, alg, private_key_enc, public_key_pem, created_at, retired_at
 		FROM signing_keys ORDER BY created_at DESC, kid`)
 	if err != nil {
 		return nil, fmt.Errorf("store: list signing keys: %w", err)
@@ -54,6 +54,6 @@ func (s *Store) ListSigningKeys(ctx context.Context) ([]model.SigningKey, error)
 
 // RetireSigningKey marks the key retired at the given time.
 func (s *Store) RetireSigningKey(ctx context.Context, kid string, at time.Time) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE signing_keys SET retired_at=? WHERE kid=?`, formatTime(at), kid)
+	res, err := s.q.ExecContext(ctx, `UPDATE signing_keys SET retired_at=? WHERE kid=?`, formatTime(at), kid)
 	return oneRow("store: retire signing key", res, err)
 }

@@ -21,11 +21,57 @@ var (
 	ErrConflict = errors.New("store: conflict")
 )
 
-// Store wraps the database handle.
-type Store struct{ db *sql.DB }
+// dbtx is what both *sql.DB and *sql.Tx offer; every query goes through it.
+type dbtx interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Store wraps the database handle. A Store handed to InTx's callback is bound
+// to that transaction: all of its calls run inside it.
+type Store struct {
+	db *sql.DB
+	q  dbtx    // db, or tx when bound
+	tx *sql.Tx // non-nil when bound to a transaction
+}
 
 // New returns a Store using db.
-func New(db *sql.DB) *Store { return &Store{db: db} }
+func New(db *sql.DB) *Store { return &Store{db: db, q: db} }
+
+// InTx runs fn with a Store whose calls all share one transaction. It commits
+// if fn returns nil and rolls back otherwise, returning fn's error unchanged.
+// On a Store already bound to a transaction it just calls fn with that Store.
+// Inside fn use only tx: the database has one connection, so a call on the
+// outer Store would wait for the transaction forever.
+func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
+	if s.tx != nil {
+		return fn(s)
+	}
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		return fn(&Store{db: s.db, q: tx, tx: tx})
+	})
+}
+
+// withTx runs fn in the Store's transaction when bound to one, else in a
+// transaction of its own that commits when fn returns nil.
+func (s *Store) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	if s.tx != nil {
+		return fn(s.tx)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: begin: %w", err)
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: commit: %w", err)
+	}
+	return nil
+}
 
 // isUniqueViolation reports whether err is a SQLite unique constraint failure.
 func isUniqueViolation(err error) bool {
@@ -52,7 +98,7 @@ func wrapWrite(op string, err error) error {
 
 // deleteRows runs a DELETE and returns how many rows it removed.
 func (s *Store) deleteRows(ctx context.Context, op, query string, args ...any) (int64, error) {
-	res, err := s.db.ExecContext(ctx, query, args...)
+	res, err := s.q.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}

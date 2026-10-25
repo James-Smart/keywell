@@ -106,7 +106,7 @@ func (s *Store) loadAppGroups(ctx context.Context, apps []model.Application) err
 	for i := range apps {
 		idx[apps[i].ID] = i
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT application_id, group_id FROM application_groups ORDER BY group_id`)
+	rows, err := s.q.QueryContext(ctx, `SELECT application_id, group_id FROM application_groups ORDER BY group_id`)
 	if err != nil {
 		return fmt.Errorf("store: load application groups: %w", err)
 	}
@@ -124,7 +124,7 @@ func (s *Store) loadAppGroups(ctx context.Context, apps []model.Application) err
 }
 
 func (s *Store) queryApps(ctx context.Context, query string, args ...any) ([]model.Application, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: query applications: %w", err)
 	}
@@ -198,27 +198,24 @@ func (s *Store) CreateApplication(ctx context.Context, a *model.Application) err
 	if err != nil {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("store: create application: %w", err)
-	}
-	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO applications
-		(id, name, slug, client_id, client_secret_hash, client_type, redirect_uris, post_logout_redirect_uris,
-		 subject_mode, access_token_ttl, refresh_token_ttl, id_token_ttl, launch_url, icon_url, description,
-		 show_tile, service_account_id, authentik_provider_pk, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, a.Name, a.Slug, a.ClientID, a.ClientSecretHash, string(a.ClientType), redirects, postOut,
-		string(a.SubjectMode), ttlSeconds(a.AccessTokenTTL), ttlSeconds(a.RefreshTokenTTL), ttlSeconds(a.IDTokenTTL),
-		a.LaunchURL, a.IconURL, a.Description, boolInt(a.ShowTile), nullIfEmpty(a.ServiceAccountID),
-		nullPK(a.AuthentikProviderPK), formatTime(a.CreatedAt), formatTime(a.UpdatedAt))
-	if err != nil {
-		return wrapWrite("store: create application", err)
-	}
-	if err := replaceAppGroups(ctx, tx, a.ID, a.AllowedGroupIDs); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		_, err = tx.ExecContext(ctx, `INSERT INTO applications
+			(id, name, slug, client_id, client_secret_hash, client_type, redirect_uris, post_logout_redirect_uris,
+			 subject_mode, access_token_ttl, refresh_token_ttl, id_token_ttl, launch_url, icon_url, description,
+			 show_tile, service_account_id, authentik_provider_pk, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			a.ID, a.Name, a.Slug, a.ClientID, a.ClientSecretHash, string(a.ClientType), redirects, postOut,
+			string(a.SubjectMode), ttlSeconds(a.AccessTokenTTL), ttlSeconds(a.RefreshTokenTTL), ttlSeconds(a.IDTokenTTL),
+			a.LaunchURL, a.IconURL, a.Description, boolInt(a.ShowTile), nullIfEmpty(a.ServiceAccountID),
+			nullPK(a.AuthentikProviderPK), formatTime(a.CreatedAt), formatTime(a.UpdatedAt))
+		if err != nil {
+			return wrapWrite("store: create application", err)
+		}
+		if err := replaceAppGroups(ctx, tx, a.ID, a.AllowedGroupIDs); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // GetApplication returns the application with the given id.
@@ -252,26 +249,23 @@ func (s *Store) UpdateApplication(ctx context.Context, a *model.Application) err
 		return err
 	}
 	a.UpdatedAt = time.Now().UTC()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("store: update application: %w", err)
-	}
-	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE applications SET name=?, slug=?, client_id=?, client_secret_hash=?,
-		client_type=?, redirect_uris=?, post_logout_redirect_uris=?, subject_mode=?, access_token_ttl=?,
-		refresh_token_ttl=?, id_token_ttl=?, launch_url=?, icon_url=?, description=?, show_tile=?,
-		service_account_id=?, authentik_provider_pk=?, updated_at=? WHERE id=?`,
-		a.Name, a.Slug, a.ClientID, a.ClientSecretHash, string(a.ClientType), redirects, postOut,
-		string(a.SubjectMode), ttlSeconds(a.AccessTokenTTL), ttlSeconds(a.RefreshTokenTTL), ttlSeconds(a.IDTokenTTL),
-		a.LaunchURL, a.IconURL, a.Description, boolInt(a.ShowTile), nullIfEmpty(a.ServiceAccountID),
-		nullPK(a.AuthentikProviderPK), formatTime(a.UpdatedAt), a.ID)
-	if err := oneRow("store: update application", res, err); err != nil {
-		return err
-	}
-	if err := replaceAppGroups(ctx, tx, a.ID, a.AllowedGroupIDs); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE applications SET name=?, slug=?, client_id=?, client_secret_hash=?,
+			client_type=?, redirect_uris=?, post_logout_redirect_uris=?, subject_mode=?, access_token_ttl=?,
+			refresh_token_ttl=?, id_token_ttl=?, launch_url=?, icon_url=?, description=?, show_tile=?,
+			service_account_id=?, authentik_provider_pk=?, updated_at=? WHERE id=?`,
+			a.Name, a.Slug, a.ClientID, a.ClientSecretHash, string(a.ClientType), redirects, postOut,
+			string(a.SubjectMode), ttlSeconds(a.AccessTokenTTL), ttlSeconds(a.RefreshTokenTTL), ttlSeconds(a.IDTokenTTL),
+			a.LaunchURL, a.IconURL, a.Description, boolInt(a.ShowTile), nullIfEmpty(a.ServiceAccountID),
+			nullPK(a.AuthentikProviderPK), formatTime(a.UpdatedAt), a.ID)
+		if err := oneRow("store: update application", res, err); err != nil {
+			return err
+		}
+		if err := replaceAppGroups(ctx, tx, a.ID, a.AllowedGroupIDs); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // DeleteApplication removes the application; its authorization codes, refresh

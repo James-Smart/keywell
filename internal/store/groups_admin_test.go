@@ -242,3 +242,17 @@ func TestReplaceUserGroups(t *testing.T) {
 		t.Fatalf("memberships changed on failure: %v", got)
 	}
 }
+
+func TestUpdateGroupWritesAuthentikUUID(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	g := mkGroup(t, s, "Makers")
+	g.AuthentikUUID = "0f6b-uuid"
+	if err := s.UpdateGroup(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetGroup(ctx, g.ID)
+	if err != nil || got.AuthentikUUID != "0f6b-uuid" {
+		t.Fatalf("got %+v %v", got, err)
+	}
+}
