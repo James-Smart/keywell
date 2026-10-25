@@ -10,7 +10,8 @@ import (
 )
 
 func TestInTxCommits(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	s := openTest(t)
 	var uid, gid string
 	err := s.InTx(ctx, func(tx *Store) error {
@@ -38,7 +39,8 @@ func TestInTxCommits(t *testing.T) {
 }
 
 func TestInTxRollsBack(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	s := openTest(t)
 	existing := mkUser(t, s, "keep@example.org")
 	if err := s.ReplaceRecoveryCodes(ctx, existing.ID, []string{"h1", "h2"}); err != nil {
@@ -174,5 +176,55 @@ func TestInTxMethodsUseTheTransaction(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInTxFailedCallUndoesItsPartialWrites(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s := openTest(t)
+	u := mkUser(t, s, "m@example.org")
+	keep := mkGroup(t, s, "Keep")
+	other := mkGroup(t, s, "Other")
+	if err := s.AddMember(ctx, u.ID, keep.ID); err != nil {
+		t.Fatal(err)
+	}
+	memberOf := func(st *Store) []string {
+		t.Helper()
+		gs, err := st.ListGroupsForUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, g := range gs {
+			out = append(out, g.Name)
+		}
+		return out
+	}
+	err := s.InTx(ctx, func(tx *Store) error {
+		if err := tx.ReplaceUserGroups(ctx, u.ID, []string{other.ID, "no-such-group"}); err == nil {
+			t.Error("unknown group accepted")
+		}
+		if got := memberOf(tx); len(got) != 1 || got[0] != "Keep" {
+			t.Errorf("inside tx: memberships = %v, want [Keep]", got)
+		}
+		a := &model.Application{Name: "A", Slug: "a", ClientID: "a", AllowedGroupIDs: []string{other.ID, "no-such-group"}}
+		if err := tx.CreateApplication(ctx, a); err == nil {
+			t.Error("app with unknown group accepted")
+		}
+		if _, err := tx.GetApplicationBySlug(ctx, "a"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("inside tx: app left behind: %v", err)
+		}
+		// The transaction is still usable and its later writes commit.
+		return tx.AddMember(ctx, u.ID, other.ID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := memberOf(s); len(got) != 2 {
+		t.Fatalf("after commit: memberships = %v, want Keep and Other", got)
+	}
+	if _, err := s.GetApplicationBySlug(ctx, "a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("after commit: app left behind: %v", err)
 	}
 }

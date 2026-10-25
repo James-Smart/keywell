@@ -31,9 +31,10 @@ type dbtx interface {
 // Store wraps the database handle. A Store handed to InTx's callback is bound
 // to that transaction: all of its calls run inside it.
 type Store struct {
-	db *sql.DB
-	q  dbtx    // db, or tx when bound
-	tx *sql.Tx // non-nil when bound to a transaction
+	db  *sql.DB
+	q   dbtx    // db, or tx when bound
+	tx  *sql.Tx // non-nil when bound to a transaction
+	spN int     // savepoint counter, for unique names; bound stores only
 }
 
 // New returns a Store using db.
@@ -54,10 +55,27 @@ func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
 }
 
 // withTx runs fn in the Store's transaction when bound to one, else in a
-// transaction of its own that commits when fn returns nil.
+// transaction of its own that commits when fn returns nil. In a bound Store
+// fn runs inside a savepoint, so when it fails its partial writes are undone
+// and the transaction stays usable; the caller may carry on.
 func (s *Store) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	if s.tx != nil {
-		return fn(s.tx)
+		s.spN++
+		name := fmt.Sprintf("latch_sp_%d", s.spN)
+		if _, err := s.tx.ExecContext(ctx, "SAVEPOINT "+name); err != nil {
+			return fmt.Errorf("store: savepoint: %w", err)
+		}
+		if err := fn(s.tx); err != nil {
+			// Undo fn's writes. If the rollback itself fails the outer
+			// transaction is unusable and its own rollback will follow.
+			_, _ = s.tx.ExecContext(ctx, "ROLLBACK TO "+name)
+			_, _ = s.tx.ExecContext(ctx, "RELEASE "+name)
+			return err
+		}
+		if _, err := s.tx.ExecContext(ctx, "RELEASE "+name); err != nil {
+			return fmt.Errorf("store: release savepoint: %w", err)
+		}
+		return nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

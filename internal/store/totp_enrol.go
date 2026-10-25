@@ -41,7 +41,7 @@ func (s *Store) GetTOTPEnrolment(ctx context.Context, sessionID string) (secretE
 // keeps codesJSON, the codes to show once, while its copy of the secret is
 // cleared. It returns ErrConflict when the user is already enrolled (or does
 // not exist) and ErrNotFound when the session has no enrolment; either way
-// nothing is written.
+// nothing is written (inside InTx, by way of a savepoint).
 func (s *Store) CompleteTOTPEnrolment(ctx context.Context, userID, sessionID string, secretEnc []byte,
 	confirmedAt time.Time, step int64, codeHashes []string, codesJSON string) error {
 	const op = "store: complete totp enrolment"

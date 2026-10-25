@@ -227,8 +227,8 @@ func (s *Store) guardedResult(ctx context.Context, op, id string, res sql.Result
 }
 
 // ReplaceUserGroups makes groupIDs the user's complete set of memberships in
-// one transaction. An unknown group fails the foreign key and leaves the
-// previous memberships in place.
+// one transaction (or savepoint, inside InTx). An unknown group fails the
+// foreign key and leaves the previous memberships in place.
 func (s *Store) ReplaceUserGroups(ctx context.Context, userID string, groupIDs []string) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM memberships WHERE user_id = ?`, userID); err != nil {

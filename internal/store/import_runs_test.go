@@ -107,8 +107,8 @@ func TestImportRuns(t *testing.T) {
 		t.Fatalf("empty: %v", err)
 	}
 	t0 := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
-	later := &ImportRun{StartedAt: t0.Add(time.Hour), FinishedAt: t0.Add(2 * time.Hour), Source: "db:5432/authentik", Report: `{"a":1}`}
-	earlier := &ImportRun{StartedAt: t0, FinishedAt: t0.Add(time.Minute), Source: "other:5432/x", Report: `{}`}
+	later := &ImportRun{StartedAt: t0, FinishedAt: t0.Add(2 * time.Hour), Source: "db:5432/authentik", Report: `{"a":1}`}
+	earlier := &ImportRun{StartedAt: t0.Add(30 * time.Minute), FinishedAt: t0.Add(40 * time.Minute), Source: "other:5432/x", Report: `{}`}
 	// Insert the later one first so insertion order cannot decide the answer.
 	if err := s.InsertImportRun(ctx, later); err != nil {
 		t.Fatal(err)

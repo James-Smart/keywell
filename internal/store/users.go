@@ -214,7 +214,8 @@ func (s *Store) TouchLastLogin(ctx context.Context, userID string, at time.Time)
 	return oneRow("store: touch last login", res, err)
 }
 
-// ReplaceRecoveryCodes atomically swaps the user's recovery codes for codeHashes.
+// ReplaceRecoveryCodes atomically swaps the user's recovery codes for codeHashes:
+// on failure the old codes stay, also inside InTx.
 func (s *Store) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		if err := replaceRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
