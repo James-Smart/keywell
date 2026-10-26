@@ -2,7 +2,11 @@
 # the one-off `init` step to run before `up -d`.
 services:
   latch:
-    build: ..
+    build:
+      context: ..
+      args:
+        # Shown by `latch version` and /healthz. Set VERSION in the environment.
+        VERSION: "${VERSION:-dev}"
     image: latch:local
     restart: unless-stopped
     # Published on the host's loopback only. Put a reverse proxy that
@@ -22,10 +26,13 @@ services:
       #   LATCH_SMTP_FROM: login@example.org
       #   LATCH_SMTP_TLS: starttls
       #   LATCH_PUBLIC_URL: https://login.example.org
-      #   LATCH_METRICS_LISTEN: 0.0.0.0:9100  (publish that port only to a private network)
+      # Publish the metrics port only to a private network:
+      #   LATCH_METRICS_LISTEN: 0.0.0.0:9100
       # latch.example.yaml lists every setting; the variable is LATCH_ plus the key path.
       # Docker's default networks, where a proxy on the host or in a container appears.
       LATCH_TRUSTED_PROXIES: "172.16.0.0/12"
 
 volumes:
   latch-data:
+    # A fixed name, so backups can mount it whatever the compose project is called.
+    name: latch-data

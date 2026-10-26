@@ -72,7 +72,7 @@ docker compose -f deploy/docker-compose.yml run --rm latch init --config /var/li
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-`init` asks for the first admin's password. The port is published on `127.0.0.1:8080` only, so point your reverse proxy there. Because the image has no shell to edit the config file with, set SMTP and other settings with `LATCH_` variables in the compose file's `environment:` section (see the comments there).
+To show a version in `latch version` and `/healthz`, set it when you build: `VERSION=$(git describe --always) docker compose -f deploy/docker-compose.yml build`. `init` asks for the first admin's password. The port is published on `127.0.0.1:8080` only, so point your reverse proxy there. Because the image has no shell to edit the config file with, set SMTP and other settings with `LATCH_` variables in the compose file's `environment:` section (see the comments there).
 
 ### systemd
 
@@ -115,7 +115,7 @@ docker run --rm -v latch-data:/var/lib/latch -v "$PWD/backups:/backups" alpine s
   if [ -d /var/lib/latch/icons ]; then cp -r /var/lib/latch/icons /backups/; fi'
 ```
 
-The volume's name is prefixed with the compose project name (the directory name, `deploy_latch-data` by default); `docker volume ls` shows it. Or stop Latch and copy `latch.db` along with the other files.
+The volume is called `latch-data`. Or stop Latch and copy `latch.db` along with the other files.
 
 ## Connecting MediaWiki
 
