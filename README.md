@@ -59,6 +59,64 @@ To scrape it, add this to Prometheus:
 scrape_configs: [{job_name: latch, static_configs: [{targets: ['127.0.0.1:9100']}]}]
 ```
 
+## Running Latch for real
+
+### Docker
+
+`deploy/docker-compose.yml` runs Latch from a small image with no shell. The data lives in a named volume, `latch-data`, mounted at `/var/lib/latch`. Build the image, then make the config and database once:
+
+```sh
+docker compose -f deploy/docker-compose.yml build
+docker compose -f deploy/docker-compose.yml run --rm latch init --config /var/lib/latch/latch.yaml \
+  --data-dir /var/lib/latch --public-url https://login.example.org --admin-email you@example.org
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+`init` asks for the first admin's password. The port is published on `127.0.0.1:8080` only, so point your reverse proxy there. Because the image has no shell to edit the config file with, set SMTP and other settings with `LATCH_` variables in the compose file's `environment:` section (see the comments there).
+
+### systemd
+
+```sh
+sudo useradd --system --home-dir /var/lib/latch --shell /usr/sbin/nologin latch
+make build
+sudo install -m 0755 latch /usr/local/bin/latch
+sudo install -d -o root -g latch -m 0750 /etc/latch
+sudo install -d -o latch -g latch -m 0750 /var/lib/latch
+sudo latch init --config /etc/latch/latch.yaml --data-dir /var/lib/latch \
+  --public-url https://login.example.org --admin-email you@example.org
+sudo chown root:latch /etc/latch/latch.yaml
+sudo chmod 0640 /etc/latch/latch.yaml
+sudo chown -R latch:latch /var/lib/latch
+sudo cp deploy/latch.service /etc/systemd/system/latch.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now latch
+```
+
+The config file holds `encryption_key` and the SMTP password, so only root and the `latch` group can read it.
+
+### Backups
+
+A backup is the database, `data_dir/icons` (the admin's decisions about app icons) and the config file. The config's `encryption_key` is needed to read two-step sign-in secrets and signing keys from any backup. Without it, a copy of the database cannot restore those, so keep the key somewhere separate from the database backups too.
+
+You can back up the database while Latch runs:
+
+```sh
+sqlite3 /var/lib/latch/latch.db ".backup '/backups/latch.db'"
+```
+
+Under Docker, use a throwaway container with the volume mounted read-write (SQLite needs to write to its lock files, even to read), and copy the config and icons as well:
+
+```sh
+mkdir -p backups
+docker run --rm -v latch-data:/var/lib/latch -v "$PWD/backups:/backups" alpine sh -c '
+  apk add --no-cache sqlite >/dev/null &&
+  sqlite3 /var/lib/latch/latch.db ".backup /backups/latch.db" &&
+  cp /var/lib/latch/latch.yaml /backups/ &&
+  if [ -d /var/lib/latch/icons ]; then cp -r /var/lib/latch/icons /backups/; fi'
+```
+
+The volume's name is prefixed with the compose project name (the directory name, `deploy_latch-data` by default); `docker volume ls` shows it. Or stop Latch and copy `latch.db` along with the other files.
+
 ## Connecting MediaWiki
 
 Install the [PluggableAuth](https://www.mediawiki.org/wiki/Extension:PluggableAuth) and [OpenID Connect](https://www.mediawiki.org/wiki/Extension:OpenID_Connect) extensions. Register the wiki in Latch as a confidential application with the redirect URI `https://wiki.example.org/index.php/Special:PluggableAuthLogin` (use your wiki's own address). Then add this to `LocalSettings.php`. The app's page in Latch has a Setup details panel with this snippet already filled in, apart from the secret.

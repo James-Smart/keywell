@@ -1,0 +1,31 @@
+# Latch under Docker Compose. See "Running Latch for real" in the README for
+# the one-off `init` step to run before `up -d`.
+services:
+  latch:
+    build: ..
+    image: latch:local
+    restart: unless-stopped
+    # Published on the host's loopback only. Put a reverse proxy that
+    # terminates TLS in front of it.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Holds latch.yaml, latch.db and icons/.
+      - latch-data:/var/lib/latch
+    environment:
+      # The image has no shell for editing the config file, so set anything
+      # else here with LATCH_ variables, which override the file. For example:
+      #   LATCH_SMTP_HOST: smtp.example.org
+      #   LATCH_SMTP_PORT: "587"
+      #   LATCH_SMTP_USERNAME: latch
+      #   LATCH_SMTP_PASSWORD: change-me
+      #   LATCH_SMTP_FROM: login@example.org
+      #   LATCH_SMTP_TLS: starttls
+      #   LATCH_PUBLIC_URL: https://login.example.org
+      #   LATCH_METRICS_LISTEN: 0.0.0.0:9100  (publish that port only to a private network)
+      # latch.example.yaml lists every setting; the variable is LATCH_ plus the key path.
+      # Docker's default networks, where a proxy on the host or in a container appears.
+      LATCH_TRUSTED_PROXIES: "172.16.0.0/12"
+
+volumes:
+  latch-data:

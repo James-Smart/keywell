@@ -1,0 +1,8 @@
+.git
+.claude
+.superpowers
+dev-data
+dev/authentik/.env
+dev/authentik/data
+/latch
+*.db

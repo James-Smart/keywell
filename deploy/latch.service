@@ -1,0 +1,32 @@
+[Unit]
+Description=Latch identity provider
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=latch
+Group=latch
+ExecStart=/usr/local/bin/latch serve --config /etc/latch/latch.yaml
+Restart=on-failure
+# Creates /var/lib/latch, owned by the service user.
+StateDirectory=latch
+StateDirectoryMode=0750
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
