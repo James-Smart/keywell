@@ -75,7 +75,7 @@ These depart from the spec or settle what it left open. Each says why, and what 
    - It adds and removes memberships in groups that carry an `authentik_uuid`.
    - It never touches memberships of Latch-only groups. For example, the `Admin` group that `latch init` made keeps its members.
    - It never turns `is_admin` off on a group; it reports instead.
-   - It sets `require_totp` to the Authentik group's `is_superuser` on every run.
+   - It sets `require_totp` when the Authentik group is `is_superuser`, and keeps it on while the Latch group stays `is_admin` (Ruling AC: `require_totp = is_superuser || (is_admin && old require_totp)`).
    - Cost: an Authentik demotion has to be repeated by hand in Latch.
 5. **Empty, unused groups are skipped and listed.** These are groups with no imported members (directly or through child groups) that no imported app uses. This keeps Authentik's built-in `authentik Read-only` and `authentik Agent-Users` out. Cost: an empty group James wanted must be re-created by hand.
 6. **Access rules Latch can't express never widen access.**

@@ -546,9 +546,11 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 	goneBefore := e.user("gone@example.org")
 	rep = e.run(s)
 
+	// Ruling AC: an admin group keeps two-step sign in along with admin
+	// access.
 	g := e.group("Trustees")
-	if !g.IsAdmin || g.RequireTOTP {
-		t.Errorf("Trustees: is_admin %v, require_totp %v; want admin kept and second step off", g.IsAdmin, g.RequireTOTP)
+	if !g.IsAdmin || !g.RequireTOTP {
+		t.Errorf("Trustees: is_admin %v, require_totp %v; want both kept", g.IsAdmin, g.RequireTOTP)
 	}
 	if goneAfter := e.user("gone@example.org"); !reflect.DeepEqual(goneAfter, goneBefore) {
 		t.Errorf("gone changed:\n%+v\n%+v", goneBefore, goneAfter)
@@ -561,11 +563,37 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 	}
 	want := []Item{
 		{Kind: "member", Name: "gone@example.org", Reason: "Is no longer in Authentik. Latch has left them as they are."},
-		{Kind: "group", Name: "Trustees",
-			Reason: "Isn't an admin group in Authentik any more. Latch leaves admin access on; untick it on the group's page if that's right."},
+		{Kind: "group", Name: "Trustees", Reason: "Isn't an admin group in Authentik any more. " +
+			"Latch leaves admin access and two-step sign in on; untick them on the group's page if that's right."},
 	}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
+	}
+
+	// An admin unticks two-step sign in on the group's page but keeps admin
+	// access. The next import leaves it that way, and says so.
+	g.RequireTOTP = false
+	if err := e.st.UpdateGroup(context.Background(), g); err != nil {
+		t.Fatal(err)
+	}
+	rep = e.run(s)
+	if g := e.group("Trustees"); !g.IsAdmin || g.RequireTOTP {
+		t.Errorf("Trustees: is_admin %v, require_totp %v; want admin kept and two-step left off", g.IsAdmin, g.RequireTOTP)
+	}
+	want[1].Reason = "Isn't an admin group in Authentik any more. Latch leaves admin access on; " +
+		"untick it on the group's page if that's right."
+	if !reflect.DeepEqual(rep.Items, want) {
+		t.Errorf("Items after unticking two-step:\n got %+v\nwant %+v", rep.Items, want)
+	}
+
+	// An admin group in Authentik again needs two-step sign in again.
+	s.G(trustees).IsSuperuser = true
+	rep = e.run(s)
+	if g := e.group("Trustees"); !g.IsAdmin || !g.RequireTOTP {
+		t.Errorf("Trustees: is_admin %v, require_totp %v; want both on", g.IsAdmin, g.RequireTOTP)
+	}
+	if !reflect.DeepEqual(rep.Items, want[:1]) {
+		t.Errorf("Items after promotion:\n got %+v\nwant %+v", rep.Items, want[:1])
 	}
 }
 

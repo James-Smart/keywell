@@ -151,7 +151,8 @@ These two are only for members Latch doesn't have yet. A member an earlier impor
 ### Groups
 
 - Skipped: `Has no members and no app uses it.` Nothing to do, unless you wanted the group. Then add a member in Authentik.
-- Warning: `Isn't an admin group in Authentik any more. Latch leaves admin access on; untick it on the group's page if that's right.` On the group's page in Latch, untick admin access if the group should no longer have it. Latch never takes admin access away on its own, so nobody gets locked out.
+- Warning: `Isn't an admin group in Authentik any more. Latch leaves admin access and two-step sign in on; untick them on the group's page if that's right.` On the group's page in Latch, untick "Members can use the admin pages" and "Members must use two-step sign in" if the group should no longer have them. Latch never takes admin access away on its own, so nobody gets locked out, and while the group has admin access it doesn't turn two-step sign in off either.
+- Warning: `Isn't an admin group in Authentik any more. Latch leaves admin access on; untick it on the group's page if that's right.` The same, for a group whose two-step sign in was already turned off in Latch.
 - Warning: `Is no longer in Authentik. Latch has left it as it is.` See "Things that disappear from Authentik".
 
 ### Apps: skipped

@@ -10,7 +10,11 @@ import (
 // Report copy for groups.
 const (
 	reasonUnusedGroup = "Has no members and no app uses it."
-	warnNotAdmin      = "Isn't an admin group in Authentik any more. Latch leaves admin access on; " +
+	warnNotAdmin      = "Isn't an admin group in Authentik any more. Latch leaves admin access and two-step sign in on; " +
+		"untick them on the group's page if that's right."
+	// warnNotAdminNoTOTP is warnNotAdmin for a group whose two-step sign in
+	// was already turned off in Latch.
+	warnNotAdminNoTOTP = "Isn't an admin group in Authentik any more. Latch leaves admin access on; " +
 		"untick it on the group's page if that's right."
 	warnGroupGone = "Is no longer in Authentik. Latch has left it as it is."
 )
@@ -107,9 +111,14 @@ func (r *run) planGroups() {
 			r.block("Authentik has two groups called %s. Rename one of them in Authentik.", src.Name)
 		}
 		names[src.Name] = true
-		// Ruling 4: admin access is never turned off.
+		// Ruling 4: admin access is never turned off. Ruling AC: nor is the
+		// two-step sign in that goes with it.
 		if g.latch != nil && g.latch.IsAdmin && !src.IsSuperuser {
-			g.warn(warnNotAdmin)
+			if g.latch.RequireTOTP {
+				g.warn(warnNotAdmin)
+			} else {
+				g.warn(warnNotAdminNoTOTP)
+			}
 		}
 	}
 
@@ -157,8 +166,8 @@ func (r *run) writeGroups() error {
 			old := g.latch
 			u := *old
 			u.Name = g.src.Name
-			u.IsAdmin = old.IsAdmin || g.src.IsSuperuser // Ruling 4
-			u.RequireTOTP = g.src.IsSuperuser
+			u.IsAdmin = old.IsAdmin || g.src.IsSuperuser                        // Ruling 4
+			u.RequireTOTP = g.src.IsSuperuser || (u.IsAdmin && old.RequireTOTP) // Ruling AC
 			u.Metadata = g.metadata
 			u.AuthentikUUID = g.src.UUID
 			if groupChanged(old, &u) {
