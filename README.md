@@ -38,7 +38,7 @@ Latch refuses to start if:
 - `tokens.access` or `tokens.id` is longer than 24h. A retired signing key keeps verifying tokens for only 24 hours.
 - `tokens.refresh_absolute` is shorter than `tokens.refresh`.
 - A `trusted_proxies` entry is not a CIDR range (`10.0.0.0/8`) or an IP address.
-- `metrics.listen` is set but is not `host:port`.
+- `metrics.listen` is set but is not `host:port`, or uses port 0.
 
 ## Metrics
 

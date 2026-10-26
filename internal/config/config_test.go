@@ -269,7 +269,7 @@ func TestMetricsListen(t *testing.T) {
 			t.Errorf("%q: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"localhost", "127.0.0.1:x", "127.0.0.1:", "127.0.0.1:70000"} {
+	for _, bad := range []string{"localhost", "127.0.0.1:x", "127.0.0.1:", "127.0.0.1:70000", "127.0.0.1:0", ":0"} {
 		c := valid(t)
 		c.Metrics.Listen = bad
 		want := "metrics.listen must be host:port, got \"" + bad + "\""

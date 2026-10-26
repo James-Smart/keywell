@@ -66,19 +66,17 @@ func TestObserveAudit(t *testing.T) {
 	m.CountRequest(0)
 	m.CountRequest(503)
 	body, _ := scrape(t, m)
-	for _, want := range []string{
-		`latch_http_requests_total{code="2xx"} 1`,
-		`latch_http_requests_total{code="3xx"} 1`,
-		`latch_http_requests_total{code="5xx"} 1`,
-		`latch_logins_total{result="success"} 2`,
-		`latch_logins_total{result="failure"} 1`,
-		`latch_logins_total{result="second_step_failure"} 1`,
-		`latch_tokens_issued_total{grant="refresh_token"} 1`,
-		`latch_tokens_issued_total{grant="authorization_code"} 0`,
-	} {
-		if !strings.Contains(body, want+"\n") {
-			t.Errorf("missing %q in:\n%s", want, body)
-		}
+	want := strings.NewReplacer(
+		`code="2xx"} 0`, `code="2xx"} 1`,
+		`code="3xx"} 0`, `code="3xx"} 1`,
+		`code="5xx"} 0`, `code="5xx"} 1`,
+		`result="success"} 0`, `result="success"} 2`,
+		`result="failure"} 0`, `result="failure"} 1`,
+		`result="second_step_failure"} 0`, `result="second_step_failure"} 1`,
+		`grant="refresh_token"} 0`, `grant="refresh_token"} 1`,
+	).Replace(fresh)
+	if body != want {
+		t.Errorf("body:\n%s\nwant:\n%s", body, want)
 	}
 	var nilm *Registry
 	nilm.CountRequest(200) // must not panic

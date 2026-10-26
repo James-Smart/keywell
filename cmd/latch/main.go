@@ -300,13 +300,20 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	log.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+	// Both servers are shut down before either failure is returned.
+	err = srv.Shutdown(shutdownCtx)
+	if err != nil {
+		err = fmt.Errorf("shutdown: %w", err)
 	}
 	if msrv != nil {
-		if err := msrv.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("shutdown metrics: %w", err)
+		if merr := msrv.Shutdown(shutdownCtx); merr != nil && err == nil {
+			err = fmt.Errorf("shutdown metrics: %w", merr)
 		}
+	}
+	if err != nil {
+		return err
+	}
+	if msrv != nil {
 		if err := <-merrc; !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}

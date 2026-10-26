@@ -367,6 +367,29 @@ func getEventually(t *testing.T, url string) (int, string) {
 	}
 }
 
+// With metrics.listen empty, nothing listens at the address it would use.
+func TestServeNoMetricsListenerByDefault(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	main, unused := freeAddr(t), freeAddr(t)
+	cfg, _, _ := serveInstall(t, main)
+	errc := make(chan error, 1)
+	go func() { errc <- serve(ctx, cfg, slog.New(slog.DiscardHandler)) }()
+	getEventually(t, "http://"+main+"/healthz")
+	if c, err := net.DialTimeout("tcp", unused, time.Second); err == nil {
+		c.Close()
+		t.Error("something listens with metrics.listen empty")
+	}
+	cancel()
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("serve: %v", err)
+		}
+	case <-time.After(within):
+		t.Fatal("serve still running after its context ended")
+	}
+}
+
 // With metrics.listen set, /metrics is served there and only there.
 func TestServeMetricsListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
@@ -427,8 +450,7 @@ func TestServeMetricsListener(t *testing.T) {
 	}
 }
 
-// With metrics.listen empty nothing extra listens; one that cannot bind
-// fails serve.
+// A metrics listener that cannot bind fails serve.
 func TestServeMetricsListenFailure(t *testing.T) {
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
