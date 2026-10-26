@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func TestInTxCommits(t *testing.T) {

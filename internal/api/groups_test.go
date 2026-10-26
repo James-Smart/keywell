@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 const apiGroups = "/api/v1/groups"

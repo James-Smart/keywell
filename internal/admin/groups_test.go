@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 const msgLastAdminGroup = "This is the only admin group. Make another group an admin group first."

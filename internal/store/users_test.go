@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func jsonEqual(a, b any) bool {

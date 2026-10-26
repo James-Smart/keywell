@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/audit"
-	"latch/internal/authentik"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 const importDSN = "postgres://reader:s3cret@db.internal:5432/authentik"
@@ -64,7 +64,7 @@ func TestImportCommand(t *testing.T) {
 		cfgPath := initInstall(t)
 		_, st := openInstallation(t, cfgPath)
 		fakeAuthentik(t, users...)
-		code, stdout, stderr := latch("", "import-authentik", "--config", cfgPath, "--from", importDSN, "--dry-run")
+		code, stdout, stderr := keywell("", "import-authentik", "--config", cfgPath, "--from", importDSN, "--dry-run")
 		if code != 0 || stderr != "" {
 			t.Fatalf("exit %d, stderr %q", code, stderr)
 		}
@@ -84,7 +84,7 @@ func TestImportCommand(t *testing.T) {
 		cfgPath := initInstall(t)
 		_, st := openInstallation(t, cfgPath)
 		fakeAuthentik(t, users...)
-		code, stdout, stderr := latch("", "import-authentik", "--config", cfgPath, "--from", importDSN)
+		code, stdout, stderr := keywell("", "import-authentik", "--config", cfgPath, "--from", importDSN)
 		if code != 0 {
 			t.Fatalf("exit %d, stderr %q", code, stderr)
 		}
@@ -125,7 +125,7 @@ func TestImportCommand(t *testing.T) {
 		cfgPath := initInstall(t)
 		_, st := openInstallation(t, cfgPath)
 		fakeAuthentik(t, users...)
-		code, _, stderr := latch("", "import-authentik", "--config", cfgPath, "--from", importDSN,
+		code, _, stderr := keywell("", "import-authentik", "--config", cfgPath, "--from", importDSN,
 			"--drop-key", "member_number", "--drop-key", "door")
 		if code != 0 {
 			t.Fatalf("exit %d, stderr %q", code, stderr)
@@ -143,7 +143,7 @@ func TestImportCommand(t *testing.T) {
 		cfgPath := initInstall(t)
 		_, st := openInstallation(t, cfgPath)
 		fakeAuthentik(t, akUser(1, "alex", "Alex@example.org", nil), akUser(2, "alex2", "alex@example.org", nil))
-		code, stdout, _ := latch("", "import-authentik", "--config", cfgPath, "--from", importDSN)
+		code, stdout, _ := keywell("", "import-authentik", "--config", cfgPath, "--from", importDSN)
 		if code != 1 {
 			t.Fatalf("exit %d, want 1", code)
 		}
@@ -158,7 +158,7 @@ func TestImportCommand(t *testing.T) {
 
 	t.Run("extra arguments are not echoed", func(t *testing.T) {
 		// An unquoted keyword DSN leaves its password as a positional argument.
-		code, stdout, stderr := latch("", "import-authentik", "--config", initInstall(t),
+		code, stdout, stderr := keywell("", "import-authentik", "--config", initInstall(t),
 			"--from", "host=db", "password=s3cret")
 		if code != 2 || strings.Contains(stdout+stderr, "s3cret") || !strings.Contains(stderr, "unexpected arguments") {
 			t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
@@ -166,8 +166,8 @@ func TestImportCommand(t *testing.T) {
 	})
 
 	t.Run("no --from", func(t *testing.T) {
-		code, stdout, stderr := latch("", "import-authentik", "--config", initInstall(t))
-		if code != 2 || stdout != "" || stderr != "latch import-authentik: --from is required\n" {
+		code, stdout, stderr := keywell("", "import-authentik", "--config", initInstall(t))
+		if code != 2 || stdout != "" || stderr != "keywell import-authentik: --from is required\n" {
 			t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 		}
 	})

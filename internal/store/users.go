@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 const userCols = `id, name, type, COALESCE(email,''), COALESCE(username,''), password_hash,

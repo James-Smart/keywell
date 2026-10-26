@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // InsertSigningKey stores a signing key; ErrConflict if the kid exists.

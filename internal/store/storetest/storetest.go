@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"latch/internal/db"
-	"latch/internal/store"
+	"keywell/internal/db"
+	"keywell/internal/store"
 )
 
 // OpenTest returns a Store backed by a fresh, migrated temp-file database that

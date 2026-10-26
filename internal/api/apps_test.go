@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/icons"
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/icons"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 const apiApps = "/api/v1/apps"

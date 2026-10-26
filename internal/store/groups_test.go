@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func TestGroupsAndMembership(t *testing.T) {

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // How long the links IssueResetLink makes can be used.

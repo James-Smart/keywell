@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 // ImportRun is the record of one import from Authentik.

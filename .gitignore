@@ -1,6 +1,6 @@
 .superpowers/
 dev-data/
-/latch
+/keywell
 dev/authentik/.env
 dev/authentik/data/
 dev/authentik/certs/

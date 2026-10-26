@@ -37,7 +37,7 @@ func GenerateSecret() (string, error) {
 }
 
 // SecretFromHex converts a hex-encoded raw TOTP key (as Authentik stores it)
-// into the base32 form used by Latch.
+// into the base32 form used by Keywell.
 func SecretFromHex(hexKey string) (string, error) {
 	b, err := hex.DecodeString(strings.TrimSpace(hexKey))
 	if err != nil {

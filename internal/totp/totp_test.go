@@ -112,7 +112,7 @@ func TestProvisioningURIFormat(t *testing.T) {
 }
 
 func TestQRPNG(t *testing.T) {
-	uri := ProvisioningURI("JBSWY3DPEHPK3PXP", "Latch", "jo@example.org")
+	uri := ProvisioningURI("JBSWY3DPEHPK3PXP", "Keywell", "jo@example.org")
 	b, err := QRPNG(uri, 200)
 	if err != nil {
 		t.Fatal(err)

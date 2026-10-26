@@ -11,9 +11,9 @@ import (
 // stackDSN returns the dev stack's DSN, or skips the test without one.
 func stackDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("LATCH_TEST_AUTHENTIK_DSN")
+	dsn := os.Getenv("KEYWELL_TEST_AUTHENTIK_DSN")
 	if dsn == "" {
-		t.Skip("set LATCH_TEST_AUTHENTIK_DSN (make authentik-up) to run")
+		t.Skip("set KEYWELL_TEST_AUTHENTIK_DSN (make authentik-up) to run")
 	}
 	return dsn
 }

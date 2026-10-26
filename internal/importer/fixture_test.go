@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"latch/internal/authentik"
+	"keywell/internal/authentik"
 )
 
 // TestInstallID is the Authentik install ID of every snapshot NewSnap builds.

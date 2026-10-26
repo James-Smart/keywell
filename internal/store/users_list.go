@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // UserFilter selects and pages the users ListUsers returns.

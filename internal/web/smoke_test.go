@@ -13,8 +13,8 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // TestSmokeFullFlow follows one member through a new installation: signing
@@ -31,7 +31,7 @@ func TestSmokeFullFlow(t *testing.T) {
 	env := testenv.New(t)
 	ctx := gooidc.ClientContext(context.Background(), env.TS.Client())
 
-	// What latch init sets up: a signing key, the Admin group requiring
+	// What keywell init sets up: a signing key, the Admin group requiring
 	// two-step sign in, and its first member.
 	if env.Keys.ActiveKID() == "" {
 		t.Fatal("no signing key")
@@ -57,7 +57,7 @@ func TestSmokeFullFlow(t *testing.T) {
 		t.Fatalf("home: status %d\n%s", resp.StatusCode, body)
 	}
 
-	// The app discovers Latch and signs the member in with a code.
+	// The app discovers Keywell and signs the member in with a code.
 	provider, err := gooidc.NewProvider(ctx, env.TS.URL)
 	if err != nil {
 		t.Fatalf("discovery: %v", err)
@@ -110,7 +110,7 @@ func TestSmokeFullFlow(t *testing.T) {
 		t.Fatalf("refresh after password change: %v, want invalid_grant", err)
 	}
 
-	// The app signs the member out of Latch, which shows the signed-out
+	// The app signs the member out of Keywell, which shows the signed-out
 	// page.
 	var meta struct {
 		EndSession string `json:"end_session_endpoint"`

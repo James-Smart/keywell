@@ -1,4 +1,4 @@
-// Latch: closes the account menu when you click outside it or press
+// Keywell: closes the account menu when you click outside it or press
 // Escape. The menu is a <details> element, so it works without this.
 (function () {
   "use strict";

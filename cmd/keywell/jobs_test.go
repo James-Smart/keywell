@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/db"
-	"latch/internal/metrics"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/config"
+	"keywell/internal/db"
+	"keywell/internal/metrics"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 // within bounds each wait in these tests, so a broken loop fails the test
@@ -206,7 +206,7 @@ func TestJanitorPrunesSpentCodesAndTokens(t *testing.T) {
 	}
 }
 
-// keyReloader picks up a key that latch rotate-keys, in another process,
+// keyReloader picks up a key that keywell rotate-keys, in another process,
 // made active.
 func TestKeyReloaderPicksUpRotation(t *testing.T) {
 	ctx := context.Background()
@@ -266,7 +266,7 @@ func TestJobsWarnOnFailure(t *testing.T) {
 	}
 }
 
-// serveInstall makes an installation with latch init and returns its
+// serveInstall makes an installation with keywell init and returns its
 // config, set to listen on addr, and a connection to its database.
 func serveInstall(t *testing.T, addr string) (*config.Config, *store.Store, *sql.DB) {
 	t.Helper()
@@ -393,7 +393,7 @@ func TestServeMetricsListener(t *testing.T) {
 	go func() { errc <- serve(ctx, cfg, slog.New(slog.DiscardHandler)) }()
 
 	status, body := getEventually(t, "http://"+metricsAddr+"/metrics")
-	if status != 200 || !strings.Contains(body, "latch_build_info") {
+	if status != 200 || !strings.Contains(body, "keywell_build_info") {
 		t.Fatalf("metrics listener: %d\n%s", status, body)
 	}
 	getEventually(t, "http://"+main+"/healthz")
@@ -403,10 +403,10 @@ func TestServeMetricsListener(t *testing.T) {
 	}
 	resp.Body.Close()
 	_, body = getEventually(t, "http://"+metricsAddr+"/metrics")
-	if !strings.Contains(body, `latch_logins_total{result="failure"} 1`+"\n") {
+	if !strings.Contains(body, `keywell_logins_total{result="failure"} 1`+"\n") {
 		t.Errorf("sign-in failure not counted:\n%s", body)
 	}
-	if strings.Contains(body, `latch_http_requests_total{code="2xx"} 0`) {
+	if strings.Contains(body, `keywell_http_requests_total{code="2xx"} 0`) {
 		t.Errorf("requests not counted:\n%s", body)
 	}
 	// The public listener never serves it.
@@ -417,7 +417,7 @@ func TestServeMetricsListener(t *testing.T) {
 	}
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if strings.Contains(string(b), "latch_build_info") || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain; version=0.0.4") {
+	if strings.Contains(string(b), "keywell_build_info") || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain; version=0.0.4") {
 		t.Errorf("main listener served metrics:\n%s", b)
 	}
 	if resp.StatusCode != 404 && resp.StatusCode != 303 && resp.StatusCode != 302 {

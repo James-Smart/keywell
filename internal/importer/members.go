@@ -6,38 +6,38 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/authentik"
-	"latch/internal/model"
+	"keywell/internal/admin"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
 )
 
 // Report copy for members. Item reasons are full sentences about the
 // member the item names.
 const (
-	reasonNoEmail   = "Has no email address, which Latch needs to sign them in."
-	reasonBadEmail  = "Has an email address Latch can't use."
-	warnBadUsername = "Has a username Latch can't use, so it was left off."
-	warnLongName    = "Has a name longer than Latch allows. Latch kept it, but shorten it before editing them on their page."
-	warnBigMetadata = "Has more than 8 KB of metadata. Latch kept it, but shorten it before editing them on their page."
-	warnRelinked    = "Was linked to an Authentik account that no longer exists. Latch now links them to this one, " +
+	reasonNoEmail   = "Has no email address, which Keywell needs to sign them in."
+	reasonBadEmail  = "Has an email address Keywell can't use."
+	warnBadUsername = "Has a username Keywell can't use, so it was left off."
+	warnLongName    = "Has a name longer than Keywell allows. Keywell kept it, but shorten it before editing them on their page."
+	warnBigMetadata = "Has more than 8 KB of metadata. Keywell kept it, but shorten it before editing them on their page."
+	warnRelinked    = "Was linked to an Authentik account that no longer exists. Keywell now links them to this one, " +
 		"so apps that identify people by their Authentik ID will see a new ID."
-	warnMemberGone   = "Is no longer in Authentik. Latch has left them as they are."
-	warnKeptEmail    = "Has no usable email address in Authentik, so Latch kept the one it had."
-	warnNowService   = "Is now a service account in Authentik, so Latch turned their account off."
+	warnMemberGone   = "Is no longer in Authentik. Keywell has left them as they are."
+	warnKeptEmail    = "Has no usable email address in Authentik, so Keywell kept the one it had."
+	warnNowService   = "Is now a service account in Authentik, so Keywell turned their account off."
 	warnUsernameCase = "Has the username %s, which differs only in capitals from the username %s of member %s. " +
-		"Latch keeps both, but apps that ignore capitals may mix them up."
+		"Keywell keeps both, but apps that ignore capitals may mix them up."
 )
 
-// member is a snapshot user who is not left out, or a Latch member who is
+// member is a snapshot user who is not left out, or a Keywell member who is
 // now a service account in Authentik, and what the import does with them.
 type member struct {
 	src                   authentik.User
-	name, email, username string         // as Latch stores them
-	metadata              map[string]any // the attributes Latch keeps
+	name, email, username string         // as Keywell stores them
+	metadata              map[string]any // the attributes Keywell keeps
 	skipped               bool
-	keptEmail             bool        // email is Latch's, as Authentik has no usable one (Ruling AB)
+	keptEmail             bool        // email is Keywell's, as Authentik has no usable one (Ruling AB)
 	turnOff               bool        // now a service account, so only turned off (Ruling AB)
-	latch                 *model.User // the Latch member matched, nil for a new one; once written, as stored
+	keywell               *model.User // the Keywell member matched, nil for a new one; once written, as stored
 	groups                []string    // UUIDs of their Authentik groups, direct and through child groups
 	items                 []Item
 }
@@ -66,7 +66,7 @@ func leftOut(u *authentik.User) bool {
 }
 
 // foldEmail lower-cases ASCII letters only, as SQLite's lower() does, so
-// two emails match here exactly when Latch's email index and sign in treat
+// two emails match here exactly when Keywell's email index and sign in treat
 // them as one.
 func foldEmail(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -88,25 +88,25 @@ func akRef(u *authentik.User) string {
 
 func akMember(u *authentik.User) string { return "Authentik member " + akRef(u) }
 
-// latchRef names a Latch account in a blocking message.
-func latchRef(u *model.User) string {
+// keywellRef names a Keywell account in a blocking message.
+func keywellRef(u *model.User) string {
 	if u.Type == model.UserTypeService {
-		return "Latch service account " + cmp.Or(u.Username, u.Name)
+		return "Keywell service account " + cmp.Or(u.Username, u.Name)
 	}
-	return "Latch member " + cmp.Or(u.Email, u.Username, u.Name)
+	return "Keywell member " + cmp.Or(u.Email, u.Username, u.Name)
 }
 
-// latchUsers indexes Latch's users the ways members are matched and checked.
-type latchUsers struct {
+// keywellUsers indexes Keywell's users the ways members are matched and checked.
+type keywellUsers struct {
 	byUUID, byEmail, byUsername map[string]*model.User
 }
 
 // planMembers decides what happens to each snapshot user, matches them to
-// Latch members, and records problems that block the import.
+// Keywell members, and records problems that block the import.
 func (r *run) planMembers() {
-	idx := latchUsers{map[string]*model.User{}, map[string]*model.User{}, map[string]*model.User{}}
-	for i := range r.latchUsers {
-		u := &r.latchUsers[i]
+	idx := keywellUsers{map[string]*model.User{}, map[string]*model.User{}, map[string]*model.User{}}
+	for i := range r.keywellUsers {
+		u := &r.keywellUsers[i]
 		if u.AuthentikUUID != "" {
 			idx.byUUID[u.AuthentikUUID] = u
 		}
@@ -124,14 +124,14 @@ func (r *run) planMembers() {
 
 	emails := map[string]*member{}    // folded email: the first member with it
 	usernames := map[string]*member{} // lower-cased username: the first member with it
-	claimed := map[string]bool{}      // IDs of the Latch members matched
+	claimed := map[string]bool{}      // IDs of the Keywell members matched
 	for i := range r.snap.Users {
 		u := &r.snap.Users[i]
 		if leftOut(u) {
 			// Ruling AB. Matched by Authentik ID only: an email address shared
-			// with a Latch member is no sign they are the same person.
+			// with a Keywell member is no sign they are the same person.
 			if l := idx.byUUID[u.UUID]; l != nil {
-				m := &member{src: *u, latch: l, turnOff: true}
+				m := &member{src: *u, keywell: l, turnOff: true}
 				m.warn(warnNowService)
 				r.members = append(r.members, m)
 				claimed[l.ID] = true
@@ -146,17 +146,17 @@ func (r *run) planMembers() {
 			r.rep.Members.Skipped++
 			continue
 		}
-		if m.latch != nil {
-			claimed[m.latch.ID] = true
+		if m.keywell != nil {
+			claimed[m.keywell.ID] = true
 		}
-		// An email address Latch kept isn't Authentik's, so it can't clash
+		// An email address Keywell kept isn't Authentik's, so it can't clash
 		// within the snapshot. A snapshot member who has it matches this
-		// Latch member by email, and planMember blocks that.
+		// Keywell member by email, and planMember blocks that.
 		switch prev := emails[foldEmail(m.email)]; {
 		case m.keptEmail:
 		case prev != nil:
 			r.block("Authentik members %s and %s have the same email address apart from capitals. "+
-				"Latch needs a different email address for each member, so change one of them in Authentik.",
+				"Keywell needs a different email address for each member, so change one of them in Authentik.",
 				akRef(&prev.src), akRef(&m.src))
 		default:
 			emails[foldEmail(m.email)] = m
@@ -171,8 +171,8 @@ func (r *run) planMembers() {
 		}
 	}
 
-	for i := range r.latchUsers {
-		l := &r.latchUsers[i]
+	for i := range r.keywellUsers {
+		l := &r.keywellUsers[i]
 		if l.AuthentikUUID != "" && inSnap[l.AuthentikUUID] == nil && !claimed[l.ID] {
 			r.goneUsers = append(r.goneUsers, Item{Kind: "member", Name: cmp.Or(l.Email, l.Username, l.Name),
 				Reason: warnMemberGone})
@@ -181,7 +181,7 @@ func (r *run) planMembers() {
 }
 
 // emailProblem is why a member with this email address can't be added to
-// Latch, or "" when Latch can use it.
+// Keywell, or "" when Keywell can use it.
 func emailProblem(email string) string {
 	switch {
 	case email == "":
@@ -192,14 +192,14 @@ func emailProblem(email string) string {
 	return ""
 }
 
-// planMember works out how Latch stores u, and which Latch member u is.
-func (r *run) planMember(u *authentik.User, idx latchUsers, inSnap map[string]*authentik.User) *member {
+// planMember works out how Keywell stores u, and which Keywell member u is.
+func (r *run) planMember(u *authentik.User, idx keywellUsers, inSnap map[string]*authentik.User) *member {
 	m := &member{src: *u}
 	m.email = strings.TrimSpace(u.Email)
 	m.username = strings.TrimSpace(u.Username)
 	m.metadata = r.keep(u.Attributes)
 	// Ruling AB: the Authentik ID is matched before the email is checked, so
-	// a member Latch has stays in step when their email address goes bad.
+	// a member Keywell has stays in step when their email address goes bad.
 	linked := idx.byUUID[u.UUID]
 	if reason := emailProblem(m.email); reason != "" {
 		if linked == nil {
@@ -226,29 +226,29 @@ func (r *run) planMember(u *authentik.User, idx latchUsers, inSnap map[string]*a
 
 	// Match on Authentik UUID, then email.
 	if linked != nil {
-		m.latch = linked
+		m.keywell = linked
 		if other := idx.byEmail[foldEmail(m.email)]; other != nil && other.ID != linked.ID {
 			r.block("%s is linked to %s, but %s already has that email address. "+
-				"Change the email address of one of them in Authentik or Latch.", akMember(u), latchRef(linked),
-				latchRef(other))
+				"Change the email address of one of them in Authentik or Keywell.", akMember(u), keywellRef(linked),
+				keywellRef(other))
 		}
 	} else if l := idx.byEmail[foldEmail(m.email)]; l != nil {
 		switch old := inSnap[l.AuthentikUUID]; {
 		case l.AuthentikUUID == "":
-			m.latch = l
+			m.keywell = l
 		case old != nil:
-			r.block("%s has the email address of %s, but that Latch member is linked to %s. "+
-				"Change the email address of one of them in Authentik or Latch.", akMember(u), latchRef(l), akMember(old))
+			r.block("%s has the email address of %s, but that Keywell member is linked to %s. "+
+				"Change the email address of one of them in Authentik or Keywell.", akMember(u), keywellRef(l), akMember(old))
 		default: // Ruling F: the Authentik account was deleted and made again.
-			m.latch = l
+			m.keywell = l
 			m.warn(warnRelinked)
 		}
 	}
 
 	if m.username != "" {
-		if other := idx.byUsername[m.username]; other != nil && (m.latch == nil || other.ID != m.latch.ID) {
-			r.block("%s has the username %s, which %s already has. Change one of the usernames in Authentik or Latch.",
-				akMember(u), m.username, latchRef(other))
+		if other := idx.byUsername[m.username]; other != nil && (m.keywell == nil || other.ID != m.keywell.ID) {
+			r.block("%s has the username %s, which %s already has. Change one of the usernames in Authentik or Keywell.",
+				akMember(u), m.username, keywellRef(other))
 		}
 	}
 	return m
@@ -264,7 +264,7 @@ func (r *run) writeMembers() error {
 				return err
 			}
 			r.rep.Members.Updated++
-		case m.latch == nil:
+		case m.keywell == nil:
 			if err := r.addMember(m); err != nil {
 				return err
 			}
@@ -279,7 +279,7 @@ func (r *run) writeMembers() error {
 	return nil
 }
 
-// addMember creates the member in Latch.
+// addMember creates the member in Keywell.
 func (r *run) addMember(m *member) error {
 	pk := m.src.PK
 	u := &model.User{
@@ -298,15 +298,15 @@ func (r *run) addMember(m *member) error {
 	if err := r.tx.CreateUser(r.ctx, u); err != nil {
 		return fmt.Errorf("importer: add member %s: %w", m.email, err)
 	}
-	m.latch = u
+	m.keywell = u
 	return nil
 }
 
-// updateMember overwrites the matched Latch member's imported fields with
+// updateMember overwrites the matched Keywell member's imported fields with
 // Authentik's. It never touches their password or two-step sign in. A
 // member Authentik has disabled is signed out everywhere.
 func (r *run) updateMember(m *member) error {
-	old := m.latch
+	old := m.keywell
 	u := *old
 	pk := m.src.PK
 	u.Name, u.Email, u.Username, u.IsActive, u.Metadata = m.name, m.email, m.username, m.src.IsActive, m.metadata
@@ -327,15 +327,15 @@ func (r *run) updateMember(m *member) error {
 			return err
 		}
 	}
-	m.latch = &u
+	m.keywell = &u
 	return nil
 }
 
-// turnOffMember turns off a Latch member who is now a service account in
+// turnOffMember turns off a Keywell member who is now a service account in
 // Authentik, and signs them out everywhere. Nothing else about them
 // changes.
 func (r *run) turnOffMember(m *member) error {
-	old := m.latch
+	old := m.keywell
 	if !old.IsActive {
 		return nil
 	}
@@ -347,7 +347,7 @@ func (r *run) turnOffMember(m *member) error {
 	if err := r.signOut(&u); err != nil {
 		return err
 	}
-	m.latch = &u
+	m.keywell = &u
 	return nil
 }
 

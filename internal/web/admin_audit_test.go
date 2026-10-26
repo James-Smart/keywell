@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // addEvent stores an audit event at the given time.
@@ -112,7 +112,7 @@ func TestAuditNamesAndLinks(t *testing.T) {
 	row := rowWith(body, "Edit two")
 	assertContains(t, row, "Deleted account")
 	assertLacks(t, row, "/admin/members/")
-	assertContains(t, rowWith(body, "Edit three"), "Latch", "nameless@example.org", `href="/admin/members/`+nameless.ID+`"`)
+	assertContains(t, rowWith(body, "Edit three"), "Keywell", "nameless@example.org", `href="/admin/members/`+nameless.ID+`"`)
 	assertContains(t, rowWith(body, "Edit four"), "Door controller", `href="/admin/groups/`+group.ID+`"`)
 	assertContains(t, rowWith(body, "Edit five"), "Importer", "Wiki", `href="/admin/apps/`+app.ID+`"`)
 	assertContains(t, rowWith(body, "Edit six"), "Door controller", `href="/admin/service-accounts/`+sa.ID+`"`)

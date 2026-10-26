@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 const apiUsers = "/api/v1/users"

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"testing"
 
-	"latch/internal/secrets"
+	"keywell/internal/secrets"
 )
 
 func TestRandomTokenLengthAndUniqueness(t *testing.T) {

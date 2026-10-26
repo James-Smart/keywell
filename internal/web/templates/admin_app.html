@@ -48,7 +48,7 @@
     <h2>How the app recognises people</h2>
     <label for="subject_mode">Identify people by</label>
     <select id="subject_mode" name="subject_mode"{{if .Errors.subject_mode}} aria-invalid="true" aria-describedby="subject_mode-error"{{end}}>
-      <option value="id"{{if or (eq .Form.SubjectMode "id") (eq .Form.SubjectMode "")}} selected{{end}}>Latch ID (recommended)</option>
+      <option value="id"{{if or (eq .Form.SubjectMode "id") (eq .Form.SubjectMode "")}} selected{{end}}>Keywell ID (recommended)</option>
       <option value="email"{{if eq .Form.SubjectMode "email"}} selected{{end}}>Email address</option>
       <option value="username"{{if eq .Form.SubjectMode "username"}} selected{{end}}>Username</option>
       <option value="authentik_uid"{{if eq .Form.SubjectMode "authentik_uid"}} selected{{end}}>Authentik ID (Authentik's default)</option>
@@ -57,13 +57,13 @@
     </select>
     {{- template "admin-field-error" .Errors.For "subject_mode"}}
     <ul class="hint">
-      <li>Latch ID: A permanent ID that never changes, even if their email does.</li>
+      <li>Keywell ID: A permanent ID that never changes, even if their email does.</li>
       <li>Email address: Changes when their email changes.</li>
-      <li>Username: People without a username get their Latch ID.</li>
+      <li>Username: People without a username get their Keywell ID.</li>
     </ul>
     <p class="hint">Changing this changes how the app recognises people, so existing accounts in the app may stop matching.</p>
     {{- if or (eq .Form.SubjectMode "authentik_uid") (eq .Form.SubjectMode "authentik_uuid") (eq .Form.SubjectMode "authentik_pk")}}
-    <p class="note">⚠ This uses the identifier Authentik gave this app, so people's existing accounts in it keep working. People added after the move get their Latch ID instead. Switch to Latch ID once the app no longer needs Authentik's identifiers.</p>
+    <p class="note">⚠ This uses the identifier Authentik gave this app, so people's existing accounts in it keep working. People added after the move get their Keywell ID instead. Switch to Keywell ID once the app no longer needs Authentik's identifiers.</p>
     {{- end}}
 
     <h2>Home page tile</h2>

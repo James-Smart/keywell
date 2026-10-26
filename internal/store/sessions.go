@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // CreateSession stores a new session.

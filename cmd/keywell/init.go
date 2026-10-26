@@ -13,23 +13,23 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"latch/internal/config"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
+	"keywell/internal/config"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
 )
 
 // cmdInit sets up a new installation: the config file, the database, the
 // Admin group, a signing key and, when --admin-email is given, the first
 // admin. Everything that can be refused (flags, an existing config or
 // database, the admin's password) is checked before anything is written.
-// LATCH_* environment variables are ignored: the database is set up as the
+// KEYWELL_* environment variables are ignored: the database is set up as the
 // written file describes.
 func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "where to write the config file")
+	configPath := flags.String("config", "./keywell.yaml", "where to write the config file")
 	dataDir := flags.String("data-dir", "./data", "directory for the database")
-	publicURL := flags.String("public-url", "", "the address members use to reach Latch, e.g. https://login.example.org (required)")
+	publicURL := flags.String("public-url", "", "the address members use to reach Keywell, e.g. https://login.example.org (required)")
 	adminEmail := flags.String("admin-email", "", "email address of the first admin")
 	adminPW := flags.String("admin-password", "", "the first admin's password (prompted for when omitted)")
 	if err := flags.Parse(args); err != nil {
@@ -101,9 +101,9 @@ func cmdInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "\nNext steps:\n")
 	fmt.Fprintf(stdout, "  - Edit %s to set your branding and email (smtp) settings.\n", *configPath)
 	if *adminEmail == "" {
-		fmt.Fprintf(stdout, "  - Add an admin: latch create-admin --config %s --email you@example.org\n", *configPath)
+		fmt.Fprintf(stdout, "  - Add an admin: keywell create-admin --config %s --email you@example.org\n", *configPath)
 	}
-	fmt.Fprintf(stdout, "  - Start the server: latch serve --config %s\n", *configPath)
+	fmt.Fprintf(stdout, "  - Start the server: keywell serve --config %s\n", *configPath)
 	fmt.Fprintf(stdout, "  - Sign in at %s as the admin. You'll be asked to set up two-step sign in first, because the %s group requires it.\n",
 		cfg.Issuer(), adminGroup)
 	return 0

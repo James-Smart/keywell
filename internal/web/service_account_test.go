@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/testenv"
 )
 
 // createServiceAccount stores an active service account with email and,

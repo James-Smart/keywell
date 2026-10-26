@@ -14,7 +14,7 @@
     <dt>Support text</dt>
     <dd>{{with .Branding.SupportText}}{{.}}{{else}}None{{end}}</dd>
   </dl>
-  <p>To change these, edit the branding section of Latch's config file (latch.yaml) and restart Latch.</p>
+  <p>To change these, edit the branding section of Keywell's config file (keywell.yaml) and restart Keywell.</p>
 </section>
 
 <section class="panel" aria-labelledby="email">
@@ -30,9 +30,9 @@
     <dt>Encryption</dt>
     <dd>{{.SMTP.TLS}}</dd>
   </dl>
-  <p>To change these, edit the smtp section of Latch's config file (latch.yaml) and restart Latch.</p>
+  <p>To change these, edit the smtp section of Keywell's config file (keywell.yaml) and restart Keywell.</p>
   {{- else}}
-  <p>Email isn't set up yet. To set it up, add an smtp section to Latch's config file (latch.yaml) and restart Latch.</p>
+  <p>Email isn't set up yet. To set it up, add an smtp section to Keywell's config file (keywell.yaml) and restart Keywell.</p>
   {{- end}}
   <form method="post" action="/admin/settings/test-email">
     <button type="submit">Send a test email to {{.AdminEmail}}</button>
@@ -41,7 +41,7 @@
 
 <section class="panel" aria-labelledby="keys">
   <h2 id="keys">Signing keys</h2>
-  <p>Latch signs the tokens it gives apps with the key in use. Apps check them against every key still published.</p>
+  <p>Keywell signs the tokens it gives apps with the key in use. Apps check them against every key still published.</p>
   <div class="table-wrap">
     <table class="list">
       <thead>
@@ -86,7 +86,7 @@
   {{- else}}
   <p>Nothing has been imported from Authentik yet.</p>
   {{- end}}
-  <p class="hint">To import or re-run, use <code>latch import-authentik</code> on the server.</p>
+  <p class="hint">To import or re-run, use <code>keywell import-authentik</code> on the server.</p>
 </section>
 {{- end}}
 {{end}}

@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strings"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // memberStatusLabels name each member status in the admin pages.

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"latch/internal/audit"
-	"latch/internal/model"
+	"keywell/internal/audit"
+	"keywell/internal/model"
 )
 
 // Registry holds the counters. Every series exists from the start at 0.
@@ -25,7 +25,7 @@ var (
 	grants       = [...]string{"authorization_code", "refresh_token", "client_credentials"}
 )
 
-// New returns a Registry reporting version in latch_build_info.
+// New returns a Registry reporting version in keywell_build_info.
 func New(version string) *Registry { return &Registry{version: version} }
 
 // CountRequest counts a response by status class. A status of 0 (nothing
@@ -72,19 +72,19 @@ func (m *Registry) ObserveAudit(e model.AuditEvent) {
 func (m *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
-		b.WriteString("# HELP latch_build_info The running version of Latch.\n# TYPE latch_build_info gauge\n")
-		fmt.Fprintf(&b, "latch_build_info{version=%q} 1\n", m.version)
-		b.WriteString("# HELP latch_http_requests_total Requests answered, by status class.\n# TYPE latch_http_requests_total counter\n")
+		b.WriteString("# HELP keywell_build_info The running version of Keywell.\n# TYPE keywell_build_info gauge\n")
+		fmt.Fprintf(&b, "keywell_build_info{version=%q} 1\n", m.version)
+		b.WriteString("# HELP keywell_http_requests_total Requests answered, by status class.\n# TYPE keywell_http_requests_total counter\n")
 		for i := range m.requests {
-			fmt.Fprintf(&b, "latch_http_requests_total{code=\"%dxx\"} %d\n", i+1, m.requests[i].Load())
+			fmt.Fprintf(&b, "keywell_http_requests_total{code=\"%dxx\"} %d\n", i+1, m.requests[i].Load())
 		}
-		b.WriteString("# HELP latch_logins_total Sign-ins, by result.\n# TYPE latch_logins_total counter\n")
+		b.WriteString("# HELP keywell_logins_total Sign-ins, by result.\n# TYPE keywell_logins_total counter\n")
 		for i, name := range loginResults {
-			fmt.Fprintf(&b, "latch_logins_total{result=%q} %d\n", name, m.logins[i].Load())
+			fmt.Fprintf(&b, "keywell_logins_total{result=%q} %d\n", name, m.logins[i].Load())
 		}
-		b.WriteString("# HELP latch_tokens_issued_total Tokens issued to apps, by grant.\n# TYPE latch_tokens_issued_total counter\n")
+		b.WriteString("# HELP keywell_tokens_issued_total Tokens issued to apps, by grant.\n# TYPE keywell_tokens_issued_total counter\n")
 		for i, name := range grants {
-			fmt.Fprintf(&b, "latch_tokens_issued_total{grant=%q} %d\n", name, m.tokens[i].Load())
+			fmt.Fprintf(&b, "keywell_tokens_issued_total{grant=%q} %d\n", name, m.tokens[i].Load())
 		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		fmt.Fprint(w, b.String())

@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/testenv"
-	"latch/internal/web"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
+	"keywell/internal/web"
 )
 
 const newPW = "a brand new passphrase"
@@ -160,7 +160,7 @@ func TestResetRequestSendsMailOnlyForActiveUsers(t *testing.T) {
 		t.Fatalf("sent %d emails, want 1", n)
 	}
 	msg, _ := env.Mailer.Last()
-	if msg.To != "alex@example.org" || msg.Subject != "Reset your Latch password" || !strings.Contains(msg.Text, "1 hour") {
+	if msg.To != "alex@example.org" || msg.Subject != "Reset your Keywell password" || !strings.Contains(msg.Text, "1 hour") {
 		t.Fatalf("email %+v", msg)
 	}
 	path := mailedLink(t, env)
@@ -332,14 +332,14 @@ func TestInviteCopy(t *testing.T) {
 	c := env.Client(t)
 
 	resp, body := get(t, c, env.TS.URL+path)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "Welcome to Latch. Choose your password.") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "Welcome to Keywell. Choose your password.") {
 		t.Fatalf("invite page: status %d\n%s", resp.StatusCode, body)
 	}
 	if strings.Contains(body, "Choose a new password") {
 		t.Error("invite page shows the reset copy")
 	}
 	resp, body = post(t, env, c, path, setPassword("short", "short"))
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "Welcome to Latch.") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "Welcome to Keywell.") {
 		t.Fatalf("invite page after a refused password: status %d\n%s", resp.StatusCode, body)
 	}
 

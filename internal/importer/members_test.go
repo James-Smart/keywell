@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/authentik"
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/authentik"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 // testNow is the time test runs report until a test moves env.now.
@@ -75,7 +75,7 @@ func blockingOf(r *Report) []string {
 	return r.Blocking
 }
 
-// user returns the Latch user with this email (any case).
+// user returns the Keywell user with this email (any case).
 func (e *env) user(email string) *model.User {
 	e.t.Helper()
 	u, err := e.st.GetUserByEmail(context.Background(), email)
@@ -85,7 +85,7 @@ func (e *env) user(email string) *model.User {
 	return u
 }
 
-// group returns the Latch group with this name.
+// group returns the Keywell group with this name.
 func (e *env) group(name string) *model.Group {
 	e.t.Helper()
 	g, err := e.st.GetGroupByName(context.Background(), name)
@@ -95,7 +95,7 @@ func (e *env) group(name string) *model.Group {
 	return g
 }
 
-// groupsOf returns the names of the Latch groups the member with this email
+// groupsOf returns the names of the Keywell groups the member with this email
 // is in, sorted.
 func (e *env) groupsOf(email string) []string {
 	e.t.Helper()
@@ -173,8 +173,8 @@ func (e *env) dump() string {
 	return b.String()
 }
 
-// mkLatchMember adds a member to Latch directly, as the member pages would.
-func (e *env) mkLatchMember(name, email, username string) *model.User {
+// mkKeywellMember adds a member to Keywell directly, as the member pages would.
+func (e *env) mkKeywellMember(name, email, username string) *model.User {
 	e.t.Helper()
 	u := &model.User{Name: name, Email: email, Username: username, IsActive: true}
 	if err := e.st.CreateUser(context.Background(), u); err != nil {
@@ -183,8 +183,8 @@ func (e *env) mkLatchMember(name, email, username string) *model.User {
 	return u
 }
 
-// mkLatchGroup adds a group to Latch directly.
-func (e *env) mkLatchGroup(g *model.Group) *model.Group {
+// mkKeywellGroup adds a group to Keywell directly.
+func (e *env) mkKeywellGroup(g *model.Group) *model.Group {
 	e.t.Helper()
 	if err := e.st.CreateGroup(context.Background(), g); err != nil {
 		e.t.Fatal(err)
@@ -192,12 +192,12 @@ func (e *env) mkLatchGroup(g *model.Group) *model.Group {
 	return g
 }
 
-// mkLatchAdmin makes what latch init makes: an Admin group with no
+// mkKeywellAdmin makes what keywell init makes: an Admin group with no
 // Authentik ID and an admin in it.
-func (e *env) mkLatchAdmin(email string) *model.User {
+func (e *env) mkKeywellAdmin(email string) *model.User {
 	e.t.Helper()
-	admin := e.mkLatchGroup(&model.Group{Name: "Admin", IsAdmin: true, RequireTOTP: true})
-	u := e.mkLatchMember("Ada Admin", email, "ada")
+	admin := e.mkKeywellGroup(&model.Group{Name: "Admin", IsAdmin: true, RequireTOTP: true})
+	u := e.mkKeywellMember("Ada Admin", email, "ada")
 	if err := e.st.AddMember(context.Background(), u.ID, admin.ID); err != nil {
 		e.t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestImportMembers(t *testing.T) {
 		t.Errorf("LeftOut = %d, want 3", rep.LeftOut)
 	}
 	wantItems := []Item{{Kind: "member", Name: "nomail", Skipped: true,
-		Reason: "Has no email address, which Latch needs to sign them in."}}
+		Reason: "Has no email address, which Keywell needs to sign them in."}}
 	if !reflect.DeepEqual(rep.Items, wantItems) {
 		t.Errorf("Items = %+v", rep.Items)
 	}
@@ -252,7 +252,7 @@ func TestImportMembers(t *testing.T) {
 	if !a.CreatedAt.Equal(joined) || a.LastLoginAt == nil || !a.LastLoginAt.Equal(lastLogin) {
 		t.Errorf("alex created %v, last login %v", a.CreatedAt, a.LastLoginAt)
 	}
-	// Ruling B: a member Latch adds starts with Authentik's hash when Latch
+	// Ruling B: a member Keywell adds starts with Authentik's hash when Keywell
 	// can check it, and with none otherwise.
 	if a.LegacyPasswordHash != UsableHash || a.PasswordHash != "" {
 		t.Errorf("alex hashes: legacy %q, native %q", a.LegacyPasswordHash, a.PasswordHash)
@@ -286,12 +286,12 @@ func TestImportMemberProblems(t *testing.T) {
 	rep := e.run(s)
 
 	want := []Item{
-		{Kind: "member", Name: "not an email", Skipped: true, Reason: "Has an email address Latch can't use."},
-		{Kind: "member", Name: "jo@example.org", Reason: "Has a username Latch can't use, so it was left off."},
+		{Kind: "member", Name: "not an email", Skipped: true, Reason: "Has an email address Keywell can't use."},
+		{Kind: "member", Name: "jo@example.org", Reason: "Has a username Keywell can't use, so it was left off."},
 		{Kind: "member", Name: "tall@example.org",
-			Reason: "Has a name longer than Latch allows. Latch kept it, but shorten it before editing them on their page."},
+			Reason: "Has a name longer than Keywell allows. Keywell kept it, but shorten it before editing them on their page."},
 		{Kind: "member", Name: "big@example.org",
-			Reason: "Has more than 8 KB of metadata. Latch kept it, but shorten it before editing them on their page."},
+			Reason: "Has more than 8 KB of metadata. Keywell kept it, but shorten it before editing them on their page."},
 	}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
@@ -312,7 +312,7 @@ func TestImportMemberProblems(t *testing.T) {
 
 func TestImportGroupsAndMemberships(t *testing.T) {
 	e := newEnv(t)
-	woodshopLatch := e.mkLatchGroup(&model.Group{Name: "Woodshop", Description: "Made in Latch"})
+	woodshopKeywell := e.mkKeywellGroup(&model.Group{Name: "Woodshop", Description: "Made in Keywell"})
 
 	s := NewSnap()
 	members := s.Group("Members", GroupAttrs(map[string]any{"door": "yes", "goauthentik.io/internal": true}))
@@ -373,9 +373,9 @@ func TestImportGroupsAndMemberships(t *testing.T) {
 	if g := e.group("Members"); !reflect.DeepEqual(g.Metadata, map[string]any{"door": "yes"}) {
 		t.Errorf("Members metadata = %v", g.Metadata)
 	}
-	// A Latch group with the same name and no Authentik ID is adopted.
-	if g := e.group("Woodshop"); g.ID != woodshopLatch.ID || g.AuthentikUUID != woodshop || g.Description != "Made in Latch" {
-		t.Errorf("Woodshop = %+v, want adopted %s", g, woodshopLatch.ID)
+	// A Keywell group with the same name and no Authentik ID is adopted.
+	if g := e.group("Woodshop"); g.ID != woodshopKeywell.ID || g.AuthentikUUID != woodshop || g.Description != "Made in Keywell" {
+		t.Errorf("Woodshop = %+v, want adopted %s", g, woodshopKeywell.ID)
 	}
 	if _, err := e.st.GetGroupByName(context.Background(), "Bound"); err != nil {
 		t.Errorf("Bound, which an app uses, was not imported: %v", err)
@@ -501,7 +501,7 @@ func TestImportIsIdempotent(t *testing.T) {
 		t.Errorf("memberships after leaving:\n got %v\nwant %v", got, want)
 	}
 
-	// A renamed group is renamed in Latch, not added again.
+	// A renamed group is renamed in Keywell, not added again.
 	id := e.group("Laser").ID
 	s.G(laser).Name = "Laser Cutter"
 	rep := e.run(s)
@@ -514,9 +514,9 @@ func TestImportIsIdempotent(t *testing.T) {
 }
 
 // Review Focus 1 and 2.
-func TestImportKeepsLatchOnlyState(t *testing.T) {
+func TestImportKeepsKeywellOnlyState(t *testing.T) {
 	e := newEnv(t)
-	ada := e.mkLatchAdmin("ada@example.org")
+	ada := e.mkKeywellAdmin("ada@example.org")
 
 	s := NewSnap()
 	laser := s.Group("Laser")
@@ -562,9 +562,9 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 		t.Errorf("ada in %v after second run", got)
 	}
 	want := []Item{
-		{Kind: "member", Name: "gone@example.org", Reason: "Is no longer in Authentik. Latch has left them as they are."},
+		{Kind: "member", Name: "gone@example.org", Reason: "Is no longer in Authentik. Keywell has left them as they are."},
 		{Kind: "group", Name: "Trustees", Reason: "Isn't an admin group in Authentik any more. " +
-			"Latch leaves admin access and two-step sign in on; untick them on the group's page if that's right."},
+			"Keywell leaves admin access and two-step sign in on; untick them on the group's page if that's right."},
 	}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
@@ -580,7 +580,7 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 	if g := e.group("Trustees"); !g.IsAdmin || g.RequireTOTP {
 		t.Errorf("Trustees: is_admin %v, require_totp %v; want admin kept and two-step left off", g.IsAdmin, g.RequireTOTP)
 	}
-	want[1].Reason = "Isn't an admin group in Authentik any more. Latch leaves admin access on; " +
+	want[1].Reason = "Isn't an admin group in Authentik any more. Keywell leaves admin access on; " +
 		"untick it on the group's page if that's right."
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items after unticking two-step:\n got %+v\nwant %+v", rep.Items, want)
@@ -598,7 +598,7 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 }
 
 // signIn gives the member with this email a session and a refresh token,
-// as signing in to Latch and then to an app would, and returns them.
+// as signing in to Keywell and then to an app would, and returns them.
 func (e *env) signIn(email string) (sessionID, tokenHash string) {
 	e.t.Helper()
 	ctx := context.Background()
@@ -666,7 +666,7 @@ func TestImportDisablesAndSignsOut(t *testing.T) {
 	}
 }
 
-// Ruling AB, the review's probe: a member Latch already has whose email
+// Ruling AB, the review's probe: a member Keywell already has whose email
 // Authentik clears is still kept in step. Bob is disabled, removed from
 // Laser and changed in every other way in the same snapshot.
 func TestImportSyncsMemberWithNoUsableEmail(t *testing.T) {
@@ -704,7 +704,7 @@ func TestImportSyncsMemberWithNoUsableEmail(t *testing.T) {
 		t.Errorf("password not carried over: legacy %q, no password %d", u.LegacyPasswordHash, rep.NoPassword)
 	}
 	want := []Item{{Kind: "member", Name: "robert",
-		Reason: "Has no usable email address in Authentik, so Latch kept the one it had."}}
+		Reason: "Has no usable email address in Authentik, so Keywell kept the one it had."}}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
 	}
@@ -713,9 +713,9 @@ func TestImportSyncsMemberWithNoUsableEmail(t *testing.T) {
 	}
 }
 
-// Ruling AB: a matched member whose Authentik email Latch can't use keeps
-// the email Latch has. A new member with one is still skipped.
-func TestImportKeepsLatchEmailWhenAuthentiksIsBad(t *testing.T) {
+// Ruling AB: a matched member whose Authentik email Keywell can't use keeps
+// the email Keywell has. A new member with one is still skipped.
+func TestImportKeepsKeywellEmailWhenAuthentiksIsBad(t *testing.T) {
 	e := newEnv(t)
 	s := NewSnap()
 	bob := s.User("bob", "bob@example.org")
@@ -736,8 +736,8 @@ func TestImportKeepsLatchEmailWhenAuthentiksIsBad(t *testing.T) {
 	}
 	want := []Item{
 		{Kind: "member", Name: "bob at example.org",
-			Reason: "Has no usable email address in Authentik, so Latch kept the one it had."},
-		{Kind: "member", Name: "new at example.org", Skipped: true, Reason: "Has an email address Latch can't use."},
+			Reason: "Has no usable email address in Authentik, so Keywell kept the one it had."},
+		{Kind: "member", Name: "new at example.org", Skipped: true, Reason: "Has an email address Keywell can't use."},
 	}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
@@ -747,8 +747,8 @@ func TestImportKeepsLatchEmailWhenAuthentiksIsBad(t *testing.T) {
 	}
 }
 
-// An email address Latch kept for a member is not one of Authentik's, so
-// another Authentik member who has it is blocked as having that Latch
+// An email address Keywell kept for a member is not one of Authentik's, so
+// another Authentik member who has it is blocked as having that Keywell
 // member's email address, and not as sharing an email within Authentik.
 func TestImportKeptEmailTakenInAuthentik(t *testing.T) {
 	e := newEnv(t)
@@ -762,8 +762,8 @@ func TestImportKeptEmailTakenInAuthentik(t *testing.T) {
 	if !errors.Is(err, ErrBlocked) {
 		t.Fatalf("err = %v, want ErrBlocked", err)
 	}
-	want := []string{"Authentik member robert (Bob@example.org) has the email address of Latch member bob@example.org, " +
-		"but that Latch member is linked to Authentik member bob. Change the email address of one of them in Authentik or Latch."}
+	want := []string{"Authentik member robert (Bob@example.org) has the email address of Keywell member bob@example.org, " +
+		"but that Keywell member is linked to Authentik member bob. Change the email address of one of them in Authentik or Keywell."}
 	if !reflect.DeepEqual(rep.Blocking, want) {
 		t.Errorf("Blocking:\n got %q\nwant %q", rep.Blocking, want)
 	}
@@ -802,7 +802,7 @@ func TestImportTurnsOffMemberWhoIsNowAServiceAccount(t *testing.T) {
 				t.Error("sam was turned off or signed out")
 			}
 			want := []Item{{Kind: "member", Name: "bob@example.org",
-				Reason: "Is now a service account in Authentik, so Latch turned their account off."}}
+				Reason: "Is now a service account in Authentik, so Keywell turned their account off."}}
 			if !reflect.DeepEqual(rep.Items, want) {
 				t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
 			}
@@ -814,11 +814,11 @@ func TestImportTurnsOffMemberWhoIsNowAServiceAccount(t *testing.T) {
 }
 
 // A service account is matched only by its Authentik ID: one that shares an
-// email address with a Latch member Authentik never linked to it leaves
+// email address with a Keywell member Authentik never linked to it leaves
 // that member alone.
 func TestImportServiceAccountNeverMatchesByEmail(t *testing.T) {
 	e := newEnv(t)
-	ada := e.mkLatchAdmin("ada@example.org")
+	ada := e.mkKeywellAdmin("ada@example.org")
 	s := NewSnap()
 	s.User("ada-bot", "ada@example.org", WithType("service_account"))
 	rep := e.run(s)
@@ -851,7 +851,7 @@ func TestImportRelinksRecreatedAccount(t *testing.T) {
 		t.Errorf("sam = %+v", u)
 	}
 	want := []Item{{Kind: "member", Name: "Sam@example.org", Reason: "Was linked to an Authentik account that no longer " +
-		"exists. Latch now links them to this one, so apps that identify people by their Authentik ID will see a new ID."}}
+		"exists. Keywell now links them to this one, so apps that identify people by their Authentik ID will see a new ID."}}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items = %+v", rep.Items)
 	}
@@ -878,27 +878,27 @@ func TestImportBlocksConflicts(t *testing.T) {
 		},
 		want: []string{"ann (a@x.org)", "andy (A@X.org)"},
 	}, {
-		name: "email of another Latch account",
+		name: "email of another Keywell account",
 		setup: func(e *env) *Snap {
 			s := NewSnap()
 			s.User("bob", "bob@x.org")
 			e.run(s)
-			e.mkLatchMember("Taken", "taken@x.org", "tk")
+			e.mkKeywellMember("Taken", "taken@x.org", "tk")
 			s.Users[0].Email = "Taken@x.org"
 			return s
 		},
-		want: []string{"bob (Taken@x.org)", "Latch member bob@x.org", "Latch member taken@x.org"},
+		want: []string{"bob (Taken@x.org)", "Keywell member bob@x.org", "Keywell member taken@x.org"},
 	}, {
-		name: "username of another Latch account",
+		name: "username of another Keywell account",
 		setup: func(e *env) *Snap {
-			e.mkLatchMember("Other", "other@x.org", "alex")
+			e.mkKeywellMember("Other", "other@x.org", "alex")
 			s := NewSnap()
 			s.User("alex", "alex@x.org")
 			return s
 		},
-		want: []string{"alex (alex@x.org)", "Latch member other@x.org"},
+		want: []string{"alex (alex@x.org)", "Keywell member other@x.org"},
 	}, {
-		name: "username of a Latch service account",
+		name: "username of a Keywell service account",
 		setup: func(e *env) *Snap {
 			sa := &model.User{Name: "Door", Type: model.UserTypeService, Username: "door", IsActive: true}
 			if err := e.st.CreateUser(context.Background(), sa); err != nil {
@@ -908,18 +908,18 @@ func TestImportBlocksConflicts(t *testing.T) {
 			s.User("door", "door@x.org")
 			return s
 		},
-		want: []string{"door (door@x.org)", "Latch service account door"},
+		want: []string{"door (door@x.org)", "Keywell service account door"},
 	}, {
 		name: "group name linked to another Authentik group",
 		setup: func(e *env) *Snap {
-			e.mkLatchGroup(&model.Group{Name: "Laser", AuthentikUUID: "99999999-0000-4000-8000-000000000001"})
+			e.mkKeywellGroup(&model.Group{Name: "Laser", AuthentikUUID: "99999999-0000-4000-8000-000000000001"})
 			s := NewSnap()
 			s.Join(s.User("alex", "alex@x.org"), s.Group("Laser"))
 			return s
 		},
-		want: []string{"Authentik group Laser", "Latch group Laser"},
+		want: []string{"Authentik group Laser", "Keywell group Laser"},
 	}, {
-		name: "email of a Latch member linked to another account still in Authentik",
+		name: "email of a Keywell member linked to another account still in Authentik",
 		setup: func(e *env) *Snap {
 			s := NewSnap()
 			sam := s.User("sam", "sam@x.org")
@@ -928,19 +928,19 @@ func TestImportBlocksConflicts(t *testing.T) {
 			s.User("newsam", "SAM@x.org")
 			return s
 		},
-		want: []string{"newsam (SAM@x.org)", "Latch member sam@x.org", "sam (samuel@x.org)"},
+		want: []string{"newsam (SAM@x.org)", "Keywell member sam@x.org", "sam (samuel@x.org)"},
 	}, {
-		name: "renamed group takes the name of another Latch group",
+		name: "renamed group takes the name of another Keywell group",
 		setup: func(e *env) *Snap {
 			s := NewSnap()
 			laser := s.Group("Laser")
 			s.Join(s.User("alex", "alex@x.org"), laser)
 			e.run(s)
-			e.mkLatchGroup(&model.Group{Name: "Lasers"})
+			e.mkKeywellGroup(&model.Group{Name: "Lasers"})
 			s.G(laser).Name = "Lasers"
 			return s
 		},
-		want: []string{"Authentik group Lasers", "Latch group Laser,", "Lasers"},
+		want: []string{"Authentik group Lasers", "Keywell group Laser,", "Lasers"},
 	}, {
 		name: "two Authentik groups with one name",
 		setup: func(e *env) *Snap {
@@ -951,19 +951,19 @@ func TestImportBlocksConflicts(t *testing.T) {
 		},
 		want: []string{"two groups called Laser"},
 	}, {
-		// Ruling J: adopting Latch's own admin group would let the import
-		// remove Latch's admins from it.
-		name: "group named like Latch's admin group",
+		// Ruling J: adopting Keywell's own admin group would let the import
+		// remove Keywell's admins from it.
+		name: "group named like Keywell's admin group",
 		setup: func(e *env) *Snap {
 			s := NewSnap()
 			s.Join(s.User("sam", "sam@x.org"), s.Group("Admin"))
 			return s
 		},
-		want: []string{`Authentik's group "Admin" has the same name as Latch's admin group. ` +
+		want: []string{`Authentik's group "Admin" has the same name as Keywell's admin group. ` +
 			"Rename one of them before importing."},
 		check: func(e *env) {
 			if got := e.groupsOf("ada@example.org"); !slices.Equal(got, []string{"Admin"}) {
-				e.t.Errorf("the Latch admin is in %v, want Admin", got)
+				e.t.Errorf("the Keywell admin is in %v, want Admin", got)
 			}
 		},
 	}}
@@ -971,7 +971,7 @@ func TestImportBlocksConflicts(t *testing.T) {
 		for _, dry := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s/dry=%v", tc.name, dry), func(t *testing.T) {
 				e := newEnv(t)
-				e.mkLatchAdmin("ada@example.org")
+				e.mkKeywellAdmin("ada@example.org")
 				s := tc.setup(e)
 				before := e.dump()
 				rep, err := e.try(s, func(o *Options) { o.DryRun = dry })
@@ -1025,7 +1025,7 @@ func TestImportWarnsOnUsernameCase(t *testing.T) {
 		t.Errorf("members %+v, blocking %v", rep.Members, rep.Blocking)
 	}
 	want := []Item{{Kind: "member", Name: "alex.two@x.org", Reason: "Has the username Alex, which differs only in " +
-		"capitals from the username alex of member alex@x.org. Latch keeps both, but apps that ignore capitals may mix them up."}}
+		"capitals from the username alex of member alex@x.org. Keywell keeps both, but apps that ignore capitals may mix them up."}}
 	if !reflect.DeepEqual(rep.Items, want) {
 		t.Errorf("Items = %+v", rep.Items)
 	}
@@ -1047,7 +1047,7 @@ func changedSnap(s *Snap, alex int64, woodshop, laser string) {
 // Review Focus 5: a dry run gives the real run's report and writes nothing.
 func TestDryRunWritesNothing(t *testing.T) {
 	e := newEnv(t)
-	e.mkLatchAdmin("ada@example.org")
+	e.mkKeywellAdmin("ada@example.org")
 	s, alex, woodshop, laser := idempotentSnap()
 	e.run(s)
 	changedSnap(s, alex, woodshop, laser)
@@ -1097,7 +1097,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 // Review Focus 5: a failure partway leaves the database as it was.
 func TestFailurePartwayLeavesNothing(t *testing.T) {
 	e := newEnv(t)
-	e.mkLatchAdmin("ada@example.org")
+	e.mkKeywellAdmin("ada@example.org")
 	s, alex, woodshop, laser := idempotentSnap()
 	e.run(s)
 	changedSnap(s, alex, woodshop, laser)

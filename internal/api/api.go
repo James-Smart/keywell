@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/ratelimit"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/ratelimit"
+	"keywell/internal/store"
 )
 
 // Deps is what the API needs.

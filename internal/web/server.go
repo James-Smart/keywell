@@ -1,4 +1,4 @@
-// Package web serves Latch's member-facing pages and wires the HTTP
+// Package web serves Keywell's member-facing pages and wires the HTTP
 // middleware every route shares.
 package web
 
@@ -14,16 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/api"
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/mail"
-	"latch/internal/metrics"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/api"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/mail"
+	"keywell/internal/metrics"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // Deps are the collaborators the web handlers use.
@@ -80,7 +80,7 @@ type Server struct {
 
 // dummyPassword is what dummyHash hashes. Knowing it gains nothing: a
 // sign-in that matches no user fails whatever the password.
-const dummyPassword = "latch dummy password"
+const dummyPassword = "keywell dummy password"
 
 func newServer(d Deps) *Server {
 	dummy, err := password.Hash(dummyPassword)

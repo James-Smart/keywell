@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // groupResponse makes the JSON of group g, counting its members.

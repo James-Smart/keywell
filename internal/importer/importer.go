@@ -1,9 +1,9 @@
-// Package importer copies an Authentik snapshot into Latch: members,
+// Package importer copies an Authentik snapshot into Keywell: members,
 // groups and memberships, then credentials and applications.
 //
 // One Run is one SQLite transaction on the store's single connection. A
 // dry run, an import with problems that block it, and a failure partway
-// all roll back, so Latch is left exactly as it was; a dry run's report is
+// all roll back, so Keywell is left exactly as it was; a dry run's report is
 // the one the real run would give. Inside the transaction only the
 // transaction's Store is used.
 package importer
@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/authentik"
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/authentik"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // Deps is what Run needs.
@@ -53,7 +53,7 @@ var errDryRun = errors.New("importer: dry run")
 // written; an error from it fails the run there.
 var testHookAfterMembers func() error
 
-// Run imports snap into Latch in one transaction and reports what it did.
+// Run imports snap into Keywell in one transaction and reports what it did.
 // With opts.DryRun it reports what it would do and saves nothing. When
 // there are blocking problems it saves nothing and returns ErrBlocked with
 // the report. Any other error means nothing was saved and there is no
@@ -134,32 +134,32 @@ type run struct {
 	opts Options
 	rep  *Report
 
-	// Latch as it was when the run started.
-	latchUsers  []model.User
-	latchGroups []model.Group
-	latchApps   []model.Application
+	// Keywell as it was when the run started.
+	keywellUsers  []model.User
+	keywellGroups []model.Group
+	keywellApps   []model.Application
 
 	members    []*member    // every snapshot user not left out, in snapshot order
-	goneUsers  []Item       // Latch members whose Authentik account is gone
+	goneUsers  []Item       // Keywell members whose Authentik account is gone
 	groups     []*group     // every snapshot group, in snapshot order
-	goneGroups []Item       // Latch groups whose Authentik group is gone
+	goneGroups []Item       // Keywell groups whose Authentik group is gone
 	apps       []*importApp // every snapshot application, in snapshot order
-	// otherAppItems lists the providers no application uses, then the Latch
+	// otherAppItems lists the providers no application uses, then the Keywell
 	// apps whose Authentik app is gone.
 	otherAppItems []Item
 	blocking      []string
 }
 
-// load reads Latch's users, groups and applications.
+// load reads Keywell's users, groups and applications.
 func (r *run) load() error {
 	var err error
-	if r.latchUsers, err = r.tx.AllUsers(r.ctx); err != nil {
+	if r.keywellUsers, err = r.tx.AllUsers(r.ctx); err != nil {
 		return fmt.Errorf("importer: load members: %w", err)
 	}
-	if r.latchGroups, err = r.tx.ListGroups(r.ctx); err != nil {
+	if r.keywellGroups, err = r.tx.ListGroups(r.ctx); err != nil {
 		return fmt.Errorf("importer: load groups: %w", err)
 	}
-	if r.latchApps, err = r.tx.ListApplications(r.ctx); err != nil {
+	if r.keywellApps, err = r.tx.ListApplications(r.ctx); err != nil {
 		return fmt.Errorf("importer: load apps: %w", err)
 	}
 	return nil
@@ -170,7 +170,7 @@ func (r *run) block(format string, args ...any) {
 	r.blocking = append(r.blocking, fmt.Sprintf(format, args...))
 }
 
-// keep returns the attributes Latch keeps as metadata: all but the
+// keep returns the attributes Keywell keeps as metadata: all but the
 // "goauthentik.io/…" keys and Options.DropKeys.
 func (r *run) keep(attrs map[string]any) map[string]any {
 	out := map[string]any{}

@@ -42,25 +42,25 @@ func TestLoadDefaults(t *testing.T) {
 	if c.SMTP.TLS != "starttls" || c.SMTP.Port != 587 {
 		t.Errorf("smtp = %+v", c.SMTP)
 	}
-	if c.Branding.PrimaryColor != "#2c6e49" || c.Branding.Name != "Latch" {
+	if c.Branding.PrimaryColor != "#2c6e49" || c.Branding.Name != "Keywell" {
 		t.Errorf("branding = %+v", c.Branding)
 	}
 }
 
 func TestLoadYAMLAndEnvOverride(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "latch.yaml")
+	p := filepath.Join(t.TempDir(), "keywell.yaml")
 	y := "public_url: https://x\nsmtp:\n  host: a\n  port: 25\nsessions:\n  absolute: 30d\ntrusted_proxies: [10.0.0.0/8]\n"
 	if err := os.WriteFile(p, []byte(y), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := Load(p, mapEnv(map[string]string{
-		"LATCH_SMTP_HOST":                                 "b",
-		"LATCH_TOKENS_ACCESS":                             "30m",
-		"LATCH_SESSIONS_IDLE":                             "7d",
-		"LATCH_BRANDING_PRIMARY_COLOR":                    "#112233",
-		"LATCH_TOKENS_REQUIRE_OFFLINE_ACCESS_FOR_REFRESH": "true",
-		"LATCH_TRUSTED_PROXIES":                           "192.168.0.0/16, 172.16.0.0/12",
-		"LATCH_PASSWORD_MIN_LENGTH":                       "12",
+		"KEYWELL_SMTP_HOST":                                 "b",
+		"KEYWELL_TOKENS_ACCESS":                             "30m",
+		"KEYWELL_SESSIONS_IDLE":                             "7d",
+		"KEYWELL_BRANDING_PRIMARY_COLOR":                    "#112233",
+		"KEYWELL_TOKENS_REQUIRE_OFFLINE_ACCESS_FOR_REFRESH": "true",
+		"KEYWELL_TRUSTED_PROXIES":                           "192.168.0.0/16, 172.16.0.0/12",
+		"KEYWELL_PASSWORD_MIN_LENGTH":                       "12",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 		{"smtp:\n  hostname: mail.example.org\n", "hostname"},
 		{"sessions:\n  idle: 7d\n  absolut: 30d\n", "absolut"},
 	} {
-		p := filepath.Join(t.TempDir(), "latch.yaml")
+		p := filepath.Join(t.TempDir(), "keywell.yaml")
 		if err := os.WriteFile(p, []byte(tc.yaml), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -105,11 +105,11 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 }
 
 func TestLoadErrors(t *testing.T) {
-	if _, err := Load("/nonexistent/latch.yaml", noEnv); err == nil {
+	if _, err := Load("/nonexistent/keywell.yaml", noEnv); err == nil {
 		t.Error("missing file: want error")
 	}
-	_, err := Load("", mapEnv(map[string]string{"LATCH_TOKENS_ACCESS": "soon"}))
-	if err == nil || !strings.Contains(err.Error(), "LATCH_TOKENS_ACCESS") {
+	_, err := Load("", mapEnv(map[string]string{"KEYWELL_TOKENS_ACCESS": "soon"}))
+	if err == nil || !strings.Contains(err.Error(), "KEYWELL_TOKENS_ACCESS") {
 		t.Errorf("bad duration err = %v", err)
 	}
 }
@@ -187,7 +187,7 @@ func TestValidateAcceptsLimits(t *testing.T) {
 func TestDerived(t *testing.T) {
 	c := valid(t)
 	c.PublicURL = "https://x/"
-	c.DataDir = "/var/lib/latch"
+	c.DataDir = "/var/lib/keywell"
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -211,13 +211,13 @@ func TestDerived(t *testing.T) {
 		t.Errorf("HTTPS:// public_url: SecureCookies %v, Issuer %q; want true, https://login.example.org",
 			c.SecureCookies(), c.Issuer())
 	}
-	if c.DBPath() != "/var/lib/latch/latch.db" {
+	if c.DBPath() != "/var/lib/keywell/keywell.db" {
 		t.Errorf("DBPath = %q", c.DBPath())
 	}
 }
 
 func TestExampleFileLoads(t *testing.T) {
-	c, err := Load("../../latch.example.yaml", noEnv)
+	c, err := Load("../../keywell.example.yaml", noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,15 +235,15 @@ func TestExampleFileLoads(t *testing.T) {
 	}
 }
 
-// The repo-root latch.example.yaml is a copy of example.yaml, the source
-// that latch init writes configs from.
+// The repo-root keywell.example.yaml is a copy of example.yaml, the source
+// that keywell init writes configs from.
 func TestRootExampleMatchesEmbedded(t *testing.T) {
-	root, err := os.ReadFile("../../latch.example.yaml")
+	root, err := os.ReadFile("../../keywell.example.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(root) != ExampleYAML {
-		t.Fatal("latch.example.yaml differs from internal/config/example.yaml; copy example.yaml over it")
+		t.Fatal("keywell.example.yaml differs from internal/config/example.yaml; copy example.yaml over it")
 	}
 }
 
@@ -255,7 +255,7 @@ func TestMetricsListen(t *testing.T) {
 	if c.Metrics.Listen != "" {
 		t.Errorf("default Metrics.Listen = %q", c.Metrics.Listen)
 	}
-	c, err = Load("", mapEnv(map[string]string{"LATCH_METRICS_LISTEN": "127.0.0.1:9100"}))
+	c, err = Load("", mapEnv(map[string]string{"KEYWELL_METRICS_LISTEN": "127.0.0.1:9100"}))
 	if err != nil {
 		t.Fatal(err)
 	}

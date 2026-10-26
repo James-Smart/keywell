@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func mkSession(t *testing.T, s *Store, id, userID string, exp time.Time) *model.Session {

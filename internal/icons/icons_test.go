@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/icons"
+	"keywell/internal/icons"
 )
 
 const (
@@ -23,7 +23,7 @@ func TestValidName(t *testing.T) {
 		}
 	}
 	for _, n := range []string{
-		"", "x.svg", "../latch.db", "..%2Flatch.db", "../" + appA + "-0123456789ab.png",
+		"", "x.svg", "../keywell.db", "..%2Fkeywell.db", "../" + appA + "-0123456789ab.png",
 		appA + "-0123456789ab.svg", appA + "-0123456789ab.png/", appA + "-0123456789AB.png",
 		appA + "-0123456789a.png", "a/" + appA + "-0123456789ab.png",
 	} {
@@ -96,12 +96,12 @@ func TestRemoveIfOwned(t *testing.T) {
 		t.Errorf("already gone: %v", err)
 	}
 	// A file outside the icons folder is never touched.
-	other := filepath.Join(dir, "latch.db")
+	other := filepath.Join(dir, "keywell.db")
 	os.WriteFile(other, []byte("db"), 0o600)
-	if err := icons.RemoveIfOwned(dir, appA, "/icons/../latch.db"); err != nil {
+	if err := icons.RemoveIfOwned(dir, appA, "/icons/../keywell.db"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(other); err != nil {
-		t.Errorf("latch.db removed: %v", err)
+		t.Errorf("keywell.db removed: %v", err)
 	}
 }

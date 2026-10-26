@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/admin"
-	"latch/internal/config"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/config"
+	"keywell/internal/store"
 )
 
 func TestAdminFailureFor(t *testing.T) {

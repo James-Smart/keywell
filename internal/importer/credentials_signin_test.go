@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"latch/internal/importer"
-	"latch/internal/testenv"
+	"keywell/internal/importer"
+	"keywell/internal/testenv"
 )
 
 // An imported member signs in with their Authentik password, and the

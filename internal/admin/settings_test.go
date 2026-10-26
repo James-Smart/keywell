@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/mail"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/mail"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
 )
 
 // failingMailer fails every send with err.

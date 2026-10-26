@@ -24,12 +24,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/store"
 )
 
 // Notifier emails a member a link to choose a password. *web.Server

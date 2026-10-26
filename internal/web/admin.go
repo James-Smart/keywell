@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // Admin pages live under /admin and make every change through the admin

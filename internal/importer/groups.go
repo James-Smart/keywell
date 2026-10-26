@@ -3,28 +3,28 @@ package importer
 import (
 	"fmt"
 
-	"latch/internal/authentik"
-	"latch/internal/model"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
 )
 
 // Report copy for groups.
 const (
 	reasonUnusedGroup = "Has no members and no app uses it."
-	warnNotAdmin      = "Isn't an admin group in Authentik any more. Latch leaves admin access and two-step sign in on; " +
+	warnNotAdmin      = "Isn't an admin group in Authentik any more. Keywell leaves admin access and two-step sign in on; " +
 		"untick them on the group's page if that's right."
 	// warnNotAdminNoTOTP is warnNotAdmin for a group whose two-step sign in
-	// was already turned off in Latch.
-	warnNotAdminNoTOTP = "Isn't an admin group in Authentik any more. Latch leaves admin access on; " +
+	// was already turned off in Keywell.
+	warnNotAdminNoTOTP = "Isn't an admin group in Authentik any more. Keywell leaves admin access on; " +
 		"untick it on the group's page if that's right."
-	warnGroupGone = "Is no longer in Authentik. Latch has left it as it is."
+	warnGroupGone = "Is no longer in Authentik. Keywell has left it as it is."
 )
 
 // group is a snapshot group and what the import does with it.
 type group struct {
 	src      authentik.Group
-	metadata map[string]any // the attributes Latch keeps
+	metadata map[string]any // the attributes Keywell keeps
 	skipped  bool
-	latch    *model.Group // the Latch group matched, nil for a new one; once written, as stored
+	keywell  *model.Group // the Keywell group matched, nil for a new one; once written, as stored
 	items    []Item
 }
 
@@ -38,7 +38,7 @@ func (g *group) warn(reason string) {
 }
 
 // planGroups works out each imported member's groups, decides what happens
-// to each snapshot group, matches them to Latch groups, and records
+// to each snapshot group, matches them to Keywell groups, and records
 // problems that block the import. It runs after planMembers.
 func (r *run) planGroups() {
 	parents := map[string][]string{}
@@ -70,22 +70,22 @@ func (r *run) planGroups() {
 	}
 
 	byUUID, byName := map[string]*model.Group{}, map[string]*model.Group{}
-	for i := range r.latchGroups {
-		g := &r.latchGroups[i]
+	for i := range r.keywellGroups {
+		g := &r.keywellGroups[i]
 		if g.AuthentikUUID != "" {
 			byUUID[g.AuthentikUUID] = g
 		}
 		byName[g.Name] = g
 	}
 	inSnap := map[string]bool{}
-	names := map[string]bool{} // names of the snapshot groups Latch will have
+	names := map[string]bool{} // names of the snapshot groups Keywell will have
 	for _, src := range r.snap.Groups {
 		inSnap[src.UUID] = true
-		g := &group{src: src, metadata: r.keep(src.Attributes), latch: byUUID[src.UUID]}
+		g := &group{src: src, metadata: r.keep(src.Attributes), keywell: byUUID[src.UUID]}
 		r.groups = append(r.groups, g)
-		// Ruling 5. A group Latch already has is kept up to date even when
-		// empty, so that memberships Authentik removed go in Latch too.
-		if g.latch == nil && memberCount[src.UUID] == 0 && !used[src.UUID] {
+		// Ruling 5. A group Keywell already has is kept up to date even when
+		// empty, so that memberships Authentik removed go in Keywell too.
+		if g.keywell == nil && memberCount[src.UUID] == 0 && !used[src.UUID] {
 			g.skip(reasonUnusedGroup)
 			r.rep.Groups.Skipped++
 			continue
@@ -93,19 +93,19 @@ func (r *run) planGroups() {
 		// Match on Authentik UUID, then exact name.
 		switch named := byName[src.Name]; {
 		case named == nil:
-		case g.latch == nil && named.AuthentikUUID != "":
-			r.block("Authentik group %s has the same name as Latch group %s, which is linked to a different "+
-				"Authentik group. Rename the Latch group on its page, then import again.", src.Name, named.Name)
-		case g.latch == nil && named.IsAdmin:
-			// Ruling J: adopting a Latch-only admin group would let the
-			// import remove Latch's own admins from it.
-			r.block(`Authentik's group "%s" has the same name as Latch's admin group. `+
+		case g.keywell == nil && named.AuthentikUUID != "":
+			r.block("Authentik group %s has the same name as Keywell group %s, which is linked to a different "+
+				"Authentik group. Rename the Keywell group on its page, then import again.", src.Name, named.Name)
+		case g.keywell == nil && named.IsAdmin:
+			// Ruling J: adopting a Keywell-only admin group would let the
+			// import remove Keywell's own admins from it.
+			r.block(`Authentik's group "%s" has the same name as Keywell's admin group. `+
 				"Rename one of them before importing.", src.Name)
-		case g.latch == nil:
-			g.latch = named
-		case named.ID != g.latch.ID:
-			r.block("Authentik group %s is linked to Latch group %s, but another Latch group is already called %s. "+
-				"Rename that Latch group on its page, then import again.", src.Name, g.latch.Name, src.Name)
+		case g.keywell == nil:
+			g.keywell = named
+		case named.ID != g.keywell.ID:
+			r.block("Authentik group %s is linked to Keywell group %s, but another Keywell group is already called %s. "+
+				"Rename that Keywell group on its page, then import again.", src.Name, g.keywell.Name, src.Name)
 		}
 		if names[src.Name] {
 			r.block("Authentik has two groups called %s. Rename one of them in Authentik.", src.Name)
@@ -113,8 +113,8 @@ func (r *run) planGroups() {
 		names[src.Name] = true
 		// Ruling 4: admin access is never turned off. Ruling AC: nor is the
 		// two-step sign in that goes with it.
-		if g.latch != nil && g.latch.IsAdmin && !src.IsSuperuser {
-			if g.latch.RequireTOTP {
+		if g.keywell != nil && g.keywell.IsAdmin && !src.IsSuperuser {
+			if g.keywell.RequireTOTP {
 				g.warn(warnNotAdmin)
 			} else {
 				g.warn(warnNotAdminNoTOTP)
@@ -122,8 +122,8 @@ func (r *run) planGroups() {
 		}
 	}
 
-	for i := range r.latchGroups {
-		if l := &r.latchGroups[i]; l.AuthentikUUID != "" && !inSnap[l.AuthentikUUID] {
+	for i := range r.keywellGroups {
+		if l := &r.keywellGroups[i]; l.AuthentikUUID != "" && !inSnap[l.AuthentikUUID] {
 			r.goneGroups = append(r.goneGroups, Item{Kind: "group", Name: l.Name, Reason: warnGroupGone})
 		}
 	}
@@ -154,16 +154,16 @@ func (r *run) writeGroups() error {
 	for _, g := range r.groups {
 		switch {
 		case g.skipped:
-		case g.latch == nil:
+		case g.keywell == nil:
 			n := &model.Group{Name: g.src.Name, IsAdmin: g.src.IsSuperuser, RequireTOTP: g.src.IsSuperuser,
 				Metadata: g.metadata, AuthentikUUID: g.src.UUID}
 			if err := r.tx.CreateGroup(r.ctx, n); err != nil {
 				return fmt.Errorf("importer: add group %s: %w", g.src.Name, err)
 			}
-			g.latch = n
+			g.keywell = n
 			r.rep.Groups.Added++
 		default:
-			old := g.latch
+			old := g.keywell
 			u := *old
 			u.Name = g.src.Name
 			u.IsAdmin = old.IsAdmin || g.src.IsSuperuser                        // Ruling 4
@@ -175,7 +175,7 @@ func (r *run) writeGroups() error {
 					return fmt.Errorf("importer: update group %s: %w", g.src.Name, err)
 				}
 			}
-			g.latch = &u
+			g.keywell = &u
 			r.rep.Groups.Updated++
 		}
 	}
@@ -190,15 +190,15 @@ func groupChanged(a, b *model.Group) bool {
 
 // writeMemberships makes each imported member's memberships of the groups
 // this import wrote match Authentik's, direct and through child groups.
-// Memberships of Latch-only groups, and of groups no longer in Authentik,
+// Memberships of Keywell-only groups, and of groups no longer in Authentik,
 // are left alone (Ruling 4).
 func (r *run) writeMemberships() error {
-	latchID := map[string]string{} // Authentik group UUID: Latch group ID, for the groups written
-	managed := map[string]bool{}   // Latch IDs of the groups written
+	keywellID := map[string]string{} // Authentik group UUID: Keywell group ID, for the groups written
+	managed := map[string]bool{}     // Keywell IDs of the groups written
 	for _, g := range r.groups {
 		if !g.skipped {
-			latchID[g.src.UUID] = g.latch.ID
-			managed[g.latch.ID] = true
+			keywellID[g.src.UUID] = g.keywell.ID
+			managed[g.keywell.ID] = true
 		}
 	}
 	for _, m := range r.members {
@@ -208,12 +208,12 @@ func (r *run) writeMemberships() error {
 		want := map[string]bool{}
 		var add []string
 		for _, uuid := range m.groups {
-			if id, ok := latchID[uuid]; ok && !want[id] {
+			if id, ok := keywellID[uuid]; ok && !want[id] {
 				want[id] = true
 				add = append(add, id)
 			}
 		}
-		have, err := r.tx.ListGroupsForUser(r.ctx, m.latch.ID)
+		have, err := r.tx.ListGroupsForUser(r.ctx, m.keywell.ID)
 		if err != nil {
 			return fmt.Errorf("importer: memberships of %s: %w", m.email, err)
 		}
@@ -221,14 +221,14 @@ func (r *run) writeMemberships() error {
 		for _, h := range have {
 			in[h.ID] = true
 			if managed[h.ID] && !want[h.ID] {
-				if err := r.tx.RemoveMember(r.ctx, m.latch.ID, h.ID); err != nil {
+				if err := r.tx.RemoveMember(r.ctx, m.keywell.ID, h.ID); err != nil {
 					return fmt.Errorf("importer: remove %s from %s: %w", m.email, h.Name, err)
 				}
 			}
 		}
 		for _, id := range add {
 			if !in[id] {
-				if err := r.tx.AddMember(r.ctx, m.latch.ID, id); err != nil {
+				if err := r.tx.AddMember(r.ctx, m.keywell.ID, id); err != nil {
 					return fmt.Errorf("importer: add %s to a group: %w", m.email, err)
 				}
 			}

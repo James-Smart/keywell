@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // keys returns the values of the key column of table, sorted.

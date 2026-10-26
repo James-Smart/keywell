@@ -5,7 +5,7 @@
 #   - HTTP is published on 0.0.0.0:9700 (so it can be opened over the LAN);
 #     the 9443 mapping is dropped;
 #   - the worker has no Docker socket and does not run as root.
-name: latch-authentik-dev
+name: keywell-authentik-dev
 
 services:
   postgresql:

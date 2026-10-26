@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/mail"
-	"latch/internal/model"
+	"keywell/internal/audit"
+	"keywell/internal/mail"
+	"keywell/internal/model"
 )
 
 // KeyRetireAfter is how long a signing key stays published after a newer

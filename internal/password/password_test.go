@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"latch/internal/password"
+	"keywell/internal/password"
 )
 
 const pw = "correct horse battery staple"

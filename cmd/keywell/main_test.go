@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/config"
-	"latch/internal/db"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/config"
+	"keywell/internal/db"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 const (
@@ -23,21 +23,21 @@ const (
 	publicURL = "https://login.example.org"
 )
 
-// latch runs the command line in-process with stdin, returning the exit
+// keywell runs the command line in-process with stdin, returning the exit
 // code and what it wrote.
-func latch(stdin string, args ...string) (code int, stdout, stderr string) {
+func keywell(stdin string, args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
 	code = run(args, strings.NewReader(stdin), &out, &errOut)
 	return code, out.String(), errOut.String()
 }
 
-// initInstall runs latch init in a fresh directory with an admin
+// initInstall runs keywell init in a fresh directory with an admin
 // admin@example.org and returns the config file's path.
 func initInstall(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "latch.yaml")
-	code, _, stderr := latch("", "init", "--config", cfgPath, "--data-dir", filepath.Join(dir, "data"),
+	cfgPath := filepath.Join(dir, "keywell.yaml")
+	code, _, stderr := keywell("", "init", "--config", cfgPath, "--data-dir", filepath.Join(dir, "data"),
 		"--public-url", publicURL, "--admin-email", "admin@example.org", "--admin-password", testPW)
 	if code != 0 {
 		t.Fatalf("init: exit %d, stderr %q", code, stderr)
@@ -109,15 +109,15 @@ func TestUnknownSubcommand(t *testing.T) {
 func TestInitCreatesConfigDBAdminAndKey(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "latch.yaml")
+	cfgPath := filepath.Join(dir, "keywell.yaml")
 	dataDir := filepath.Join(dir, "data")
 	args := []string{"init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL,
 		"--admin-email", "admin@example.org", "--admin-password", testPW}
-	code, stdout, stderr := latch("", args...)
+	code, stdout, stderr := keywell("", args...)
 	if code != 0 || stderr != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
-	for _, want := range []string{"latch serve --config " + cfgPath, "two-step sign in"} {
+	for _, want := range []string{"keywell serve --config " + cfgPath, "two-step sign in"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout)
 		}
@@ -193,8 +193,8 @@ func TestInitCreatesConfigDBAdminAndKey(t *testing.T) {
 	}
 
 	// A second init leaves everything alone.
-	code, _, stderr = latch("", args...)
-	if code != 1 || stderr != "latch: "+cfgPath+" already exists\n" {
+	code, _, stderr = keywell("", args...)
+	if code != 1 || stderr != "keywell: "+cfgPath+" already exists\n" {
 		t.Fatalf("second init: exit %d, stderr %q", code, stderr)
 	}
 	again, err := os.ReadFile(cfgPath)
@@ -221,7 +221,7 @@ func TestConfigFromExampleSubstitutesValues(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfgPath := filepath.Join(t.TempDir(), "latch.yaml")
+			cfgPath := filepath.Join(t.TempDir(), "keywell.yaml")
 			if err := os.WriteFile(cfgPath, []byte(text), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -244,9 +244,9 @@ func TestInitRefusesExistingDatabase(t *testing.T) {
 	if err := os.Remove(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL,
+	code, stdout, stderr := keywell("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL,
 		"--admin-email", "admin@example.org", "--admin-password", testPW)
-	want := "latch: a database already exists at " + filepath.Join(dataDir, "latch.db") +
+	want := "keywell: a database already exists at " + filepath.Join(dataDir, "keywell.db") +
 		"; restore your config file instead of running init again\n"
 	if code != 1 || stdout != "" || stderr != want {
 		t.Fatalf("exit %d, stdout %q, stderr %q; want exit 1, %q", code, stdout, stderr, want)
@@ -262,9 +262,9 @@ func TestInitAcceptsEmptyDataDir(t *testing.T) {
 	if err := os.Mkdir(dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(dir, "latch.yaml")
+	cfgPath := filepath.Join(dir, "keywell.yaml")
 	const portURL = "https://login.example.org:8443"
-	code, _, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", portURL)
+	code, _, stderr := keywell("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", portURL)
 	if code != 0 || stderr != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
@@ -277,21 +277,21 @@ func TestInitAcceptsEmptyDataDir(t *testing.T) {
 	}
 }
 
-// init sets up the database the file describes, whatever LATCH_*
+// init sets up the database the file describes, whatever KEYWELL_*
 // variables happen to be set.
 func TestInitIgnoresEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	elsewhere := filepath.Join(dir, "elsewhere")
-	t.Setenv("LATCH_DATA_DIR", elsewhere)
-	t.Setenv("LATCH_ENCRYPTION_KEY", secrets.GenerateKey())
-	cfgPath := filepath.Join(dir, "latch.yaml")
+	t.Setenv("KEYWELL_DATA_DIR", elsewhere)
+	t.Setenv("KEYWELL_ENCRYPTION_KEY", secrets.GenerateKey())
+	cfgPath := filepath.Join(dir, "keywell.yaml")
 	dataDir := filepath.Join(dir, "data")
-	code, _, stderr := latch("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL)
+	code, _, stderr := keywell("", "init", "--config", cfgPath, "--data-dir", dataDir, "--public-url", publicURL)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
 	if _, err := os.Stat(elsewhere); !os.IsNotExist(err) {
-		t.Errorf("LATCH_DATA_DIR used (stat: %v)", err)
+		t.Errorf("KEYWELL_DATA_DIR used (stat: %v)", err)
 	}
 	cfg, st := openInstallation(t, cfgPath) // the file's data_dir and key
 	enc, err := secrets.NewEncryptor(cfg.EncryptionKey)
@@ -305,8 +305,8 @@ func TestInitIgnoresEnvironment(t *testing.T) {
 
 func TestInitReadsPasswordFromStdin(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "latch.yaml")
-	code, _, stderr := latch(testPW+"\n", "init", "--config", cfgPath, "--data-dir", filepath.Join(dir, "data"),
+	cfgPath := filepath.Join(dir, "keywell.yaml")
+	code, _, stderr := keywell(testPW+"\n", "init", "--config", cfgPath, "--data-dir", filepath.Join(dir, "data"),
 		"--public-url", publicURL, "--admin-email", "admin@example.org")
 	if code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
@@ -336,9 +336,9 @@ func TestInitRefusesBadInputBeforeWriting(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			cfgPath := filepath.Join(dir, "latch.yaml")
+			cfgPath := filepath.Join(dir, "keywell.yaml")
 			args := append([]string{"init", "--config", cfgPath, "--data-dir", filepath.Join(dir, "data")}, tc.args...)
-			code, _, stderr := latch("", args...)
+			code, _, stderr := keywell("", args...)
 			if code != tc.code || !strings.Contains(stderr, tc.stderr) || strings.Count(stderr, "\n") != 1 {
 				t.Fatalf("exit %d, stderr %q; want exit %d and one line with %q", code, stderr, tc.code, tc.stderr)
 			}
@@ -355,7 +355,7 @@ func TestCreateAdmin(t *testing.T) {
 	_, st := openInstallation(t, cfgPath)
 
 	// A new account.
-	code, stdout, stderr := latch("", "create-admin", "--config", cfgPath, "--email", "sam@example.org", "--password", testPW)
+	code, stdout, stderr := keywell("", "create-admin", "--config", cfgPath, "--email", "sam@example.org", "--password", testPW)
 	if code != 0 || stderr != "" {
 		t.Fatalf("create: exit %d, stderr %q", code, stderr)
 	}
@@ -380,7 +380,7 @@ func TestCreateAdmin(t *testing.T) {
 	if err := st.CreateUser(ctx, kim); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr = latch("", "create-admin", "--config", cfgPath, "--email", "KIM@example.org")
+	code, _, stderr = keywell("", "create-admin", "--config", cfgPath, "--email", "KIM@example.org")
 	if code != 0 || stderr != "" {
 		t.Fatalf("promote: exit %d, stderr %q", code, stderr)
 	}
@@ -393,7 +393,7 @@ func TestCreateAdmin(t *testing.T) {
 		t.Errorf("kim's groups %v, want [Admin]", names)
 	}
 
-	if code, _, _ := latch("", "create-admin", "--config", cfgPath); code != 2 {
+	if code, _, _ := keywell("", "create-admin", "--config", cfgPath); code != 2 {
 		t.Errorf("no --email: exit %d, want 2", code)
 	}
 }
@@ -403,7 +403,7 @@ func TestResetPasswordPrintsLink(t *testing.T) {
 	cfgPath := initInstall(t)
 	_, st := openInstallation(t, cfgPath)
 
-	code, stdout, stderr := latch("", "reset-password", "--config", cfgPath, "admin@example.org")
+	code, stdout, stderr := keywell("", "reset-password", "--config", cfgPath, "admin@example.org")
 	if code != 0 || stderr != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
@@ -423,8 +423,8 @@ func TestResetPasswordPrintsLink(t *testing.T) {
 		t.Errorf("token for %q purpose %q", tok.UserID, tok.Purpose)
 	}
 
-	code, stdout, stderr = latch("", "reset-password", "--config", cfgPath, "nobody@example.org")
-	if code != 1 || stdout != "" || stderr != "latch: no account with that email\n" {
+	code, stdout, stderr = keywell("", "reset-password", "--config", cfgPath, "nobody@example.org")
+	if code != 1 || stdout != "" || stderr != "keywell: no account with that email\n" {
 		t.Errorf("unknown email: exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 
@@ -433,11 +433,11 @@ func TestResetPasswordPrintsLink(t *testing.T) {
 	if err := st.UpdateUser(ctx, admin); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr = latch("", "reset-password", "--config", cfgPath, "admin@example.org")
+	code, stdout, stderr = keywell("", "reset-password", "--config", cfgPath, "admin@example.org")
 	if code != 1 || stdout != "" || !strings.Contains(stderr, "deactivated") {
 		t.Errorf("deactivated: exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
-	if code, _, _ := latch("", "reset-password", "--config", cfgPath); code != 2 {
+	if code, _, _ := keywell("", "reset-password", "--config", cfgPath); code != 2 {
 		t.Errorf("no email: exit %d, want 2", code)
 	}
 }
@@ -453,12 +453,12 @@ func TestAdminCommandsRefuseServiceAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, stdout, stderr := latch("", "reset-password", "--config", cfgPath, "door@example.org")
-	if code != 1 || stdout != "" || stderr != "latch: that is a service account, which cannot sign in\n" {
+	code, stdout, stderr := keywell("", "reset-password", "--config", cfgPath, "door@example.org")
+	if code != 1 || stdout != "" || stderr != "keywell: that is a service account, which cannot sign in\n" {
 		t.Errorf("reset-password: exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
-	code, stdout, stderr = latch("", "create-admin", "--config", cfgPath, "--email", "door@example.org")
-	if code != 1 || stdout != "" || stderr != "latch: that is a service account, which cannot sign in\n" {
+	code, stdout, stderr = keywell("", "create-admin", "--config", cfgPath, "--email", "door@example.org")
+	if code != 1 || stdout != "" || stderr != "keywell: that is a service account, which cannot sign in\n" {
 		t.Errorf("create-admin: exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	if names := groupNames(t, st, svc); len(names) != 0 {
@@ -476,8 +476,8 @@ func TestCreateAdminRefusesDeactivatedAccount(t *testing.T) {
 	if err := st.CreateUser(ctx, gone); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr := latch("", "create-admin", "--config", cfgPath, "--email", "gone@example.org")
-	if code != 1 || stdout != "" || stderr != "latch: that account is deactivated\n" {
+	code, stdout, stderr := keywell("", "create-admin", "--config", cfgPath, "--email", "gone@example.org")
+	if code != 1 || stdout != "" || stderr != "keywell: that account is deactivated\n" {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	if names := groupNames(t, st, gone); len(names) != 0 {
@@ -490,7 +490,7 @@ func TestRotateKeys(t *testing.T) {
 	cfgPath := initInstall(t)
 	_, st := openInstallation(t, cfgPath)
 
-	code, stdout, stderr := latch("", "rotate-keys", "--config", cfgPath)
+	code, stdout, stderr := keywell("", "rotate-keys", "--config", cfgPath)
 	if code != 0 || stderr != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
@@ -508,7 +508,7 @@ func TestRotateKeys(t *testing.T) {
 	}
 
 	// Retiring at once leaves only the new key published.
-	code, stdout, stderr = latch("", "rotate-keys", "--config", cfgPath, "--retire-after", "0d")
+	code, stdout, stderr = keywell("", "rotate-keys", "--config", cfgPath, "--retire-after", "0d")
 	if code != 0 || stderr != "" {
 		t.Fatalf("retire: exit %d, stderr %q", code, stderr)
 	}
@@ -523,7 +523,7 @@ func TestRotateKeys(t *testing.T) {
 	}
 
 	for _, bad := range []string{"soon", "-1d"} {
-		if code, _, _ := latch("", "rotate-keys", "--config", cfgPath, "--retire-after", bad); code != 2 {
+		if code, _, _ := keywell("", "rotate-keys", "--config", cfgPath, "--retire-after", bad); code != 2 {
 			t.Errorf("--retire-after %s: exit %d, want 2", bad, code)
 		}
 	}
@@ -531,14 +531,14 @@ func TestRotateKeys(t *testing.T) {
 
 func TestCommandsNeedAnExistingDatabase(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "latch.yaml")
+	cfgPath := filepath.Join(dir, "keywell.yaml")
 	cfg := "public_url: " + publicURL + "\ndata_dir: " + filepath.Join(dir, "data") +
 		"\nencryption_key: " + secrets.GenerateKey() + "\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := latch("", "rotate-keys", "--config", cfgPath)
-	if code != 1 || !strings.Contains(stderr, "run latch init first") {
+	code, _, stderr := keywell("", "rotate-keys", "--config", cfgPath)
+	if code != 1 || !strings.Contains(stderr, "run keywell init first") {
 		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "data")); !os.IsNotExist(err) {

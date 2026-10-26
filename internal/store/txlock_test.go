@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/db"
-	"latch/internal/model"
+	"keywell/internal/db"
+	"keywell/internal/model"
 )
 
 // A transaction that reads and then writes must not lose the race to
-// another process (a running `latch serve`) that commits in between: it
+// another process (a running `keywell serve`) that commits in between: it
 // takes the write lock when it begins, so the other writer waits.
 func TestInTxTakesWriteLockUpFront(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

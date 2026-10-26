@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func mkReset(t *testing.T, s *Store, hash, userID string, p model.ResetPurpose, exp time.Time) {

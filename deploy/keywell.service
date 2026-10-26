@@ -1,15 +1,15 @@
 [Unit]
-Description=Latch identity provider
+Description=Keywell identity provider
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=latch
-Group=latch
-ExecStart=/usr/local/bin/latch serve --config /etc/latch/latch.yaml
+User=keywell
+Group=keywell
+ExecStart=/usr/local/bin/keywell serve --config /etc/keywell/keywell.yaml
 Restart=on-failure
-# Creates /var/lib/latch, owned by the service user.
-StateDirectory=latch
+# Creates /var/lib/keywell, owned by the service user.
+StateDirectory=keywell
 StateDirectoryMode=0750
 
 NoNewPrivileges=true

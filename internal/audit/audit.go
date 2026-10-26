@@ -5,11 +5,11 @@ import (
 	"context"
 	"log/slog"
 
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
-// ActorSystem is the actor type for events caused by Latch itself.
+// ActorSystem is the actor type for events caused by Keywell itself.
 const ActorSystem = model.ActorType("system")
 
 // Action names recorded in audit events.

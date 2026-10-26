@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/importer"
-	"latch/internal/mail"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/config"
+	"keywell/internal/importer"
+	"keywell/internal/mail"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 func TestSettingsImportStatus(t *testing.T) {
@@ -34,8 +34,8 @@ func TestSettingsImportStatus(t *testing.T) {
 		Groups:  importer.Counts{Added: 4, Updated: 1, Skipped: 2},
 		Apps:    importer.Counts{Added: 3, Skipped: 3},
 		Items: []importer.Item{
-			{Kind: "member", Name: "nomail", Skipped: true, Reason: "Has no email address, so Latch can't sign them in."},
-			{Kind: "app", Name: "Grafana", Reason: "Signs in with SAML, which Latch can't do <yet>."},
+			{Kind: "member", Name: "nomail", Skipped: true, Reason: "Has no email address, so Keywell can't sign them in."},
+			{Kind: "app", Name: "Grafana", Reason: "Signs in with SAML, which Keywell can't do <yet>."},
 		},
 	}
 	raw, err := json.Marshal(rep)
@@ -55,8 +55,8 @@ func TestSettingsImportStatus(t *testing.T) {
 		"Groups: 4 added, 1 updated, 2 skipped",
 		"Apps: 3 added, 0 updated, 3 skipped",
 		"<details>", "What was skipped or needs a look (2)",
-		"member nomail", "Has no email address, so Latch can&#39;t sign them in.",
-		"app Grafana", "which Latch can&#39;t do &lt;yet&gt;.",
+		"member nomail", "Has no email address, so Keywell can&#39;t sign them in.",
+		"app Grafana", "which Keywell can&#39;t do &lt;yet&gt;.",
 		">skipped<", ">warning<",
 	} {
 		if !strings.Contains(body, want) {
@@ -346,7 +346,7 @@ func TestSettingsPage(t *testing.T) {
 	for _, want := range []string{
 		"<title>Settings · Admin · Northside Hackspace</title>",
 		"Northside Hackspace", `style="background-color: #a1b2c3"></span>#a1b2c3`, "Need help? Ask on the forum.",
-		"To change these, edit the branding section of Latch's config file (latch.yaml) and restart Latch.",
+		"To change these, edit the branding section of Keywell's config file (keywell.yaml) and restart Keywell.",
 		"Email isn't set up yet.",
 		`action="/admin/settings/test-email"`, "Send a test email to " + testenv.AdminEmail,
 		`action="/admin/settings/rotate-keys"`, "Make a new signing key",
@@ -365,7 +365,7 @@ func TestSettingsPage(t *testing.T) {
 	env = testenv.New(t, testenv.WithConfig(func(c *config.Config) {
 		c.SMTP.Host = "smtp.northside.example"
 		c.SMTP.Port = 465
-		c.SMTP.Username = "latch"
+		c.SMTP.Username = "keywell"
 		c.SMTP.Password = "smtp-password-do-not-show"
 		c.SMTP.From = "Northside <noreply@northside.example>"
 		c.SMTP.TLS = "tls"

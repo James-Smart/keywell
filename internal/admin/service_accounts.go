@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // Messages and limits for service accounts and API tokens.
@@ -24,7 +24,7 @@ const (
 	maxDescriptionLen = 500
 	maxTokenLabelLen  = 100
 
-	tokenPrefix   = "latch_"
+	tokenPrefix   = "keywell_"
 	touchInterval = time.Minute // how often LastUsedAt is written
 )
 

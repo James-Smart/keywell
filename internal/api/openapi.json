@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Latch admin API",
+    "title": "Keywell admin API",
     "version": "1",
-    "description": "Manage Latch's members, groups, applications and service accounts, and read the audit log. Send an API token, made on the admin Service accounts page, as \"Authorization: Bearer <token>\". A read-only token can only use GET. Each token can make 600 requests a minute. Bodies are JSON objects of at most 1 MiB; unknown fields are refused. Times are RFC 3339 in UTC, and unset times are null. Every error is {\"error\": \"code\", \"message\": \"...\"}."
+    "description": "Manage Keywell's members, groups, applications and service accounts, and read the audit log. Send an API token, made on the admin Service accounts page, as \"Authorization: Bearer <token>\". A read-only token can only use GET. Each token can make 600 requests a minute. Bodies are JSON objects of at most 1 MiB; unknown fields are refused. Times are RFC 3339 in UTC, and unset times are null. Every error is {\"error\": \"code\", \"message\": \"...\"}."
   },
   "servers": [{ "url": "/api/v1" }],
   "security": [{ "apiToken": [] }],
@@ -2274,7 +2274,7 @@
       "apiToken": {
         "type": "http",
         "scheme": "bearer",
-        "description": "An API token from the admin Service accounts page. It starts latch_."
+        "description": "An API token from the admin Service accounts page. It starts keywell_."
       }
     },
     "schemas": {
@@ -2470,7 +2470,7 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "Internal": {
-        "description": "Something went wrong on Latch's side.",
+        "description": "Something went wrong on Keywell's side.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       }
     }

@@ -12,14 +12,14 @@ import (
 
 	"golang.org/x/term"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/store"
-	"latch/internal/web"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/store"
+	"keywell/internal/web"
 )
 
-// adminGroup is the group whose members administer Latch.
+// adminGroup is the group whose members administer Keywell.
 const adminGroup = "Admin"
 
 // errServiceAccount refuses to make a service account an admin or give it
@@ -29,7 +29,7 @@ var errServiceAccount = errors.New("that is a service account, which cannot sign
 func cmdCreateAdmin(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("create-admin", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	configPath := flags.String("config", "./keywell.yaml", "path to the config file")
 	email := flags.String("email", "", "the admin's email address (required)")
 	pw := flags.String("password", "", "password for a new account (prompted for when omitted)")
 	if err := flags.Parse(args); err != nil {
@@ -184,12 +184,12 @@ func readLine(r io.Reader) (string, error) {
 func cmdResetPassword(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reset-password", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	configPath := flags.String("config", "./keywell.yaml", "path to the config file")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 	if flags.NArg() != 1 {
-		return usageError(stderr, "reset-password", "give one email address: latch reset-password [--config PATH] EMAIL")
+		return usageError(stderr, "reset-password", "give one email address: keywell reset-password [--config PATH] EMAIL")
 	}
 	ctx := context.Background()
 	cfg, st, conn, err := openInstall(ctx, *configPath)

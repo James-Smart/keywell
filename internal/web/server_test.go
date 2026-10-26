@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/metrics"
-	"latch/internal/session"
-	"latch/internal/store/storetest"
-	"latch/internal/testenv"
-	"latch/internal/web"
+	"keywell/internal/config"
+	"keywell/internal/metrics"
+	"keywell/internal/session"
+	"keywell/internal/store/storetest"
+	"keywell/internal/testenv"
+	"keywell/internal/web"
 )
 
 func get(t *testing.T, c *http.Client, url string) (*http.Response, string) {
@@ -71,7 +71,7 @@ func TestBrandingRendered(t *testing.T) {
 		"--primary: #a1b2c3",
 		"Need help? Email membership@northside.example",
 		`src="/static/logo"`,
-		`href="/static/latch.css"`,
+		`href="/static/keywell.css"`,
 		`action="/login"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -106,7 +106,7 @@ func customHandler(t *testing.T, trusted []string, mount mountFunc, changes ...f
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.PublicURL = "http://latch.test"
+	cfg.PublicURL = "http://keywell.test"
 	cfg.TrustedProxies = trusted
 	log := slog.New(slog.DiscardHandler)
 	rd, err := web.NewRenderer(cfg, log)
@@ -175,7 +175,7 @@ func TestPanicIsCountedAndLogged(t *testing.T) {
 
 	scrape := httptest.NewRecorder()
 	reg.Handler().ServeHTTP(scrape, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if !strings.Contains(scrape.Body.String(), `latch_http_requests_total{code="5xx"} 1`+"\n") {
+	if !strings.Contains(scrape.Body.String(), `keywell_http_requests_total{code="5xx"} 1`+"\n") {
 		t.Errorf("panic not counted as 5xx:\n%s", scrape.Body.String())
 	}
 	var logged bool
@@ -262,15 +262,15 @@ func TestCrossOriginPostRejected(t *testing.T) {
 func TestStaticAndLogo(t *testing.T) {
 	env := testenv.New(t)
 	c := env.Client(t)
-	resp, body := get(t, c, env.TS.URL+"/static/latch.css")
+	resp, body := get(t, c, env.TS.URL+"/static/keywell.css")
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "--primary") {
-		t.Fatalf("latch.css: status %d", resp.StatusCode)
+		t.Fatalf("keywell.css: status %d", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
-		t.Errorf("latch.css content type %q", ct)
+		t.Errorf("keywell.css content type %q", ct)
 	}
 	if cc := resp.Header.Get("Cache-Control"); cc != "public, max-age=86400" {
-		t.Errorf("latch.css cache control %q", cc)
+		t.Errorf("keywell.css cache control %q", cc)
 	}
 	if resp, _ := get(t, c, env.TS.URL+"/static/logo"); resp.StatusCode != http.StatusNotFound {
 		t.Errorf("logo without config: status %d, want 404", resp.StatusCode)
@@ -325,7 +325,7 @@ func TestRendererPages(t *testing.T) {
 		t.Fatalf("error status %d", rec.Code)
 	}
 	body = rec.Body.String()
-	for _, want := range []string{"<h1>Unknown application</h1>", "The app that sent you here is not registered.", "Latch"} {
+	for _, want := range []string{"<h1>Unknown application</h1>", "The app that sent you here is not registered.", "Keywell"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("error page missing %q", want)
 		}

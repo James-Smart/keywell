@@ -1,4 +1,4 @@
-// Package store is the SQLite-backed persistence layer for Latch.
+// Package store is the SQLite-backed persistence layer for Keywell.
 package store
 
 import (
@@ -61,7 +61,7 @@ func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
 func (s *Store) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	if s.tx != nil {
 		s.spN++
-		name := fmt.Sprintf("latch_sp_%d", s.spN)
+		name := fmt.Sprintf("keywell_sp_%d", s.spN)
 		if _, err := s.tx.ExecContext(ctx, "SAVEPOINT "+name); err != nil {
 			return fmt.Errorf("store: savepoint: %w", err)
 		}

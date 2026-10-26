@@ -1,4 +1,4 @@
-// Command latch is the Latch identity provider.
+// Command keywell is the Keywell identity provider.
 package main
 
 import (
@@ -18,22 +18,22 @@ import (
 	"syscall"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/db"
-	"latch/internal/mail"
-	"latch/internal/metrics"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/web"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/db"
+	"keywell/internal/mail"
+	"keywell/internal/metrics"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/web"
 )
 
 // Version is set at build time with -ldflags "-X main.Version=...".
 var Version = "dev"
 
-const usage = `usage: latch <command> [flags]
+const usage = `usage: keywell <command> [flags]
 
 commands:
   init              write a config file, set up the database and the first admin
@@ -44,8 +44,8 @@ commands:
   import-authentik  copy members, groups and apps from an Authentik database
   version           print the version
 
-Every command but version takes --config PATH (default ./latch.yaml).
-Run latch <command> -h for its flags.
+Every command but version takes --config PATH (default ./keywell.yaml).
+Run keywell <command> -h for its flags.
 `
 
 // command runs one subcommand and returns the process exit code.
@@ -72,7 +72,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	cmd, ok := commands[args[0]]
 	if !ok {
-		fmt.Fprintf(stderr, "latch: unknown command %q\n%s", args[0], usage)
+		fmt.Fprintf(stderr, "keywell: unknown command %q\n%s", args[0], usage)
 		return 2
 	}
 	return cmd(args[1:], stdin, stdout, stderr)
@@ -80,18 +80,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // fail reports err on one line and returns exit code 1.
 func fail(stderr io.Writer, err error) int {
-	fmt.Fprintf(stderr, "latch: %v\n", err)
+	fmt.Fprintf(stderr, "keywell: %v\n", err)
 	return 1
 }
 
 // usageError reports, on one line, a mistake in how command was called and
 // returns exit code 2.
 func usageError(stderr io.Writer, command, format string, args ...any) int {
-	fmt.Fprintf(stderr, "latch %s: %s\n", command, fmt.Sprintf(format, args...))
+	fmt.Fprintf(stderr, "keywell %s: %s\n", command, fmt.Sprintf(format, args...))
 	return 2
 }
 
-// loadConfig reads the config file at path, applies LATCH_* overrides from
+// loadConfig reads the config file at path, applies KEYWELL_* overrides from
 // the environment and validates the result.
 func loadConfig(path string) (*config.Config, error) {
 	cfg, err := config.Load(path, os.Getenv)
@@ -119,14 +119,14 @@ func openStore(ctx context.Context, path string) (*store.Store, *sql.DB, error) 
 }
 
 // openInstall loads the config at configPath and opens its database, which
-// latch init must already have made. The caller closes the connection.
+// keywell init must already have made. The caller closes the connection.
 func openInstall(ctx context.Context, configPath string) (*config.Config, *store.Store, *sql.DB, error) {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if _, err := os.Stat(cfg.DBPath()); errors.Is(err, fs.ErrNotExist) {
-		return nil, nil, nil, fmt.Errorf("no database at %s; run latch init first", cfg.DBPath())
+		return nil, nil, nil, fmt.Errorf("no database at %s; run keywell init first", cfg.DBPath())
 	}
 	st, conn, err := openStore(ctx, cfg.DBPath())
 	if err != nil {
@@ -142,14 +142,14 @@ func cliLogger(stderr io.Writer) *slog.Logger {
 }
 
 func cmdVersion(_ []string, _ io.Reader, stdout, _ io.Writer) int {
-	fmt.Fprintf(stdout, "latch %s\n", Version)
+	fmt.Fprintf(stdout, "keywell %s\n", Version)
 	return 0
 }
 
 func cmdServe(args []string, _ io.Reader, _, stderr io.Writer) int {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	configPath := flags.String("config", "./keywell.yaml", "path to the config file")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -188,7 +188,7 @@ func newLogger(c config.LogConfig, w io.Writer) (*slog.Logger, error) {
 	}
 }
 
-// newServer returns an http.Server with Latch's timeouts.
+// newServer returns an http.Server with Keywell's timeouts.
 func newServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
 	return &http.Server{
 		Addr:              addr,

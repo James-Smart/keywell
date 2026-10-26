@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/testenv"
 )
 
 // appValues is the application form with the fields a new app needs.
@@ -95,8 +95,8 @@ func TestNewAppForm(t *testing.T) {
 		"Does the app keep a secret?", "Yes: it runs on a server, like MediaWiki", "No: it runs in the browser or on a phone",
 		"Sign-in return addresses, one per line", "Addresses to return to after signing out (optional)",
 		"Leave all unticked to let every active member in.", `name="allowed_groups"`, "Laser",
-		"How the app recognises people", "Latch ID (recommended)", "A permanent ID that never changes, even if their email does.",
-		"Email address", "Changes when their email changes.", "Username", "People without a username get their Latch ID.",
+		"How the app recognises people", "Keywell ID (recommended)", "A permanent ID that never changes, even if their email does.",
+		"Email address", "Changes when their email changes.", "Username", "People without a username get their Keywell ID.",
 		"Authentik ID (Authentik's default)", "Authentik UUID", "Authentik number",
 		"Changing this changes how the app recognises people, so existing accounts in the app may stop matching.",
 		"Show on members' home page", "Link to open the app", "Description", "Icon address (https)",
@@ -145,7 +145,7 @@ func TestSecretPageLabelsExample(t *testing.T) {
 	// A token's example is labelled too.
 	sa := seedServiceAccount(t, env, "Door controller", "door")
 	_, body = env.Submit(t, c, "/admin/service-accounts/"+sa.ID+"/tokens", url.Values{"label": {"CI"}, "scope": {"read"}})
-	assertContains(t, body, `<code class="secret">latch_`, "<p>To check the token works, run:</p>\n  <pre>curl ")
+	assertContains(t, body, `<code class="secret">keywell_`, "<p>To check the token works, run:</p>\n  <pre>curl ")
 	assertLacks(t, body, "MediaWiki")
 }
 
@@ -304,7 +304,7 @@ func TestEditApp(t *testing.T) {
 func TestSubjectModeWarning(t *testing.T) {
 	env := testenv.New(t)
 	c, _ := env.AdminClient(t)
-	warning := "Switch to Latch ID once the app no longer needs Authentik's identifiers."
+	warning := "Switch to Keywell ID once the app no longer needs Authentik's identifiers."
 	app := createApp(t, env, model.Application{Name: "Old wiki", Slug: "old", ClientType: model.ClientTypeConfidential,
 		RedirectURIs: []string{"https://wiki.example.org/cb"}, SubjectMode: model.SubjectModeAuthentikUID}, "s3cret")
 	_, body := env.Page(t, c, "/admin/apps/"+app.ID)

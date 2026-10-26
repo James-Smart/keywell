@@ -6,5 +6,5 @@ dev/authentik/.env
 dev/authentik/data
 dev/authentik/certs
 dev/authentik/custom-templates
-/latch
+/keywell
 **/*.db

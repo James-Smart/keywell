@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // Every rejected sign-in shows msgNoMatch, whatever the reason, so the page

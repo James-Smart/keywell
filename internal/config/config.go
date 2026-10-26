@@ -1,5 +1,5 @@
-// Package config loads and validates Latch's configuration from a YAML file
-// with LATCH_* environment overrides.
+// Package config loads and validates Keywell's configuration from a YAML file
+// with KEYWELL_* environment overrides.
 package config
 
 import (
@@ -21,8 +21,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ExampleYAML is the annotated example configuration. latch init writes new
-// config files from it; latch.example.yaml at the repository root is a copy.
+// ExampleYAML is the annotated example configuration. keywell init writes new
+// config files from it; keywell.example.yaml at the repository root is a copy.
 //
 //go:embed example.yaml
 var ExampleYAML string
@@ -89,7 +89,7 @@ func defaults() *Config {
 	return &Config{
 		Listen:   "0.0.0.0:8080",
 		DataDir:  "./data",
-		Branding: BrandingConfig{Name: "Latch", PrimaryColor: "#2c6e49"},
+		Branding: BrandingConfig{Name: "Keywell", PrimaryColor: "#2c6e49"},
 		SMTP:     SMTPConfig{Port: 587, TLS: "starttls"},
 		Sessions: SessionsConfig{Idle: 336 * time.Hour, Absolute: 720 * time.Hour},
 		Tokens: TokensConfig{
@@ -137,7 +137,7 @@ func ParseDuration(s string) (time.Duration, error) {
 	return d, nil
 }
 
-// Load reads path (if non-empty) over the defaults, then applies LATCH_*
+// Load reads path (if non-empty) over the defaults, then applies KEYWELL_*
 // overrides from env.
 func Load(path string, env func(string) string) (*Config, error) {
 	c := defaults()
@@ -256,10 +256,10 @@ func applyEnv(c *Config, env func(string) string) error {
 		}
 	}
 
-	str("LATCH_PUBLIC_URL", &c.PublicURL)
-	str("LATCH_LISTEN", &c.Listen)
-	str("LATCH_DATA_DIR", &c.DataDir)
-	if v := env("LATCH_TRUSTED_PROXIES"); v != "" {
+	str("KEYWELL_PUBLIC_URL", &c.PublicURL)
+	str("KEYWELL_LISTEN", &c.Listen)
+	str("KEYWELL_DATA_DIR", &c.DataDir)
+	if v := env("KEYWELL_TRUSTED_PROXIES"); v != "" {
 		c.TrustedProxies = nil
 		for _, p := range strings.Split(v, ",") {
 			if p = strings.TrimSpace(p); p != "" {
@@ -267,28 +267,28 @@ func applyEnv(c *Config, env func(string) string) error {
 			}
 		}
 	}
-	str("LATCH_ENCRYPTION_KEY", &c.EncryptionKey)
-	str("LATCH_BRANDING_NAME", &c.Branding.Name)
-	str("LATCH_BRANDING_LOGO", &c.Branding.Logo)
-	str("LATCH_BRANDING_PRIMARY_COLOR", &c.Branding.PrimaryColor)
-	str("LATCH_BRANDING_SUPPORT_TEXT", &c.Branding.SupportText)
-	str("LATCH_SMTP_HOST", &c.SMTP.Host)
-	num("LATCH_SMTP_PORT", &c.SMTP.Port)
-	str("LATCH_SMTP_USERNAME", &c.SMTP.Username)
-	str("LATCH_SMTP_PASSWORD", &c.SMTP.Password)
-	str("LATCH_SMTP_FROM", &c.SMTP.From)
-	str("LATCH_SMTP_TLS", &c.SMTP.TLS)
-	dur("LATCH_SESSIONS_IDLE", &c.Sessions.Idle)
-	dur("LATCH_SESSIONS_ABSOLUTE", &c.Sessions.Absolute)
-	dur("LATCH_TOKENS_ACCESS", &c.Tokens.Access)
-	dur("LATCH_TOKENS_ID", &c.Tokens.ID)
-	dur("LATCH_TOKENS_REFRESH", &c.Tokens.Refresh)
-	dur("LATCH_TOKENS_REFRESH_ABSOLUTE", &c.Tokens.RefreshAbsolute)
-	boolean("LATCH_TOKENS_REQUIRE_OFFLINE_ACCESS_FOR_REFRESH", &c.Tokens.RequireOfflineAccessForRefresh)
-	num("LATCH_PASSWORD_MIN_LENGTH", &c.Password.MinLength)
-	str("LATCH_LOG_LEVEL", &c.Log.Level)
-	str("LATCH_LOG_FORMAT", &c.Log.Format)
-	str("LATCH_METRICS_LISTEN", &c.Metrics.Listen)
+	str("KEYWELL_ENCRYPTION_KEY", &c.EncryptionKey)
+	str("KEYWELL_BRANDING_NAME", &c.Branding.Name)
+	str("KEYWELL_BRANDING_LOGO", &c.Branding.Logo)
+	str("KEYWELL_BRANDING_PRIMARY_COLOR", &c.Branding.PrimaryColor)
+	str("KEYWELL_BRANDING_SUPPORT_TEXT", &c.Branding.SupportText)
+	str("KEYWELL_SMTP_HOST", &c.SMTP.Host)
+	num("KEYWELL_SMTP_PORT", &c.SMTP.Port)
+	str("KEYWELL_SMTP_USERNAME", &c.SMTP.Username)
+	str("KEYWELL_SMTP_PASSWORD", &c.SMTP.Password)
+	str("KEYWELL_SMTP_FROM", &c.SMTP.From)
+	str("KEYWELL_SMTP_TLS", &c.SMTP.TLS)
+	dur("KEYWELL_SESSIONS_IDLE", &c.Sessions.Idle)
+	dur("KEYWELL_SESSIONS_ABSOLUTE", &c.Sessions.Absolute)
+	dur("KEYWELL_TOKENS_ACCESS", &c.Tokens.Access)
+	dur("KEYWELL_TOKENS_ID", &c.Tokens.ID)
+	dur("KEYWELL_TOKENS_REFRESH", &c.Tokens.Refresh)
+	dur("KEYWELL_TOKENS_REFRESH_ABSOLUTE", &c.Tokens.RefreshAbsolute)
+	boolean("KEYWELL_TOKENS_REQUIRE_OFFLINE_ACCESS_FOR_REFRESH", &c.Tokens.RequireOfflineAccessForRefresh)
+	num("KEYWELL_PASSWORD_MIN_LENGTH", &c.Password.MinLength)
+	str("KEYWELL_LOG_LEVEL", &c.Log.Level)
+	str("KEYWELL_LOG_FORMAT", &c.Log.Format)
+	str("KEYWELL_METRICS_LISTEN", &c.Metrics.Listen)
 	return err
 }
 
@@ -379,4 +379,4 @@ func (c *Config) Issuer() string { return strings.TrimSuffix(c.PublicURL, "/") }
 
 func (c *Config) SecureCookies() bool { return strings.HasPrefix(c.PublicURL, "https://") }
 
-func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "latch.db") }
+func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "keywell.db") }

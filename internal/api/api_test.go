@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/testenv"
 )
 
 const (
@@ -82,7 +82,7 @@ func TestAPIRequiresToken(t *testing.T) {
 
 	// A token that works until it expires.
 	_, clockAccount := env.APIToken(t, "clock", model.APITokenScopeRead)
-	expiring := "latch_" + secrets.RandomToken(32)
+	expiring := "keywell_" + secrets.RandomToken(32)
 	expiresAt := env.Clock.Now().Add(time.Hour)
 	if err := env.Store.CreateAPIToken(ctx, &model.APIToken{ServiceAccountID: clockAccount.ID, Label: "expiring",
 		TokenHash: secrets.HashToken(expiring), Scope: model.APITokenScopeRead, ExpiresAt: &expiresAt}); err != nil {
@@ -324,7 +324,7 @@ func TestOpenAPIServed(t *testing.T) {
 	if v, _ := body["openapi"].(string); !strings.HasPrefix(v, "3.") {
 		t.Errorf("openapi %q, want 3.x", v)
 	}
-	if info, _ := body["info"].(map[string]any); info["title"] != "Latch admin API" {
-		t.Errorf("info.title %v, want Latch admin API", info["title"])
+	if info, _ := body["info"].(map[string]any); info["title"] != "Keywell admin API" {
+		t.Errorf("info.title %v, want Keywell admin API", info["title"])
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"latch/internal/authentik"
+	"keywell/internal/authentik"
 )
 
 // Report copy for access rules. Each "with …" phrase completes "Authentik
@@ -15,7 +15,7 @@ const (
 	withPerson       = "with a named person"
 	withLeftOut      = "with a rule that left people out"
 	withAllGroups    = "with several groups that all had to match"
-	withMissingGroup = "with a group Latch doesn't have"
+	withMissingGroup = "with a group Keywell doesn't have"
 
 	adminsOnlyTail = "Only admins can use it until you choose its groups on the app's page."
 	warnAdminsOnly = "Authentik limited who could use it %s. " + adminsOnlyTail
@@ -24,25 +24,25 @@ const (
 	// follow Authentik (Ruling N), unless they are admins only.
 	noteAccessFollows = "Who can use it still follows Authentik."
 
-	blockNoAdminGroup = `Latch has no admin group, so "%s" can't be limited to admins. ` +
+	blockNoAdminGroup = `Keywell has no admin group, so "%s" can't be limited to admins. ` +
 		"Give a group admin access before importing."
 )
 
-// accessRule is who Authentik let use an application, as far as Latch can
+// accessRule is who Authentik let use an application, as far as Keywell can
 // say it (Ruling 6).
 type accessRule struct {
 	groups []string // Authentik UUIDs of the groups that may use it; none, with no with, is everyone
-	with   string   // set when only admins may use it in Latch: why, completing "Authentik limited who could use it …"
+	with   string   // set when only admins may use it in Keywell: why, completing "Authentik limited who could use it …"
 }
 
-// decideAccess works out who may use an application in Latch from its
+// decideAccess works out who may use an application in Keywell from its
 // Authentik bindings, never letting in a member Authentik kept out.
-// imported holds the UUIDs of the snapshot groups Latch will have.
+// imported holds the UUIDs of the snapshot groups Keywell will have.
 // Disabled bindings count for nothing, as in Authentik.
 //   - No enabled bindings: everyone, as in Authentik.
 //   - Only group bindings, none negated, in "any" mode or just one: those
 //     groups.
-//   - Anything else, or a group Latch won't have: admins only, with the
+//   - Anything else, or a group Keywell won't have: admins only, with the
 //     first reason of policy, named person, negated binding and several
 //     groups that all had to match.
 func decideAccess(engineMode string, bindings []authentik.Binding, imported map[string]bool) accessRule {
@@ -61,7 +61,7 @@ func decideAccess(engineMode string, bindings []authentik.Binding, imported map[
 			if !slices.Contains(groups, b.GroupUUID) {
 				groups = append(groups, b.GroupUUID)
 			}
-		default: // a policy, or a binding Latch can't read, which it treats as one
+		default: // a policy, or a binding Keywell can't read, which it treats as one
 			policy = true
 		}
 		if b.Negate {
@@ -95,19 +95,19 @@ func decideAccess(engineMode string, bindings []authentik.Binding, imported map[
 	return accessRule{groups: groups}
 }
 
-// accessGroups is what resolve needs to know about Latch's groups once the
+// accessGroups is what resolve needs to know about Keywell's groups once the
 // import has written them.
 type accessGroups struct {
-	latchID map[string]string // Authentik group UUID: Latch group ID, for the groups imported
-	admins  []string          // IDs of every Latch admin group, imported or Latch's own, sorted
+	keywellID map[string]string // Authentik group UUID: Keywell group ID, for the groups imported
+	admins    []string          // IDs of every Keywell admin group, imported or Keywell's own, sorted
 }
 
-// loadAccessGroups reads Latch's groups after the group step (Ruling M).
+// loadAccessGroups reads Keywell's groups after the group step (Ruling M).
 func (r *run) loadAccessGroups() (accessGroups, error) {
-	ag := accessGroups{latchID: map[string]string{}}
+	ag := accessGroups{keywellID: map[string]string{}}
 	for _, g := range r.groups {
 		if !g.skipped {
-			ag.latchID[g.src.UUID] = g.latch.ID
+			ag.keywellID[g.src.UUID] = g.keywell.ID
 		}
 	}
 	all, err := r.tx.ListGroups(r.ctx)
@@ -123,13 +123,13 @@ func (r *run) loadAccessGroups() (accessGroups, error) {
 	return ag, nil
 }
 
-// access is who may use an app in Latch.
+// access is who may use an app in Keywell.
 type access struct {
-	groupIDs []string // Latch group IDs, sorted; none is every active member
+	groupIDs []string // Keywell group IDs, sorted; none is every active member
 	with     string   // set for admins only: why, as in accessRule
 }
 
-// resolve turns rule into Latch group IDs. Admins only is every Latch admin
+// resolve turns rule into Keywell group IDs. Admins only is every Keywell admin
 // group, which is never none: planApps blocks the import first, because
 // none would mean everyone.
 func (ag accessGroups) resolve(rule accessRule) (access, error) {
@@ -141,7 +141,7 @@ func (ag accessGroups) resolve(rule accessRule) (access, error) {
 	}
 	var ids []string
 	for _, uuid := range rule.groups {
-		id, ok := ag.latchID[uuid]
+		id, ok := ag.keywellID[uuid]
 		if !ok {
 			return access{}, fmt.Errorf("importer: group %s was not imported", uuid)
 		}
@@ -153,12 +153,12 @@ func (ag accessGroups) resolve(rule accessRule) (access, error) {
 
 // skipFollowingAccess skips a with reason. Every skip of an app with an
 // OpenID Connect provider comes here, with acc already decided. When a's
-// Latch app came from an earlier import, its allowed groups still become
+// Keywell app came from an earlier import, its allowed groups still become
 // acc's, so a skip never leaves it open wider than Authentik (Rulings N
 // and P); every other field is left as it was, and nothing is written when
 // the groups already match. The reason ends by saying who can use it.
 func (r *run) skipFollowingAccess(a *importApp, reason string, acc access) error {
-	l := a.latch
+	l := a.keywell
 	if l == nil || l.AuthentikProviderPK == nil {
 		a.skip(reason)
 		return nil

@@ -1,38 +1,38 @@
-# Latch under Docker Compose. See "Running Latch for real" in the README for
+# Keywell under Docker Compose. See "Running Keywell for real" in the README for
 # the one-off `init` step to run before `up -d`.
 services:
-  latch:
+  keywell:
     build:
       context: ..
       args:
-        # Shown by `latch version` and /healthz. Set VERSION in the environment.
+        # Shown by `keywell version` and /healthz. Set VERSION in the environment.
         VERSION: "${VERSION:-dev}"
-    image: latch:local
+    image: keywell:local
     restart: unless-stopped
     # Published on the host's loopback only. Put a reverse proxy that
     # terminates TLS in front of it.
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      # Holds latch.yaml, latch.db and icons/.
-      - latch-data:/var/lib/latch
+      # Holds keywell.yaml, keywell.db and icons/.
+      - keywell-data:/var/lib/keywell
     environment:
       # The image has no shell for editing the config file, so set anything
-      # else here with LATCH_ variables, which override the file. For example:
-      #   LATCH_SMTP_HOST: smtp.example.org
-      #   LATCH_SMTP_PORT: "587"
-      #   LATCH_SMTP_USERNAME: latch
-      #   LATCH_SMTP_PASSWORD: change-me
-      #   LATCH_SMTP_FROM: login@example.org
-      #   LATCH_SMTP_TLS: starttls
-      #   LATCH_PUBLIC_URL: https://login.example.org
+      # else here with KEYWELL_ variables, which override the file. For example:
+      #   KEYWELL_SMTP_HOST: smtp.example.org
+      #   KEYWELL_SMTP_PORT: "587"
+      #   KEYWELL_SMTP_USERNAME: keywell
+      #   KEYWELL_SMTP_PASSWORD: change-me
+      #   KEYWELL_SMTP_FROM: login@example.org
+      #   KEYWELL_SMTP_TLS: starttls
+      #   KEYWELL_PUBLIC_URL: https://login.example.org
       # Publish the metrics port only to a private network:
-      #   LATCH_METRICS_LISTEN: 0.0.0.0:9100
-      # latch.example.yaml lists every setting; the variable is LATCH_ plus the key path.
+      #   KEYWELL_METRICS_LISTEN: 0.0.0.0:9100
+      # keywell.example.yaml lists every setting; the variable is KEYWELL_ plus the key path.
       # Docker's default networks, where a proxy on the host or in a container appears.
-      LATCH_TRUSTED_PROXIES: "172.16.0.0/12"
+      KEYWELL_TRUSTED_PROXIES: "172.16.0.0/12"
 
 volumes:
-  latch-data:
+  keywell-data:
     # A fixed name, so backups can mount it whatever the compose project is called.
-    name: latch-data
+    name: keywell-data

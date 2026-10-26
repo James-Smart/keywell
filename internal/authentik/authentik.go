@@ -2,7 +2,7 @@
 //
 // It only reads: the connection is read-only and the whole read happens in one
 // repeatable-read transaction, so the Snapshot is consistent. A later importer
-// maps the Snapshot onto Latch. The snapshot carries secrets (password hashes,
+// maps the Snapshot onto Keywell. The snapshot carries secrets (password hashes,
 // TOTP keys, recovery codes, client secrets); callers must never print or log
 // them.
 package authentik
@@ -24,7 +24,7 @@ import (
 // scope mapping, which sends the user's groups.
 const ManagedProfileScope = "goauthentik.io/providers/oauth2/scope-profile"
 
-// Snapshot is a consistent copy of the parts of Authentik that Latch imports.
+// Snapshot is a consistent copy of the parts of Authentik that Keywell imports.
 type Snapshot struct {
 	InstallID    string            // authentik_install_id.id
 	Users        []User            // every row of authentik_core_user

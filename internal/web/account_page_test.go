@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // alexSmith creates alex@example.org, named Alex Smith, with username
@@ -139,7 +139,7 @@ func TestAccountMenuForMembers(t *testing.T) {
 		if strings.Contains(header, "Admin pages") {
 			t.Errorf("%s: admin link shown to a member", path)
 		}
-		if !strings.Contains(body, `<script src="/static/latch.js" defer></script>`) {
+		if !strings.Contains(body, `<script src="/static/keywell.js" defer></script>`) {
 			t.Errorf("%s: menu script not loaded", path)
 		}
 	}
@@ -153,9 +153,9 @@ func TestAccountMenuForMembers(t *testing.T) {
 		}
 	}
 
-	resp, js := env.Page(t, c, "/static/latch.js")
+	resp, js := env.Page(t, c, "/static/keywell.js")
 	if resp.StatusCode != http.StatusOK || !strings.Contains(js, "account-menu") {
-		t.Errorf("latch.js: status %d", resp.StatusCode)
+		t.Errorf("keywell.js: status %d", resp.StatusCode)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestAccountMenuForAdmins(t *testing.T) {
 func TestNoAccountMenuWithoutCompleteSession(t *testing.T) {
 	env := testenv.New(t)
 	_, body := env.Page(t, env.Client(t), "/login")
-	if strings.Contains(body, "account-menu") || strings.Contains(body, "latch.js") {
+	if strings.Contains(body, "account-menu") || strings.Contains(body, "keywell.js") {
 		t.Errorf("sign-in page has the account menu")
 	}
 

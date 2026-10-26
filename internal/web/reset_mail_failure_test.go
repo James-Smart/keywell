@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/mail"
-	"latch/internal/testenv"
+	"keywell/internal/mail"
+	"keywell/internal/testenv"
 )
 
 // failingMailer refuses every message with an error that echoes the

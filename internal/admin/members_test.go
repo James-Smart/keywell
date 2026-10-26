@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/store"
 )
 
 func TestCreateMemberInvite(t *testing.T) {

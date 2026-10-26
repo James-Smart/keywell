@@ -1,5 +1,5 @@
 // Package session manages browser sessions: a random token in the
-// latch_session cookie whose hash (secrets.HashToken) is the ID of a row in
+// keywell_session cookie whose hash (secrets.HashToken) is the ID of a row in
 // the sessions table. Only the hash is stored, so a copy of the database
 // does not hold anything that works as a cookie.
 package session
@@ -14,13 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // CookieName is the name of the session cookie.
-const CookieName = "latch_session"
+const CookieName = "keywell_session"
 
 // touchEvery is how old LastSeenAt must be before a request writes it again.
 const touchEvery = time.Minute

@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/store"
 )
 
 // Renderer shows the branded pages the OpenID Connect endpoints need. It is

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 const groupCols = `id, name, description, is_admin, require_totp, metadata, COALESCE(authentik_uuid,''), created_at, updated_at`

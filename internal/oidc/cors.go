@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"latch/internal/store"
+	"keywell/internal/store"
 )
 
 // corsRefresh is how long the set of allowed origins is used before it is

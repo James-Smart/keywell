@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/authentik"
+	"keywell/internal/authentik"
 )
 
 func TestParseValidity(t *testing.T) {

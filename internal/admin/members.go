@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Refusals of member changes.

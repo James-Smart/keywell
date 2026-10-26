@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 const (

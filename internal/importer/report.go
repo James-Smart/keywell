@@ -11,22 +11,22 @@ import (
 // JSON with the import run and shown on the Settings page, so its text
 // follows the admin pages' copy rules. It holds no secrets.
 type Report struct {
-	Source               string     `json:"source"`
-	DryRun               bool       `json:"dry_run"`
-	StartedAt            time.Time  `json:"started_at"`
-	FinishedAt           time.Time  `json:"finished_at"`
-	Members              Counts     `json:"members"`
-	Groups               Counts     `json:"groups"`
-	Apps                 Counts     `json:"apps"`
-	LeftOut              int        `json:"left_out"`               // service accounts and Authentik's own accounts
-	KeptLatchCredentials int        `json:"kept_latch_credentials"` // Ruling 3
-	NoPassword           int        `json:"no_password"`
-	TOTP                 int        `json:"totp"`
-	RecoveryCodes        int        `json:"recovery_codes"`
-	MemberKeys           []KeyCount `json:"member_keys"`
-	GroupKeys            []KeyCount `json:"group_keys"`
-	Items                []Item     `json:"items"`
-	Blocking             []string   `json:"blocking"`
+	Source                 string     `json:"source"`
+	DryRun                 bool       `json:"dry_run"`
+	StartedAt              time.Time  `json:"started_at"`
+	FinishedAt             time.Time  `json:"finished_at"`
+	Members                Counts     `json:"members"`
+	Groups                 Counts     `json:"groups"`
+	Apps                   Counts     `json:"apps"`
+	LeftOut                int        `json:"left_out"`                 // service accounts and Authentik's own accounts
+	KeptKeywellCredentials int        `json:"kept_keywell_credentials"` // Ruling 3
+	NoPassword             int        `json:"no_password"`
+	TOTP                   int        `json:"totp"`
+	RecoveryCodes          int        `json:"recovery_codes"`
+	MemberKeys             []KeyCount `json:"member_keys"`
+	GroupKeys              []KeyCount `json:"group_keys"`
+	Items                  []Item     `json:"items"`
+	Blocking               []string   `json:"blocking"`
 }
 
 // Counts is how many records of one kind were added, updated and skipped.
@@ -90,8 +90,8 @@ func (r *Report) WriteText(w io.Writer) error {
 		}
 		b.WriteString(".\n")
 	}
-	if n := r.KeptLatchCredentials; n > 0 {
-		fmt.Fprintf(&b, "%d %s Latch and kept their Latch password and two-step sign in.\n",
+	if n := r.KeptKeywellCredentials; n > 0 {
+		fmt.Fprintf(&b, "%d %s Keywell and kept their Keywell password and two-step sign in.\n",
 			n, plural(n, "member already uses", "members already use"))
 	}
 	if n := r.NoPassword; n > 0 {

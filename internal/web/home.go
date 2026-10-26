@@ -8,8 +8,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"latch/internal/model"
-	"latch/internal/session"
+	"keywell/internal/model"
+	"keywell/internal/session"
 )
 
 // homeTile is one app on the member home.

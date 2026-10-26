@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 func TestAPIAudit(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/testenv"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/testenv"
 )
 
 // cookieValue returns the session cookie c holds, or "".

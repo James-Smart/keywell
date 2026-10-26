@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // errOf3 drops the first and second of three results.
@@ -124,7 +124,7 @@ func TestCreateToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(raw, "latch_") || len(raw) != 49 {
+	if !strings.HasPrefix(raw, "keywell_") || len(raw) != 51 {
 		t.Errorf("raw token %q", raw)
 	}
 	stored, err := st.GetAPITokenByHash(ctx, secrets.HashToken(raw))
@@ -239,7 +239,7 @@ func TestAuthenticateToken(t *testing.T) {
 			t.Errorf("%s: %v %v", name, c, err)
 		}
 	}
-	bad("unknown", "latch_nope")
+	bad("unknown", "keywell_nope")
 	bad("empty", "")
 
 	// Expired exactly now.

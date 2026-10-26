@@ -5,14 +5,14 @@ import (
 	"log/slog"
 	"time"
 
-	"latch/internal/oidc"
-	"latch/internal/store"
+	"keywell/internal/oidc"
+	"keywell/internal/store"
 )
 
 // How often serve runs its background jobs.
 const (
 	cleanupInterval = time.Hour
-	// latch rotate-keys tells the operator a running server picks up a new
+	// keywell rotate-keys tells the operator a running server picks up a new
 	// key within this long.
 	keyReloadInterval = 5 * time.Minute
 )
@@ -65,7 +65,7 @@ func janitor(st *store.Store, log *slog.Logger) func(context.Context) {
 }
 
 // keyReloader returns a job that re-reads the signing keys, so a rotation
-// made by latch rotate-keys in another process takes effect. A failure is
+// made by keywell rotate-keys in another process takes effect. A failure is
 // logged as a warning, unless it came from ctx ending; the keys already
 // loaded stay in use.
 func keyReloader(keys *oidc.KeyManager, log *slog.Logger) func(context.Context) {

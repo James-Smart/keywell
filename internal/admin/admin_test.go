@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 // fakeNotifier records SendReset calls and, when err is set, fails them.

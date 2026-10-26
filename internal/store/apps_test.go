@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func sortedIDs(ids ...string) []string {

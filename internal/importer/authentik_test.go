@@ -15,11 +15,11 @@ import (
 
 	pqtotp "github.com/pquerna/otp/totp"
 
-	"latch/internal/audit"
-	"latch/internal/authentik"
-	"latch/internal/importer"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/authentik"
+	"keywell/internal/importer"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 // importEventCount is how many import.run audit events there are.
@@ -36,9 +36,9 @@ func importEventCount(t *testing.T, st *store.Store) int {
 // a real installation. Members then sign in with what they used in
 // Authentik, and an app gets the same sub it got there.
 func TestImportAuthentikEndToEnd(t *testing.T) {
-	dsn := os.Getenv("LATCH_TEST_AUTHENTIK_DSN")
+	dsn := os.Getenv("KEYWELL_TEST_AUTHENTIK_DSN")
 	if dsn == "" {
-		t.Skip("set LATCH_TEST_AUTHENTIK_DSN (make authentik-up) to run")
+		t.Skip("set KEYWELL_TEST_AUTHENTIK_DSN (make authentik-up) to run")
 	}
 	ctx := context.Background()
 	snap, err := authentik.Read(ctx, dsn)
@@ -201,7 +201,7 @@ func TestImportAuthentikEndToEnd(t *testing.T) {
 		t.Fatalf("recovery code used twice: / redirects to %q, want the TOTP step", loc)
 	}
 
-	// A second run adds nothing, and leaves alex's Latch credentials alone
+	// A second run adds nothing, and leaves alex's Keywell credentials alone
 	// (Ruling 3): his native hash, his used recovery code and his TOTP.
 	again, err := importer.Run(ctx, deps, snap, opts)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // tileApp creates an app shown as a tile on the home page, open to members

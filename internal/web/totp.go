@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/totp"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/totp"
 )
 
 const (
@@ -35,7 +35,7 @@ const (
 	qrSize            = 256
 )
 
-// recoveryCodeRE matches a normalised Latch recovery code. Anything else
+// recoveryCodeRE matches a normalised Keywell recovery code. Anything else
 // typed at a code prompt that looks like an imported Authentik token
 // (importedRecoveryRE) is tried as one; the rest is treated as a TOTP code.
 var recoveryCodeRE = regexp.MustCompile(`^[a-z2-9]{5}-[a-z2-9]{5}$`)
@@ -147,7 +147,7 @@ func (s *Server) checkCode(ctx context.Context, user *model.User, code string) (
 			return "recovery", ok, err
 		}
 		// A 10-character token from a non-default Authentik stage looks like
-		// a Latch code once normalised, so try it as typed too.
+		// a Keywell code once normalised, so try it as typed too.
 		ok, err = s.d.Store.ConsumeRecoveryCode(ctx, user.ID, secrets.HashToken(imported))
 		return "recovery", ok, err
 	}

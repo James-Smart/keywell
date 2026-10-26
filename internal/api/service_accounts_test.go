@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 const apiSAs = "/api/v1/service-accounts"
@@ -83,7 +83,7 @@ func TestAPITokens(t *testing.T) {
 
 	body, resp := env.API(t, raw, http.MethodPost, base, map[string]any{"label": "door", "scope": "read"})
 	tok, _ := body["token"].(string)
-	if resp.StatusCode != 201 || !strings.HasPrefix(tok, "latch_") || body["scope"] != "read" || body["expires_at"] != nil {
+	if resp.StatusCode != 201 || !strings.HasPrefix(tok, "keywell_") || body["scope"] != "read" || body["expires_at"] != nil {
 		t.Fatalf("create: %d %v", resp.StatusCode, body)
 	}
 	tid := body["id"].(string)

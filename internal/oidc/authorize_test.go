@@ -16,11 +16,11 @@ import (
 
 	pqtotp "github.com/pquerna/otp/totp"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/testenv"
 )
 
 const (

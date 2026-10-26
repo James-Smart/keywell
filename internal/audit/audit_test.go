@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"latch/internal/audit"
-	"latch/internal/db"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/db"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 func TestAuditInsertAndRecorder(t *testing.T) {

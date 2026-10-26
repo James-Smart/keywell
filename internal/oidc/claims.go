@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
-// Scopes Latch knows, in the order ParseScopes returns them.
+// Scopes Keywell knows, in the order ParseScopes returns them.
 const (
 	scopeOpenID        = "openid"
 	scopeProfile       = "profile"

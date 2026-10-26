@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
+	"keywell/internal/config"
 )
 
 func TestTemplatesContainLinkAndBrand(t *testing.T) {
@@ -43,16 +43,16 @@ func TestTemplatesContainLinkAndBrand(t *testing.T) {
 }
 
 func TestEmailCopy(t *testing.T) {
-	b := Brand{Name: "Latch"}
+	b := Brand{Name: "Keywell"}
 	r := ResetEmail(b, "L", time.Hour)
-	if r.Subject != "Reset your Latch password" {
+	if r.Subject != "Reset your Keywell password" {
 		t.Errorf("subject %q", r.Subject)
 	}
 	if !strings.Contains(r.Text, "within 1 hour") {
 		t.Errorf("reset text: %q", r.Text)
 	}
 	i := InviteEmail(b, "L", 168*time.Hour)
-	if i.Subject != "Set up your Latch account" {
+	if i.Subject != "Set up your Keywell account" {
 		t.Errorf("subject %q", i.Subject)
 	}
 	if !strings.Contains(i.Text, "within 7 days") {
@@ -167,7 +167,7 @@ func TestSMTPSendsViaLocalServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewSMTP(config.SMTPConfig{Host: host, Port: port, From: "latch@example.org", TLS: "none"})
+	s, err := NewSMTP(config.SMTPConfig{Host: host, Port: port, From: "keywell@example.org", TLS: "none"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,4 +45,4 @@ done
 docker compose exec -T server ak shell -c "$(cat seed.py)"
 
 echo "Authentik UI: http://localhost:9700 (user akadmin, password in dev/authentik/.env)"
-echo "export LATCH_TEST_AUTHENTIK_DSN=$(./dsn.sh)"
+echo "export KEYWELL_TEST_AUTHENTIK_DSN=$(./dsn.sh)"

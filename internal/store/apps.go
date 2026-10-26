@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 const appCols = `id, name, slug, client_id, client_secret_hash, client_type, redirect_uris,

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 
-	"latch/internal/audit"
-	"latch/internal/authentik"
-	"latch/internal/importer"
-	"latch/internal/secrets"
+	"keywell/internal/audit"
+	"keywell/internal/authentik"
+	"keywell/internal/importer"
+	"keywell/internal/secrets"
 )
 
 // readAuthentik reads the Authentik database; tests replace it.
@@ -23,11 +23,11 @@ func (l *stringList) String() string     { return fmt.Sprint([]string(*l)) }
 func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
 // cmdImportAuthentik copies members, groups and apps from an Authentik
-// database into Latch, or with --dry-run says what it would copy.
+// database into Keywell, or with --dry-run says what it would copy.
 func cmdImportAuthentik(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("import-authentik", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	configPath := flags.String("config", "./keywell.yaml", "path to the config file")
 	from := flags.String("from", "", "connection string for Authentik's Postgres database (required); the password can be set in PGPASSWORD instead")
 	dryRun := flags.Bool("dry-run", false, "show what would be imported, and save nothing")
 	var dropKeys stringList

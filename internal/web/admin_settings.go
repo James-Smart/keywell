@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/config"
-	"latch/internal/importer"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/config"
+	"keywell/internal/importer"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // settingsData is what admin_settings.html shows.

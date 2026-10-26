@@ -1,4 +1,4 @@
-// Package oidc implements Latch's OpenID Connect endpoints.
+// Package oidc implements Keywell's OpenID Connect endpoints.
 package oidc
 
 import (
@@ -18,10 +18,10 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 const (
@@ -37,7 +37,7 @@ const (
 // lifetimes above 24 hours are not supported).
 const RetiredKeyGrace = 24 * time.Hour
 
-// KeyManager holds the RSA keys Latch signs tokens with. The newest
+// KeyManager holds the RSA keys Keywell signs tokens with. The newest
 // non-retired key is active and signs; every non-retired key is published
 // in the JWKS. Private keys are stored as PKCS#8 DER sealed by the
 // Encryptor, public keys as PKIX PEM.
@@ -71,7 +71,7 @@ func NewKeyManager(ctx context.Context, s *store.Store, enc *secrets.Encryptor) 
 }
 
 // Reload re-reads the keys from the store, so rotations and retirements
-// made by another process (such as latch rotate-keys) take effect, and
+// made by another process (such as keywell rotate-keys) take effect, and
 // generates a key if none can sign. If it fails, the cache is unchanged.
 func (k *KeyManager) Reload(ctx context.Context) error {
 	k.mu.Lock()

@@ -16,11 +16,11 @@ import (
 
 	pqtotp "github.com/pquerna/otp/totp"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 var (
@@ -727,12 +727,12 @@ func TestImportedRecoveryCode(t *testing.T) {
 	assertRedirect(t, step("RecoveryAAA1"), "/")
 	refused("reused", "RecoveryAAA1")
 	refused("not a code", "RecoveryZZZ9")
-	// A 10-character token normalises into Latch's format but is still found
+	// A 10-character token normalises into Keywell's format but is still found
 	// as an imported code; exact case only.
 	refused("10-char wrong case", "abcdefghjk")
 	assertRedirect(t, step(" AbCdEfGhJk "), "/")
 	refused("10-char reused", "AbCdEfGhJk")
-	// A Latch-format code and a 6-digit TOTP code still work.
+	// A Keywell-format code and a 6-digit TOTP code still work.
 	assertRedirect(t, step("mnpqr-stuvw"), "/")
 	assertRedirect(t, step(validCode(t, env, secret)), "/")
 

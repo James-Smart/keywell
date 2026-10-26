@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // A TOTP code works once (RFC 6238 §5.2): signing in with it again, from

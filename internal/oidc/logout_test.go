@@ -13,19 +13,19 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 // The wiki's registered post-logout redirect URIs.
 const (
 	signedOutURI = "https://wiki.example.org/signed-out"
-	byeURI       = "https://wiki.example.org/bye?from=latch" // already has a query
+	byeURI       = "https://wiki.example.org/bye?from=keywell" // already has a query
 	loopbackBye  = "http://127.0.0.1/bye"
 )
 

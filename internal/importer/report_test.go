@@ -21,7 +21,7 @@ func fixedReport() *Report {
 		MemberKeys:    []KeyCount{{"member_number", 1}},
 		GroupKeys:     []KeyCount{{"door", 1}, {"induction", 1}},
 		Items: []Item{
-			{Kind: "member", Name: "nomail", Skipped: true, Reason: "Has no email address, which Latch needs to sign them in."},
+			{Kind: "member", Name: "nomail", Skipped: true, Reason: "Has no email address, which Keywell needs to sign them in."},
 			{Kind: "app", Name: "Wiki", Reason: `Return address https://.*\.example\.org/cb is a pattern. Add the real addresses on the app's page.`},
 		},
 	}
@@ -52,7 +52,7 @@ Metadata apps will see for groups:
   induction (1 group)
 
 Skipped:
-  member nomail: Has no email address, which Latch needs to sign them in.
+  member nomail: Has no email address, which Keywell needs to sign them in.
 Warnings:
   app Wiki: Return address https://.*\.example\.org/cb is a pattern. Add the real addresses on the app's page.
 `
@@ -67,16 +67,16 @@ Warnings:
 
 	// A real run, plurals, and sentence lines with a count of 0 left out.
 	r = &Report{
-		Source:               "db.internal:5432/authentik",
-		Members:              Counts{Added: 1, Updated: 2},
-		Groups:               Counts{Updated: 1},
-		LeftOut:              1,
-		TOTP:                 2,
-		RecoveryCodes:        1,
-		KeptLatchCredentials: 2,
-		NoPassword:           2,
-		MemberKeys:           []KeyCount{{"member_number", 2}},
-		Items:                []Item{{Kind: "group", Name: "Trustees", Reason: "A warning."}},
+		Source:                 "db.internal:5432/authentik",
+		Members:                Counts{Added: 1, Updated: 2},
+		Groups:                 Counts{Updated: 1},
+		LeftOut:                1,
+		TOTP:                   2,
+		RecoveryCodes:          1,
+		KeptKeywellCredentials: 2,
+		NoPassword:             2,
+		MemberKeys:             []KeyCount{{"member_number", 2}},
+		Items:                  []Item{{Kind: "group", Name: "Trustees", Reason: "A warning."}},
 	}
 	want = `Imported from db.internal:5432/authentik.
 Members: 1 added, 2 updated, 0 skipped
@@ -84,7 +84,7 @@ Groups: 0 added, 1 updated, 0 skipped
 Apps: 0 added, 0 updated, 0 skipped
 Left out 1 service accounts and Authentik's own accounts.
 Two-step sign in carried over for 2 members, with 1 recovery code.
-2 members already use Latch and kept their Latch password and two-step sign in.
+2 members already use Keywell and kept their Keywell password and two-step sign in.
 2 members have no usable password and will need a reset link.
 
 Metadata apps will see for members:
@@ -101,12 +101,12 @@ Warnings:
 		t.Errorf("Summary = %q", got)
 	}
 
-	r = &Report{Source: "db.internal:5432/authentik", KeptLatchCredentials: 1, GroupKeys: []KeyCount{{"door", 2}}}
+	r = &Report{Source: "db.internal:5432/authentik", KeptKeywellCredentials: 1, GroupKeys: []KeyCount{{"door", 2}}}
 	want = `Imported from db.internal:5432/authentik.
 Members: 0 added, 0 updated, 0 skipped
 Groups: 0 added, 0 updated, 0 skipped
 Apps: 0 added, 0 updated, 0 skipped
-1 member already uses Latch and kept their Latch password and two-step sign in.
+1 member already uses Keywell and kept their Keywell password and two-step sign in.
 
 Metadata apps will see for groups:
   door (2 groups)
@@ -134,7 +134,7 @@ func TestReportJSON(t *testing.T) {
 	}
 	for _, want := range []string{
 		`"source":"db.internal:5432/authentik"`, `"dry_run":true`, `"left_out":3`, `"no_password":1`,
-		`"kept_latch_credentials":0`, `"recovery_codes":3`, `"totp":1`,
+		`"kept_keywell_credentials":0`, `"recovery_codes":3`, `"totp":1`,
 		`"members":{"added":6,"updated":0,"skipped":1}`,
 		`"member_keys":[{"key":"member_number","count":1}]`,
 		`{"kind":"member","name":"nomail","skipped":true,"reason":"Has no email address`,

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Messages of the service accounts pages' own checks and the summaries
@@ -20,7 +20,7 @@ const (
 	msgTokenNotMade       = "The token wasn't made. See New API token below."
 	msgTokenNotRevoked    = "The token wasn't revoked."
 	msgTokenCopyHeading   = "Copy the API token now"
-	msgTokenCopyIntro     = "This is the only time the token is shown. Latch keeps only a fingerprint of it, so if you lose it, make a new one and revoke this one."
+	msgTokenCopyIntro     = "This is the only time the token is shown. Keywell keeps only a fingerprint of it, so if you lose it, make a new one and revoke this one."
 	msgTokenExample       = "To check the token works, run:"
 	deletedAccountName    = "a deleted account"
 )

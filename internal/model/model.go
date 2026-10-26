@@ -1,4 +1,4 @@
-// Package model holds the plain data types shared across Latch.
+// Package model holds the plain data types shared across Keywell.
 package model
 
 import "time"

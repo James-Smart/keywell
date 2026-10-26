@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/session"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/session"
 )
 
 //go:embed templates/*.html static/*

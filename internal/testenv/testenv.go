@@ -1,4 +1,4 @@
-// Package testenv starts a complete Latch HTTP stack on an httptest server
+// Package testenv starts a complete Keywell HTTP stack on an httptest server
 // for tests in the web, oidc and api packages (which use external test
 // packages so they can import this one without a cycle).
 package testenv
@@ -25,18 +25,18 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
-	"latch/internal/totp"
-	"latch/internal/web"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
+	"keywell/internal/totp"
+	"keywell/internal/web"
 )
 
 // Version is the version string the test server reports.
@@ -434,7 +434,7 @@ func (e *Env) APIToken(t *testing.T, username string, scope model.APITokenScope)
 	case account.Type != model.UserTypeService:
 		t.Fatalf("testenv: %s is a member, not a service account", username)
 	}
-	raw = "latch_" + secrets.RandomToken(32)
+	raw = "keywell_" + secrets.RandomToken(32)
 	tok := &model.APIToken{ServiceAccountID: account.ID, Label: username + " test token",
 		TokenHash: secrets.HashToken(raw), Scope: scope}
 	if err := e.Store.CreateAPIToken(ctx, tok); err != nil {

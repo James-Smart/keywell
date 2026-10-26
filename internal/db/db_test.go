@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"latch/internal/db"
+	"keywell/internal/db"
 )
 
 func open(t *testing.T) *sql.DB {

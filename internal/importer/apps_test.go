@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/authentik"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
-// app returns the Latch app with this slug.
+// app returns the Keywell app with this slug.
 func (e *env) app(slug string) *model.Application {
 	e.t.Helper()
 	a, err := e.st.GetApplicationBySlug(context.Background(), slug)
@@ -28,7 +28,7 @@ func (e *env) app(slug string) *model.Application {
 	return a
 }
 
-// groupIDs returns the Latch IDs of the groups with these names, sorted as
+// groupIDs returns the Keywell IDs of the groups with these names, sorted as
 // the store returns an app's allowed groups.
 func (e *env) groupIDs(names ...string) []string {
 	e.t.Helper()
@@ -72,10 +72,10 @@ func appUUID(s *Snap, name string) string {
 }
 
 // noAdminLine is the Blocking line for an app called Lab that can only be
-// limited to admins when Latch has no admin group (Ruling P).
-const noAdminLine = `Latch has no admin group, so "Lab" can't be limited to admins. Give a group admin access before importing.`
+// limited to admins when Keywell has no admin group (Ruling P).
+const noAdminLine = `Keywell has no admin group, so "Lab" can't be limited to admins. Give a group admin access before importing.`
 
-const profileWarning = `Authentik sent group names to it with "profile". Latch sends them only when an app asks ` +
+const profileWarning = `Authentik sent group names to it with "profile". Keywell sends them only when an app asks ` +
 	`for "groups", so add groups to its scopes if it uses them.`
 
 func TestImportApps(t *testing.T) {
@@ -89,19 +89,19 @@ func TestImportApps(t *testing.T) {
 	want := []Item{
 		{Kind: "app", Name: "Wiki", Reason: `Return address https://.*\.example\.org/cb is a pattern. Add the real addresses on the app's page.`},
 		{Kind: "app", Name: "Wiki", Reason: "Its icon is stored in Authentik. Upload it on the app's page."},
-		{Kind: "app", Name: "Wiki", Reason: `Authentik sent extra details through "Wiki extra claims", which Latch doesn't send.`},
+		{Kind: "app", Name: "Wiki", Reason: `Authentik sent extra details through "Wiki extra claims", which Keywell doesn't send.`},
 		{Kind: "app", Name: "Wiki", Reason: profileWarning},
 		{Kind: "app", Name: "Door Booking", Reason: "Its short name changed from Door_Booking to door-booking."},
-		{Kind: "app", Name: "Door Booking", Reason: "Authentik kept sign-ins for 140d; Latch's limit is 90d, so it uses that."},
+		{Kind: "app", Name: "Door Booking", Reason: "Authentik kept sign-ins for 140d; Keywell's limit is 90d, so it uses that."},
 		{Kind: "app", Name: "Door Booking", Reason: profileWarning},
-		{Kind: "app", Name: "Tool Booking", Reason: "Authentik's access tokens lasted 36h; Latch's limit is 1d, so it uses that."},
+		{Kind: "app", Name: "Tool Booking", Reason: "Authentik's access tokens lasted 36h; Keywell's limit is 1d, so it uses that."},
 		{Kind: "app", Name: "Tool Booking", Reason: profileWarning},
 		{Kind: "app", Name: "Tool Booking", Reason: "Authentik limited who could use it with a policy. " +
 			"Only admins can use it until you choose its groups on the app's page."},
 		{Kind: "app", Name: "Tool Booking", Reason: "Authentik let it sign in by itself. " +
-			"To allow that in Latch, choose a service account on the app's page."},
+			"To allow that in Keywell, choose a service account on the app's page."},
 		{Kind: "app", Name: "Grafana", Skipped: true,
-			Reason: "Signs in with something other than OpenID Connect, which is all Latch supports."},
+			Reason: "Signs in with something other than OpenID Connect, which is all Keywell supports."},
 		{Kind: "app", Name: "Printer", Skipped: true, Reason: "Has nothing to sign in with in Authentik."},
 		{Kind: "app", Name: "orphan", Skipped: true, Reason: "Isn't used by any application in Authentik."},
 	}
@@ -184,7 +184,7 @@ func itemLines(items []Item) string {
 	return b.String()
 }
 
-// Review Focus 3: access rules Latch can't express never open an app wider
+// Review Focus 3: access rules Keywell can't express never open an app wider
 // than Authentik did (Ruling 6).
 func TestImportAppAccess(t *testing.T) {
 	const tail = " Only admins can use it until you choose its groups on the app's page."
@@ -200,7 +200,7 @@ func TestImportAppAccess(t *testing.T) {
 		mode     string // the engine mode; "" is "any"
 		noAdmins bool   // Trustees is not an admin group, and there is no other
 		bind     func(w *world)
-		allowed  []string // names of the allowed Latch groups; none is open to every active member
+		allowed  []string // names of the allowed Keywell groups; none is open to every active member
 		warning  string
 		blocked  bool // the import is blocked (Ruling P)
 		// Who could use the app in Authentik; nil when a policy decides.
@@ -285,10 +285,10 @@ func TestImportAppAccess(t *testing.T) {
 		warning:   "Authentik limited who could use it with a rule that left people out." + tail,
 		authentik: []string{"ann"},
 	}, {
-		name:    "a group Latch doesn't have",
+		name:    "a group Keywell doesn't have",
 		bind:    func(w *world) { w.s.Bind(w.app, w.a); w.s.Bind(w.app, "10000000-0000-4000-8000-999999999999") },
 		allowed: []string{"Trustees"},
-		warning: "Authentik limited who could use it with a group Latch doesn't have." + tail,
+		warning: "Authentik limited who could use it with a group Keywell doesn't have." + tail,
 	}, {
 		name:     "no admin group for a policy",
 		noAdmins: true,
@@ -332,7 +332,7 @@ func TestImportAppAccess(t *testing.T) {
 					t.Errorf("Run = %v, blocking %q; want ErrBlocked with %q", err, blockingOf(rep), noAdminLine)
 				}
 				if _, err := e.st.GetApplicationBySlug(ctx, "lab"); !errors.Is(err, store.ErrNotFound) {
-					t.Errorf("blocked app is in Latch: %v", err)
+					t.Errorf("blocked app is in Keywell: %v", err)
 				}
 				return
 			}
@@ -349,7 +349,7 @@ func TestImportAppAccess(t *testing.T) {
 				t.Errorf("allowed groups %v, want %v (%v)", got, want, tc.allowed)
 			}
 
-			// Nobody can use it in Latch who couldn't in Authentik, admins
+			// Nobody can use it in Keywell who couldn't in Authentik, admins
 			// excepted, as Ruling 6 allows.
 			for _, name := range everyone {
 				u := e.user(name + "@x.org")
@@ -359,7 +359,7 @@ func TestImportAppAccess(t *testing.T) {
 				}
 				admin := slices.ContainsFunc(groups, func(g model.Group) bool { return g.IsAdmin })
 				if oidc.UserAllowed(u, groups, lab) && !admin && !slices.Contains(tc.authentik, name) {
-					t.Errorf("%s can use it in Latch but not in Authentik", name)
+					t.Errorf("%s can use it in Keywell but not in Authentik", name)
 				}
 			}
 		})
@@ -397,23 +397,23 @@ func TestImportAppMapping(t *testing.T) {
 	}, {
 		name:  "user_upn",
 		edit:  func(s src) { s.p.SubMode = "user_upn" },
-		items: []string{"Identified people by UPN in Authentik. Latch uses their email address instead."},
+		items: []string{"Identified people by UPN in Authentik. Keywell uses their email address instead."},
 		check: func(t *testing.T, app *model.Application) {
 			if app.SubjectMode != model.SubjectModeEmail {
 				t.Errorf("subject mode %s", app.SubjectMode)
 			}
 		},
 	}, {
-		name:    "a subject mode Latch doesn't know",
+		name:    "a subject mode Keywell doesn't know",
 		edit:    func(s src) { s.p.SubMode = "user_shoe_size" },
 		skipped: true,
-		items:   []string{"Identifies people in a way Latch doesn't support."},
+		items:   []string{"Identifies people in a way Keywell doesn't support."},
 	}, {
-		name: "lifetimes Latch can't read",
+		name: "lifetimes Keywell can't read",
 		edit: func(s src) { s.p.AccessTokenValidity, s.p.RefreshTokenValidity = "soon", "" },
 		items: []string{
-			"Latch couldn't read how long Authentik's access tokens lasted, so it uses the default.",
-			"Latch couldn't read how long Authentik kept sign-ins, so it uses the default.",
+			"Keywell couldn't read how long Authentik's access tokens lasted, so it uses the default.",
+			"Keywell couldn't read how long Authentik kept sign-ins, so it uses the default.",
 		},
 		check: func(t *testing.T, app *model.Application) {
 			if app.AccessTokenTTL != 0 || app.IDTokenTTL != 0 || app.RefreshTokenTTL != 0 {
@@ -424,8 +424,8 @@ func TestImportAppMapping(t *testing.T) {
 		name: "lifetimes under a minute",
 		edit: func(s src) { s.p.AccessTokenValidity, s.p.RefreshTokenValidity = "seconds=30", "seconds=0" },
 		items: []string{
-			"Authentik's access tokens lasted 30s; Latch's minimum is 1m, so it uses that.",
-			"Authentik kept sign-ins for 0s; Latch's minimum is 1m, so it uses that.",
+			"Authentik's access tokens lasted 30s; Keywell's minimum is 1m, so it uses that.",
+			"Authentik kept sign-ins for 0s; Keywell's minimum is 1m, so it uses that.",
 		},
 		check: func(t *testing.T, app *model.Application) {
 			if app.AccessTokenTTL != time.Minute || app.IDTokenTTL != time.Minute || app.RefreshTokenTTL != time.Minute {
@@ -443,7 +443,7 @@ func TestImportAppMapping(t *testing.T) {
 	}, {
 		name:  "a launch link that isn't a web address",
 		edit:  func(s src) { s.a.LaunchURL = "/start" },
-		items: []string{"Its link to open the app isn't a web address Latch can use, so it was left off."},
+		items: []string{"Its link to open the app isn't a web address Keywell can use, so it was left off."},
 		check: func(t *testing.T, app *model.Application) {
 			if app.LaunchURL != "" || app.ShowTile {
 				t.Errorf("launch %q, tile %v", app.LaunchURL, app.ShowTile)
@@ -453,7 +453,7 @@ func TestImportAppMapping(t *testing.T) {
 		// The report never quotes a user name and password.
 		name:  "a launch link with a password",
 		edit:  func(s src) { s.a.LaunchURL = "https://bot:hunter2@lab.example.org/" },
-		items: []string{"Its link to open the app isn't a web address Latch can use, so it was left off."},
+		items: []string{"Its link to open the app isn't a web address Keywell can use, so it was left off."},
 		check: func(t *testing.T, app *model.Application) {
 			if app.LaunchURL != "" || app.ShowTile {
 				t.Errorf("launch %q, tile %v", app.LaunchURL, app.ShowTile)
@@ -525,8 +525,8 @@ func TestImportAppMapping(t *testing.T) {
 	}
 }
 
-// An app whose client ID another Latch app has is skipped, and the import
-// carries on; a Latch app whose Authentik app is gone is left as it is.
+// An app whose client ID another Keywell app has is skipped, and the import
+// carries on; a Keywell app whose Authentik app is gone is left as it is.
 func TestImportAppConflicts(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -542,7 +542,7 @@ func TestImportAppConflicts(t *testing.T) {
 	onePK := s.Provider(other)
 	s.Use(one, onePK)
 
-	// Latch's app for One still has the client ID Lab now uses.
+	// Keywell's app for One still has the client ID Lab now uses.
 	was := &model.Application{Name: "One", Slug: "one", ClientID: "lab-client-id", AuthentikProviderPK: &onePK}
 	gonePK := int64(99)
 	gone := &model.Application{Name: "Old Wiki", Slug: "old-wiki", ClientID: "old-wiki", AuthentikProviderPK: &gonePK}
@@ -555,8 +555,8 @@ func TestImportAppConflicts(t *testing.T) {
 
 	rep := e.run(s)
 	want := []Item{
-		{Kind: "app", Name: "Lab", Skipped: true, Reason: "Another app in Latch already uses its client ID."},
-		{Kind: "app", Name: "Old Wiki", Reason: "Is no longer in Authentik. Latch has left it as it is."},
+		{Kind: "app", Name: "Lab", Skipped: true, Reason: "Another app in Keywell already uses its client ID."},
+		{Kind: "app", Name: "Old Wiki", Reason: "Is no longer in Authentik. Keywell has left it as it is."},
 	}
 	if got := appItems(rep); !reflect.DeepEqual(got, want) {
 		t.Errorf("app items:\n got %s\nwant %s", itemLines(got), itemLines(want))
@@ -592,7 +592,7 @@ func TestImportAppConflicts(t *testing.T) {
 	s.Bind(lab, groupA)
 	rep = e.run(s)
 	want = []Item{{Kind: "app", Name: "Lab", Skipped: true,
-		Reason: "Another app in Latch already uses its client ID. Who can use it still follows Authentik."}}
+		Reason: "Another app in Keywell already uses its client ID. Who can use it still follows Authentik."}}
 	var got []Item
 	for _, it := range appItems(rep) {
 		if it.Name == "Lab" {
@@ -625,12 +625,12 @@ func TestImportSkipFollowsAccess(t *testing.T) {
 		name:    "a group",
 		bind:    func(s *Snap, lab, a string) { s.Bind(lab, a) },
 		allowed: []string{"A"},
-		reason:  "Identifies people in a way Latch doesn't support. Who can use it still follows Authentik.",
+		reason:  "Identifies people in a way Keywell doesn't support. Who can use it still follows Authentik.",
 	}, {
 		name:    "admins only",
 		bind:    func(s *Snap, lab, a string) { s.BindPolicy(lab, WeekdaysPolicy) },
 		allowed: []string{"Trustees"},
-		reason: "Identifies people in a way Latch doesn't support. " +
+		reason: "Identifies people in a way Keywell doesn't support. " +
 			"Only admins can use it until you choose its groups on the app's page.",
 	}}
 	for _, tc := range cases {
@@ -649,7 +649,7 @@ func TestImportSkipFollowsAccess(t *testing.T) {
 				t.Fatalf("first run: lab allows %v, want everyone", before.AllowedGroupIDs)
 			}
 
-			// Authentik limits Lab, and identifies people in a way Latch
+			// Authentik limits Lab, and identifies people in a way Keywell
 			// doesn't know.
 			tc.bind(s, lab, a)
 			s.P(pk).SubMode = "user_shoe_size"
@@ -671,14 +671,14 @@ func TestImportSkipFollowsAccess(t *testing.T) {
 }
 
 // Ruling P: an app that can only be limited to admins blocks the import
-// when Latch has no admin group, because no groups means open to all.
+// when Keywell has no admin group, because no groups means open to all.
 func TestImportBlocksAppWithoutAdminGroup(t *testing.T) {
 	s := NewSnap()
 	s.Join(s.User("ann", "ann@x.org"), s.Group("A"))
 	lab := s.App("Lab", "lab")
 	s.Use(lab, s.Provider(labProvider()))
 	e := newEnv(t)
-	e.run(s) // Lab is open to everyone, and Latch has no admin group
+	e.run(s) // Lab is open to everyone, and Keywell has no admin group
 	s.BindPolicy(lab, WeekdaysPolicy)
 
 	for _, dry := range []bool{true, false} {
@@ -705,7 +705,7 @@ func labProvider() authentik.OAuth2Provider {
 func TestImportAppsUpdate(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	// An app made in Latch by hand, with Door Booking's client ID.
+	// An app made in Keywell by hand, with Door Booking's client ID.
 	door := &model.Application{Name: "Door", Slug: "door", ClientID: "door-app-client-id",
 		ClientType: model.ClientTypePublic}
 	if err := e.st.CreateApplication(ctx, door); err != nil {
@@ -719,10 +719,10 @@ func TestImportAppsUpdate(t *testing.T) {
 	}
 	if d := e.app("door-booking"); d.ID != door.ID || d.Name != "Door Booking" || d.AuthentikProviderPK == nil ||
 		*d.AuthentikProviderPK != providerPK(s, "door-app") {
-		t.Errorf("door = %+v, want the Latch app %s linked to provider %d", d, door.ID, providerPK(s, "door-app"))
+		t.Errorf("door = %+v, want the Keywell app %s linked to provider %d", d, door.ID, providerPK(s, "door-app"))
 	}
 
-	// Choices made in Latch: a service account for Tool Booking and an
+	// Choices made in Keywell: a service account for Tool Booking and an
 	// uploaded icon for Wiki, whose icon Authentik keeps to itself.
 	sa := &model.User{Name: "Tools bot", Type: model.UserTypeService, Username: "tools-bot", IsActive: true}
 	if err := e.st.CreateUser(ctx, sa); err != nil {
@@ -758,7 +758,7 @@ func TestImportAppsUpdate(t *testing.T) {
 	}
 	for _, reason := range append(itemsFor(rep, "Wiki"), itemsFor(rep, "Tool Booking")...) {
 		if strings.Contains(reason, "icon") || strings.Contains(reason, "service account") {
-			t.Errorf("warning for something Latch already has: %s", reason)
+			t.Errorf("warning for something Keywell already has: %s", reason)
 		}
 	}
 

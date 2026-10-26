@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 // InsertAuditEvent stores an audit event, filling ID and At if empty.

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 // seedServiceAccount stores an active service account called name, in the
@@ -137,7 +137,7 @@ func TestServiceAccountFormsSayNothingSaved(t *testing.T) {
 	assertNotSaved(t, env, c, "/admin/service-accounts/"+sa.ID, badMeta)
 }
 
-var tokenRE = regexp.MustCompile(`<code class="secret">(latch_[A-Za-z0-9_-]+)</code>`)
+var tokenRE = regexp.MustCompile(`<code class="secret">(keywell_[A-Za-z0-9_-]+)</code>`)
 
 func TestCreateTokenShowsOnce(t *testing.T) {
 	env := testenv.New(t)

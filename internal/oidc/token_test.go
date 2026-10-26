@@ -17,11 +17,11 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/testenv"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/testenv"
 )
 
 const (
@@ -112,7 +112,7 @@ func tokenFails(t *testing.T, resp *http.Response, body map[string]any, status i
 		t.Error("no error_description")
 	}
 	assertNoStore(t, resp)
-	if challenge := resp.Header.Get("WWW-Authenticate"); code == "invalid_client" && challenge != `Basic realm="latch"` {
+	if challenge := resp.Header.Get("WWW-Authenticate"); code == "invalid_client" && challenge != `Basic realm="keywell"` {
 		t.Errorf("WWW-Authenticate %q, want a Basic challenge", challenge)
 	}
 }
@@ -862,8 +862,8 @@ func TestUserinfoRejectsBadTokens(t *testing.T) {
 				resp.StatusCode, resp.Header.Get("WWW-Authenticate"), body, challenge)
 		}
 	}
-	const invalid = `Bearer realm="latch", error="invalid_token"`
-	t.Run("no token", func(t *testing.T) { rejected(t, "", `Bearer realm="latch"`) })
+	const invalid = `Bearer realm="keywell", error="invalid_token"`
+	t.Run("no token", func(t *testing.T) { rejected(t, "", `Bearer realm="keywell"`) })
 	t.Run("garbage", func(t *testing.T) { rejected(t, "garbage", invalid) })
 	t.Run("ID token", func(t *testing.T) { rejected(t, str(t, body, "id_token"), invalid) })
 	t.Run("access token claims with typ JWT", func(t *testing.T) {

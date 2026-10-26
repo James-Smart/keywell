@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"latch/internal/admin"
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/session"
+	"keywell/internal/admin"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/session"
 )
 
 const (

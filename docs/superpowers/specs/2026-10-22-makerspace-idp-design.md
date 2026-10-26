@@ -2,7 +2,7 @@
 
 **Status:** design, awaiting approval
 **Date:** 2026-10-22
-**Working name:** Latch (placeholder, rename freely)
+**Name:** Keywell. Renamed on 2026-10-26 from the placeholder Latch, which this document and the plans written before then still use.
 
 ## 1. Intent
 

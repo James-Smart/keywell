@@ -1,4 +1,4 @@
-module latch
+module keywell
 
 go 1.27
 

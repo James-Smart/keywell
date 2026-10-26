@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // serviceAccount finds the service account named by the request's {id}: an

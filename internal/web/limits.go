@@ -3,7 +3,7 @@ package web
 import (
 	"time"
 
-	"latch/internal/ratelimit"
+	"keywell/internal/ratelimit"
 )
 
 // Limiters are the attempt limits on sign-in and password reset requests,

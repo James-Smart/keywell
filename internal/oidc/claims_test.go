@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/oidc"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
 )
 
 func TestSubjectModes(t *testing.T) {

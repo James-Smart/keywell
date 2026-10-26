@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // groupValues is the group form: name, description and metadata, with the

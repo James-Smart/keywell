@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/config"
-	"latch/internal/icons"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/config"
+	"keywell/internal/icons"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Messages of the applications pages' own checks and the summaries shown
@@ -313,7 +313,7 @@ func (s *Server) renderApp(w http.ResponseWriter, r *http.Request, a *model.Appl
 // phpQuoted escapes s for a single-quoted PHP string.
 var phpQuoted = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
 
-// setupFor is what an admin needs to set the app up against Latch.
+// setupFor is what an admin needs to set the app up against Keywell.
 func setupFor(issuer string, a *model.Application) setupDetails {
 	return setupDetails{
 		Issuer: issuer, Discovery: issuer + "/.well-known/openid-configuration", ClientID: a.ClientID,

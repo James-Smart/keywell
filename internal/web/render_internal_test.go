@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/model"
+	"keywell/internal/config"
+	"keywell/internal/model"
 )
 
 func TestTemplateFuncs(t *testing.T) {

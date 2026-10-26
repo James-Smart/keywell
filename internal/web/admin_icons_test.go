@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"testing"
 
-	"latch/internal/model"
-	"latch/internal/testenv"
+	"keywell/internal/model"
+	"keywell/internal/testenv"
 )
 
 // pngBytes is a valid PNG of w x 1 pixels.
@@ -200,17 +200,17 @@ func TestIconRouteRejectsBadNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, content := range map[string]string{
-		filepath.Join(env.Cfg.DataDir, "latch.db"): "SQLite format 3 secret",
-		filepath.Join(dir, "x.svg"):                `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
-		filepath.Join(dir, svgName):                `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+		filepath.Join(env.Cfg.DataDir, "keywell.db"): "SQLite format 3 secret",
+		filepath.Join(dir, "x.svg"):                  `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+		filepath.Join(dir, svgName):                  `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
 	} {
 		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, name := range []string{
-		"..%2Flatch.db",
-		"%2e%2e%2flatch.db",
+		"..%2Fkeywell.db",
+		"%2e%2e%2fkeywell.db",
 		"x.svg",
 		"00000000-0000-0000-0000-000000000000-0123456789ab.png",
 		"00000000-0000-0000-0000-000000000000-0123456789ab.svg",

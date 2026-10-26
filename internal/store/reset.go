@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // CreateResetToken stores a new reset or invite token (already hashed).

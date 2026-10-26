@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // This file holds the API's JSON shapes, one type per kind of record with

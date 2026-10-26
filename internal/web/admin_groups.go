@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Messages of the groups pages' own checks and the summaries shown at the

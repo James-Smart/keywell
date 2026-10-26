@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/config"
-	"latch/internal/session"
-	"latch/internal/store/storetest"
-	"latch/internal/web"
+	"keywell/internal/config"
+	"keywell/internal/session"
+	"keywell/internal/store/storetest"
+	"keywell/internal/web"
 )
 
 // A reverse proxy missing from trusted_proxies makes every member share the
@@ -24,7 +24,7 @@ func TestWarnsOnceForForwardedHeadersFromUntrustedPeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.PublicURL = "http://latch.test"
+	cfg.PublicURL = "http://keywell.test"
 	cfg.TrustedProxies = []string{"10.0.0.0/8"}
 	var logs bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))

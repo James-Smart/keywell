@@ -7,26 +7,26 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/admin"
-	"latch/internal/authentik"
-	"latch/internal/model"
-	"latch/internal/secrets"
+	"keywell/internal/admin"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
 )
 
 // Report copy for an app's fields. The report never quotes a link, which
 // could hold a password, and quotes patterns without one.
 const (
-	reasonSubjectMode = "Identifies people in a way Latch doesn't support."
+	reasonSubjectMode = "Identifies people in a way Keywell doesn't support."
 	warnSlugChanged   = "Its short name changed from %s to %s."
 	warnPattern       = "Return address %s is a pattern. Add the real addresses on the app's page."
 	warnLogoutPattern = "Sign-out return address %s is a pattern. Add the real addresses on the app's page."
-	warnUPN           = "Identified people by UPN in Authentik. Latch uses their email address instead."
-	warnLaunchURL     = "Its link to open the app isn't a web address Latch can use, so it was left off."
+	warnUPN           = "Identified people by UPN in Authentik. Keywell uses their email address instead."
+	warnLaunchURL     = "Its link to open the app isn't a web address Keywell can use, so it was left off."
 	warnIcon          = "Its icon is stored in Authentik. Upload it on the app's page."
-	warnMapping       = `Authentik sent extra details through "%s", which Latch doesn't send.`
-	warnProfile       = `Authentik sent group names to it with "profile". Latch sends them only when an app ` +
+	warnMapping       = `Authentik sent extra details through "%s", which Keywell doesn't send.`
+	warnProfile       = `Authentik sent group names to it with "profile". Keywell sends them only when an app ` +
 		`asks for "groups", so add groups to its scopes if it uses them.`
-	warnServiceLogin = "Authentik let it sign in by itself. To allow that in Latch, choose a service account " +
+	warnServiceLogin = "Authentik let it sign in by itself. To allow that in Keywell, choose a service account " +
 		"on the app's page."
 )
 
@@ -35,18 +35,18 @@ type lifetimeCopy struct{ long, short, unread string }
 
 var (
 	accessCopy = lifetimeCopy{
-		long:   "Authentik's access tokens lasted %s; Latch's limit is %s, so it uses that.",
-		short:  "Authentik's access tokens lasted %s; Latch's minimum is %s, so it uses that.",
-		unread: "Latch couldn't read how long Authentik's access tokens lasted, so it uses the default.",
+		long:   "Authentik's access tokens lasted %s; Keywell's limit is %s, so it uses that.",
+		short:  "Authentik's access tokens lasted %s; Keywell's minimum is %s, so it uses that.",
+		unread: "Keywell couldn't read how long Authentik's access tokens lasted, so it uses the default.",
 	}
 	refreshCopy = lifetimeCopy{
-		long:   "Authentik kept sign-ins for %s; Latch's limit is %s, so it uses that.",
-		short:  "Authentik kept sign-ins for %s; Latch's minimum is %s, so it uses that.",
-		unread: "Latch couldn't read how long Authentik kept sign-ins, so it uses the default.",
+		long:   "Authentik kept sign-ins for %s; Keywell's limit is %s, so it uses that.",
+		short:  "Authentik kept sign-ins for %s; Keywell's minimum is %s, so it uses that.",
+		unread: "Keywell couldn't read how long Authentik kept sign-ins, so it uses the default.",
 	}
 )
 
-// subjectModes maps Authentik's sub_mode to Latch's subject mode (spec §6.4).
+// subjectModes maps Authentik's sub_mode to Keywell's subject mode (spec §6.4).
 var subjectModes = map[string]model.SubjectMode{
 	"hashed_user_id": model.SubjectModeAuthentikUID,
 	"user_id":        model.SubjectModeAuthentikPK,
@@ -56,10 +56,10 @@ var subjectModes = map[string]model.SubjectMode{
 	"user_upn":       model.SubjectModeEmail,
 }
 
-// mapApp makes the Latch app for a: the matched app with Authentik's values
+// mapApp makes the Keywell app for a: the matched app with Authentik's values
 // over every imported field, or a new one, allowing acc's groups. It keeps
 // the matched app's service account, and its uploaded icon when Authentik
-// has no usable one. It returns why instead when Latch can't take the app
+// has no usable one. It returns why instead when Keywell can't take the app
 // as Authentik has it.
 func (r *run) mapApp(a *importApp, acc access, mappings []authentik.ProviderMapping) (*model.Application, string) {
 	src, p := &a.src, a.prov
@@ -68,8 +68,8 @@ func (r *run) mapApp(a *importApp, acc access, mappings []authentik.ProviderMapp
 		return nil, reasonSubjectMode
 	}
 	app := &model.Application{}
-	if a.latch != nil {
-		*app = *a.latch
+	if a.keywell != nil {
+		*app = *a.keywell
 	}
 	app.Name = src.Name
 	if app.Slug = admin.SlugFromName(src.Slug); app.Slug != src.Slug {
@@ -107,7 +107,7 @@ func (r *run) mapApp(a *importApp, acc access, mappings []authentik.ProviderMapp
 }
 
 // mapAddresses keeps the provider's strict return addresses, for signing in
-// and after signing out, and warns about each pattern, which Latch can't
+// and after signing out, and warns about each pattern, which Keywell can't
 // match.
 func mapAddresses(a *importApp, app *model.Application) {
 	app.RedirectURIs, app.PostLogoutRedirectURIs = []string{}, []string{}
@@ -145,8 +145,8 @@ func mapLinks(a *importApp, app *model.Application) {
 	switch icon := strings.TrimSpace(a.src.Icon); {
 	case admin.IsWebAddress(icon, "https"):
 		app.IconURL = icon
-	case a.latch != nil && strings.HasPrefix(a.latch.IconURL, "/icons/"):
-		app.IconURL = a.latch.IconURL
+	case a.keywell != nil && strings.HasPrefix(a.keywell.IconURL, "/icons/"):
+		app.IconURL = a.keywell.IconURL
 	default:
 		app.IconURL = ""
 		if icon != "" {
@@ -155,7 +155,7 @@ func mapLinks(a *importApp, app *model.Application) {
 	}
 }
 
-// warnClaims warns about each claim mapping an admin wrote, which Latch
+// warnClaims warns about each claim mapping an admin wrote, which Keywell
 // doesn't send, and about the profile scope, which sent group names.
 func warnClaims(a *importApp, mappings []authentik.ProviderMapping) {
 	profile := false
@@ -173,7 +173,7 @@ func warnClaims(a *importApp, mappings []authentik.ProviderMapping) {
 }
 
 // lifetime reads an Authentik duration and fits it between
-// admin.MinTokenTTL and longest, warning when it changes it. One Latch
+// admin.MinTokenTTL and longest, warning when it changes it. One Keywell
 // can't read becomes 0, the default.
 func lifetime(a *importApp, text string, longest time.Duration, c lifetimeCopy) time.Duration {
 	d, err := authentik.ParseValidity(text)

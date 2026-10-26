@@ -18,10 +18,10 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
 )
 
 // Grant types the token endpoint accepts.
@@ -38,11 +38,11 @@ const (
 	idTokenType     = "JWT" // what KeyManager.Sign writes
 )
 
-// userIDClaim is a private access-token claim holding the Latch user ID.
+// userIDClaim is a private access-token claim holding the Keywell user ID.
 // sub depends on the application's subject mode and may be an email or an
 // Authentik value, which can change hands; userinfo and introspection find
 // the member by this instead.
-const userIDClaim = "latch_uid"
+const userIDClaim = "keywell_uid"
 
 // Token kinds for ttl.
 const (
@@ -71,7 +71,7 @@ var (
 	errBadRefresh = &oauthError{"invalid_grant", "the refresh token is invalid, expired or revoked"}
 )
 
-// errInvalidToken means a token is not one Latch issued and still honours,
+// errInvalidToken means a token is not one Keywell issued and still honours,
 // or its member or application is gone, or the member is disabled.
 var errInvalidToken = errors.New("oidc: invalid token")
 
@@ -155,7 +155,7 @@ func (p *Provider) tokenError(w http.ResponseWriter, r *http.Request, err error)
 	switch oe.code {
 	case errClientAuth.code:
 		status = http.StatusUnauthorized
-		w.Header().Set("WWW-Authenticate", `Basic realm="latch"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="keywell"`)
 	case errServer.code:
 		status = http.StatusInternalServerError
 	}
@@ -603,13 +603,13 @@ func (p *Provider) activeUser(ctx context.Context, id string) (*model.User, erro
 func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 	raw := bearerToken(r)
 	if raw == "" {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="latch"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="keywell"`)
 		writeOAuthError(w, http.StatusUnauthorized, &oauthError{"invalid_request", "an access token is required"})
 		return
 	}
 	claims, err := p.userinfoClaims(r.Context(), raw)
 	if errors.Is(err, errInvalidToken) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="latch", error="invalid_token"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="keywell", error="invalid_token"`)
 		writeOAuthError(w, http.StatusUnauthorized, &oauthError{"invalid_token", "the access token is invalid or expired"})
 		return
 	}
@@ -662,7 +662,7 @@ func bearerToken(r *http.Request) string {
 
 // introspect handles POST /oauth/introspect (RFC 7662) for applications
 // with a client secret. Anything that is not an active refresh or access
-// token Latch issued, for whatever reason, is {"active": false}.
+// token Keywell issued, for whatever reason, is {"active": false}.
 func (p *Provider) introspect(w http.ResponseWriter, r *http.Request) {
 	if !readForm(w, r) {
 		return

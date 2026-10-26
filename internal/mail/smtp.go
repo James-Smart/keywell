@@ -6,7 +6,7 @@ import (
 
 	gomail "github.com/wneessen/go-mail"
 
-	"latch/internal/config"
+	"keywell/internal/config"
 )
 
 // SMTP delivers messages through an SMTP server.

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
 )
 
 // pkceS256 is the only PKCE method accepted (RFC 7636 §4.2); plain is not.

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // auditCategories are the audit log's categories, in order. Actions are
@@ -136,7 +136,7 @@ func (l *auditLookup) actor(e model.AuditEvent) (name, link string, err error) {
 	}
 	switch e.ActorType {
 	case model.ActorSystem:
-		return "Latch", link, nil
+		return "Keywell", link, nil
 	case model.ActorImporter:
 		return "Importer", link, nil
 	}

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/authentik"
-	"latch/internal/secrets"
-	"latch/internal/totp"
+	"keywell/internal/authentik"
+	"keywell/internal/secrets"
+	"keywell/internal/totp"
 )
 
 // newCredEnv is newEnv with an encryptor, which TOTP needs.
@@ -65,7 +65,7 @@ func itemsFor(rep *Report, name string) []string {
 
 func TestImportPasswords(t *testing.T) {
 	e := newCredEnv(t)
-	ada := e.mkLatchAdmin("ada@example.org")
+	ada := e.mkKeywellAdmin("ada@example.org")
 	if err := e.st.SetPassword(context.Background(), ada.ID, nativeHash); err != nil {
 		t.Fatal(err)
 	}
@@ -87,10 +87,10 @@ func TestImportPasswords(t *testing.T) {
 	if a.PasswordHash != nativeHash || a.LegacyPasswordHash != "" {
 		t.Errorf("ada: native %q, legacy %q; want native kept, no legacy", a.PasswordHash, a.LegacyPasswordHash)
 	}
-	if rep.NoPassword != 2 || rep.KeptLatchCredentials != 1 {
-		t.Errorf("NoPassword %d, KeptLatchCredentials %d; want 2 and 1", rep.NoPassword, rep.KeptLatchCredentials)
+	if rep.NoPassword != 2 || rep.KeptKeywellCredentials != 1 {
+		t.Errorf("NoPassword %d, KeptKeywellCredentials %d; want 2 and 1", rep.NoPassword, rep.KeptKeywellCredentials)
 	}
-	want := []string{"Has a password Latch can't check. They'll need a reset link."}
+	want := []string{"Has a password Keywell can't check. They'll need a reset link."}
 	if got := itemsFor(rep, "md5@example.org"); !reflect.DeepEqual(got, want) {
 		t.Errorf("md5 items = %q, want %q", got, want)
 	}
@@ -101,7 +101,7 @@ func TestImportPasswords(t *testing.T) {
 	// A second run changes nothing and counts the same.
 	before := e.rows()
 	rep = e.run(s)
-	if rep.NoPassword != 2 || rep.KeptLatchCredentials != 1 || !reflect.DeepEqual(e.rows(), before) {
+	if rep.NoPassword != 2 || rep.KeptKeywellCredentials != 1 || !reflect.DeepEqual(e.rows(), before) {
 		t.Errorf("rerun: %+v", rep)
 	}
 }
@@ -152,7 +152,7 @@ func TestImportTOTP(t *testing.T) {
 	if ok, _ := e.st.ConsumeRecoveryCode(ctx, u.ID, secrets.HashToken("AbCdEf12")); !ok {
 		t.Error("recovery code did not match as typed")
 	}
-	want := []string{`Had 3 authenticator apps in Authentik. Latch kept the one used most recently ("Phone").`}
+	want := []string{`Had 3 authenticator apps in Authentik. Keywell kept the one used most recently ("Phone").`}
 	if got := itemsFor(rep, "alex@example.org"); !reflect.DeepEqual(got, want) {
 		t.Errorf("alex items = %q, want %q", got, want)
 	}
@@ -161,7 +161,7 @@ func TestImportTOTP(t *testing.T) {
 	if string(jp) != wantSecret {
 		t.Errorf("jo kept the wrong device")
 	}
-	want = []string{`Had 2 authenticator apps in Authentik. Latch kept the one used most recently ("New").`}
+	want = []string{`Had 2 authenticator apps in Authentik. Keywell kept the one used most recently ("New").`}
 	if got := itemsFor(rep, "jo@example.org"); !reflect.DeepEqual(got, want) {
 		t.Errorf("jo items = %q, want %q", got, want)
 	}
@@ -174,7 +174,7 @@ func TestImportTOTP(t *testing.T) {
 }
 
 func TestImportTOTPUnsupported(t *testing.T) {
-	const warn = "Used a kind of two-step code Latch doesn't support. They'll set up two-step sign in again."
+	const warn = "Used a kind of two-step code Keywell doesn't support. They'll set up two-step sign in again."
 	e := newCredEnv(t)
 	s := NewSnap()
 	names := []string{"digits", "step", "t0", "hex"}
@@ -219,7 +219,7 @@ func TestImportTOTPMirrorsAuthentik(t *testing.T) {
 		t.Fatal("not imported")
 	}
 
-	// Authentik drops the device; Latch drops it and its codes.
+	// Authentik drops the device; Keywell drops it and its codes.
 	s.TOTPDevices, s.StaticTokens = nil, nil
 	rep := e.run(s)
 	u := e.user("alex@example.org")
@@ -235,15 +235,15 @@ func TestImportTOTPMirrorsAuthentik(t *testing.T) {
 }
 
 // Ruling 3, Review Focus 2.
-func TestImportKeepsLatchCredentials(t *testing.T) {
+func TestImportKeepsKeywellCredentials(t *testing.T) {
 	e := newCredEnv(t)
 	ctx := context.Background()
-	ada := e.mkLatchAdmin("ada@example.org")
+	ada := e.mkKeywellAdmin("ada@example.org")
 	if err := e.st.SetPassword(ctx, ada.ID, nativeHash); err != nil {
 		t.Fatal(err)
 	}
 	sealed, _ := e.d.Enc.Seal([]byte("JBSWY3DPEHPK3PXP"))
-	if err := e.st.ImportTOTP(ctx, ada.ID, sealed, t0, 77, []string{secrets.HashToken("latch-code")}); err != nil {
+	if err := e.st.ImportTOTP(ctx, ada.ID, sealed, t0, 77, []string{secrets.HashToken("keywell-code")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -267,7 +267,7 @@ func TestImportKeepsLatchCredentials(t *testing.T) {
 		if n, _ := e.st.CountUnusedRecoveryCodes(ctx, a.ID); n != 1 {
 			t.Errorf("run %d: %d recovery codes, want her 1", i, n)
 		}
-		if rep.KeptLatchCredentials != 1 || rep.TOTP != 0 || rep.RecoveryCodes != 0 || rep.NoPassword != 0 {
+		if rep.KeptKeywellCredentials != 1 || rep.TOTP != 0 || rep.RecoveryCodes != 0 || rep.NoPassword != 0 {
 			t.Errorf("run %d report: %+v", i, rep)
 		}
 		if got := itemsFor(rep, "ada@example.org"); len(got) != 0 {
@@ -278,7 +278,7 @@ func TestImportKeepsLatchCredentials(t *testing.T) {
 	if ok, _ := e.st.ConsumeRecoveryCode(ctx, a.ID, secrets.HashToken("ak-code")); ok {
 		t.Error("Authentik's recovery code was imported")
 	}
-	if ok, _ := e.st.ConsumeRecoveryCode(ctx, a.ID, secrets.HashToken("latch-code")); !ok {
-		t.Error("Latch recovery code is gone")
+	if ok, _ := e.st.ConsumeRecoveryCode(ctx, a.ID, secrets.HashToken("keywell-code")); !ok {
+		t.Error("Keywell recovery code is gone")
 	}
 }

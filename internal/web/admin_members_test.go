@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/mail"
-	"latch/internal/model"
-	"latch/internal/store"
-	"latch/internal/testenv"
+	"keywell/internal/mail"
+	"keywell/internal/model"
+	"keywell/internal/store"
+	"keywell/internal/testenv"
 )
 
 // addMember stores an active member called name, with email and testPW as

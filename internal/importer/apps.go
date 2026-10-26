@@ -7,27 +7,27 @@ import (
 	"slices"
 	"strings"
 
-	"latch/internal/admin"
-	"latch/internal/authentik"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/authentik"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Report copy for apps. Item reasons are full sentences about the app the
 // item names. The copy for an app's fields is in appfields.go.
 const (
 	reasonNoProvider  = "Has nothing to sign in with in Authentik."
-	reasonNotOIDC     = "Signs in with something other than OpenID Connect, which is all Latch supports."
+	reasonNotOIDC     = "Signs in with something other than OpenID Connect, which is all Keywell supports."
 	reasonOrphan      = "Isn't used by any application in Authentik."
-	reasonClientTaken = "Another app in Latch already uses its client ID."
-	warnAppGone       = "Is no longer in Authentik. Latch has left it as it is."
+	reasonClientTaken = "Another app in Keywell already uses its client ID."
+	warnAppGone       = "Is no longer in Authentik. Keywell has left it as it is."
 )
 
 // importApp is a snapshot application and what the import does with it.
 type importApp struct {
 	src     authentik.Application
 	prov    *authentik.OAuth2Provider // its OpenID Connect provider; nil when it has none
-	latch   *model.Application        // the Latch app matched, nil for a new one
+	keywell *model.Application        // the Keywell app matched, nil for a new one
 	rule    accessRule                // who Authentik let use it, decided before anything can skip it
 	skipped bool
 	items   []Item
@@ -46,10 +46,10 @@ func (a *importApp) skip(reason string) {
 
 // planApps decides, before anything is written, what happens to each
 // snapshot application: whether it has an OpenID Connect provider, which
-// Latch app it matches and who may use it. An app only admins may use
-// blocks the import when Latch will have no admin group (Ruling P), since
+// Keywell app it matches and who may use it. An app only admins may use
+// blocks the import when Keywell will have no admin group (Ruling P), since
 // no groups means open to all. It lists the providers no application uses
-// and the Latch apps whose Authentik app is gone. It runs after planGroups.
+// and the Keywell apps whose Authentik app is gone. It runs after planGroups.
 func (r *run) planApps() {
 	providers := map[int64]*authentik.OAuth2Provider{}
 	for i := range r.snap.Providers {
@@ -59,10 +59,10 @@ func (r *run) planApps() {
 	for _, b := range r.snap.Bindings {
 		bindings[b.TargetUUID] = append(bindings[b.TargetUUID], b)
 	}
-	// Latch's admin groups never lose admin access (Ruling 4), and each
+	// Keywell's admin groups never lose admin access (Ruling 4), and each
 	// imported superuser group is one.
-	imported := map[string]bool{} // UUIDs of the snapshot groups Latch will have
-	hasAdmin := slices.ContainsFunc(r.latchGroups, func(g model.Group) bool { return g.IsAdmin })
+	imported := map[string]bool{} // UUIDs of the snapshot groups Keywell will have
+	hasAdmin := slices.ContainsFunc(r.keywellGroups, func(g model.Group) bool { return g.IsAdmin })
 	for _, g := range r.groups {
 		if !g.skipped {
 			imported[g.src.UUID] = true
@@ -95,22 +95,22 @@ func (r *run) planApps() {
 			r.otherAppItems = append(r.otherAppItems, Item{Kind: "app", Name: p.Name, Skipped: true, Reason: reasonOrphan})
 		}
 	}
-	for i := range r.latchApps {
-		if l := &r.latchApps[i]; l.AuthentikProviderPK != nil && !claimed[l.ID] {
+	for i := range r.keywellApps {
+		if l := &r.keywellApps[i]; l.AuthentikProviderPK != nil && !claimed[l.ID] {
 			r.otherAppItems = append(r.otherAppItems, Item{Kind: "app", Name: l.Name, Reason: warnAppGone})
 		}
 	}
 }
 
 // matchApps matches each application that has an OpenID Connect provider
-// to a Latch app: on Authentik provider PK first, then on client ID. Each
-// Latch app is matched at most once. It returns the IDs of the Latch apps
+// to a Keywell app: on Authentik provider PK first, then on client ID. Each
+// Keywell app is matched at most once. It returns the IDs of the Keywell apps
 // matched.
 func (r *run) matchApps() map[string]bool {
 	byPK := map[int64]*model.Application{}
 	byClientID := map[string]*model.Application{}
-	for i := range r.latchApps {
-		l := &r.latchApps[i]
+	for i := range r.keywellApps {
+		l := &r.keywellApps[i]
 		if pk := l.AuthentikProviderPK; pk != nil && byPK[*pk] == nil {
 			byPK[*pk] = l
 		}
@@ -118,8 +118,8 @@ func (r *run) matchApps() map[string]bool {
 	}
 	claimed := map[string]bool{}
 	claim := func(a *importApp, l *model.Application) {
-		if a.latch == nil && l != nil && !claimed[l.ID] {
-			a.latch = l
+		if a.keywell == nil && l != nil && !claimed[l.ID] {
+			a.keywell = l
 			claimed[l.ID] = true
 		}
 	}
@@ -136,7 +136,7 @@ func (r *run) matchApps() map[string]bool {
 	return claimed
 }
 
-// writeApps adds and updates the Latch apps planApps decided on, each
+// writeApps adds and updates the Keywell apps planApps decided on, each
 // checked with the app pages' rules. It runs after the groups are written.
 func (r *run) writeApps() error {
 	if slices.ContainsFunc(r.apps, func(a *importApp) bool { return !a.skipped }) {
@@ -175,8 +175,8 @@ func (r *run) writeApps() error {
 }
 
 // writeApp maps one application, checks it with the app pages' rules, and
-// adds or updates its Latch app. An app Latch can't take as Authentik has
-// it, that breaks a rule, or whose client ID another Latch app has, is
+// adds or updates its Keywell app. An app Keywell can't take as Authentik has
+// it, that breaks a rule, or whose client ID another Keywell app has, is
 // skipped (a failed store call undoes its own writes, so the import
 // carries on), but who can use it still follows Authentik (Rulings N, P).
 func (r *run) writeApp(svc *admin.Service, a *importApp, acc access, mappings []authentik.ProviderMapping) error {
@@ -193,11 +193,11 @@ func (r *run) writeApp(svc *admin.Service, a *importApp, acc access, mappings []
 	}
 	var err error
 	switch {
-	case a.latch == nil:
+	case a.keywell == nil:
 		if err = r.tx.CreateApplication(r.ctx, app); err == nil {
 			r.rep.Apps.Added++
 		}
-	case appChanged(a.latch, app):
+	case appChanged(a.keywell, app):
 		if err = r.tx.UpdateApplication(r.ctx, app); err == nil {
 			r.rep.Apps.Updated++
 		}

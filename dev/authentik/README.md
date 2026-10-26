@@ -10,7 +10,7 @@ Nothing here is used in production. Needs Docker with Compose and `openssl`.
 
 The first run writes `dev/authentik/.env` (random database password, secret key and `akadmin` password; it is git-ignored), starts the stack, waits for Authentik to finish migrating (a few minutes), and seeds it with `seed.py`. It ends with:
 
-    export LATCH_TEST_AUTHENTIK_DSN=postgres://...
+    export KEYWELL_TEST_AUTHENTIK_DSN=postgres://...
 
 Running it again is safe: the seed changes nothing that is already there.
 
@@ -18,7 +18,7 @@ Running it again is safe: the seed changes nothing that is already there.
 
     make test-authentik
 
-This fills in `LATCH_TEST_AUTHENTIK_DSN` from `.env` and runs the tests whose names contain `Authentik`. Plain `go test ./...` skips them.
+This fills in `KEYWELL_TEST_AUTHENTIK_DSN` from `.env` and runs the tests whose names contain `Authentik`. Plain `go test ./...` skips them.
 
 ## Reseed from scratch
 

@@ -6,29 +6,29 @@ import (
 	"strings"
 	"testing"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
-const fresh = `# HELP latch_build_info The running version of Latch.
-# TYPE latch_build_info gauge
-latch_build_info{version="v1"} 1
-# HELP latch_http_requests_total Requests answered, by status class.
-# TYPE latch_http_requests_total counter
-latch_http_requests_total{code="1xx"} 0
-latch_http_requests_total{code="2xx"} 0
-latch_http_requests_total{code="3xx"} 0
-latch_http_requests_total{code="4xx"} 0
-latch_http_requests_total{code="5xx"} 0
-# HELP latch_logins_total Sign-ins, by result.
-# TYPE latch_logins_total counter
-latch_logins_total{result="success"} 0
-latch_logins_total{result="failure"} 0
-latch_logins_total{result="second_step_failure"} 0
-# HELP latch_tokens_issued_total Tokens issued to apps, by grant.
-# TYPE latch_tokens_issued_total counter
-latch_tokens_issued_total{grant="authorization_code"} 0
-latch_tokens_issued_total{grant="refresh_token"} 0
-latch_tokens_issued_total{grant="client_credentials"} 0
+const fresh = `# HELP keywell_build_info The running version of Keywell.
+# TYPE keywell_build_info gauge
+keywell_build_info{version="v1"} 1
+# HELP keywell_http_requests_total Requests answered, by status class.
+# TYPE keywell_http_requests_total counter
+keywell_http_requests_total{code="1xx"} 0
+keywell_http_requests_total{code="2xx"} 0
+keywell_http_requests_total{code="3xx"} 0
+keywell_http_requests_total{code="4xx"} 0
+keywell_http_requests_total{code="5xx"} 0
+# HELP keywell_logins_total Sign-ins, by result.
+# TYPE keywell_logins_total counter
+keywell_logins_total{result="success"} 0
+keywell_logins_total{result="failure"} 0
+keywell_logins_total{result="second_step_failure"} 0
+# HELP keywell_tokens_issued_total Tokens issued to apps, by grant.
+# TYPE keywell_tokens_issued_total counter
+keywell_tokens_issued_total{grant="authorization_code"} 0
+keywell_tokens_issued_total{grant="refresh_token"} 0
+keywell_tokens_issued_total{grant="client_credentials"} 0
 `
 
 func scrape(t *testing.T, m *Registry) (string, string) {

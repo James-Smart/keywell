@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/model"
-	"latch/internal/password"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/model"
+	"keywell/internal/password"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 const busyPW = "a long enough password 1"
@@ -30,7 +30,7 @@ func busyServer(t *testing.T) (*Server, *store.Store, *model.User) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.PublicURL = "http://latch.test"
+	cfg.PublicURL = "http://keywell.test"
 	log := slog.New(slog.DiscardHandler)
 	rd, err := NewRenderer(cfg, log)
 	if err != nil {

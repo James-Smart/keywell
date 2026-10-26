@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"latch/internal/admin"
-	"latch/internal/model"
-	"latch/internal/store"
+	"keywell/internal/admin"
+	"keywell/internal/model"
+	"keywell/internal/store"
 )
 
 // Error messages, and the field message of a bad page or per_page. The

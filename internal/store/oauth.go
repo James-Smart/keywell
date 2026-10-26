@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 // CreateAuthCode stores a new authorization code (already hashed).

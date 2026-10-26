@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"latch/internal/model"
+	"keywell/internal/model"
 )
 
 func TestUpdateGroup(t *testing.T) {

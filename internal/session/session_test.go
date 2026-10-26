@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"latch/internal/model"
-	"latch/internal/secrets"
-	"latch/internal/session"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/model"
+	"keywell/internal/secrets"
+	"keywell/internal/session"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 // harness wires a Manager to a test store with a settable clock that starts

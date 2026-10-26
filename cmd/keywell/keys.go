@@ -7,10 +7,10 @@ import (
 	"io"
 	"time"
 
-	"latch/internal/audit"
-	"latch/internal/config"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
+	"keywell/internal/audit"
+	"keywell/internal/config"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
 )
 
 // cmdRotateKeys makes a new active signing key, then retires the keys
@@ -18,7 +18,7 @@ import (
 func cmdRotateKeys(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("rotate-keys", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "./latch.yaml", "path to the config file")
+	configPath := flags.String("config", "./keywell.yaml", "path to the config file")
 	retireAfter := 90 * 24 * time.Hour
 	flags.Func("retire-after", "retire older keys once they have been superseded this long, e.g. 90d or 0d (default 90d)",
 		func(s string) error {

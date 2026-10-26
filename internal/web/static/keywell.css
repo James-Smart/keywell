@@ -1,4 +1,4 @@
-/* Latch: one stylesheet for every page. --primary is set inline by the
+/* Keywell: one stylesheet for every page. --primary is set inline by the
    frame from branding.primary_color. Mobile-first; wider screens get more
    breathing room, not a different layout. */
 
@@ -76,7 +76,7 @@ p { margin: 0 0 1rem; }
 
 /* Account menu: a round button with the member's initials that opens a
    panel of account links. A <details> element, so it needs no script;
-   latch.js only closes it on a click outside or Escape. */
+   keywell.js only closes it on a click outside or Escape. */
 .account-menu { position: relative; margin-left: auto; }
 .account-menu summary { display: block; list-style: none; cursor: pointer; border-radius: 50%; }
 .account-menu summary::-webkit-details-marker { display: none; }

@@ -17,12 +17,12 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"latch/internal/audit"
-	"latch/internal/model"
-	"latch/internal/oidc"
-	"latch/internal/secrets"
-	"latch/internal/store"
-	"latch/internal/store/storetest"
+	"keywell/internal/audit"
+	"keywell/internal/model"
+	"keywell/internal/oidc"
+	"keywell/internal/secrets"
+	"keywell/internal/store"
+	"keywell/internal/store/storetest"
 )
 
 func newEncryptor(t *testing.T) *secrets.Encryptor {
@@ -438,7 +438,7 @@ func TestReloadPicksUpAnotherManagersChanges(t *testing.T) {
 	ctx := context.Background()
 	s := storetest.OpenTest(t)
 	enc := newEncryptor(t)
-	a := newKeyManager(t, s, enc) // e.g. latch rotate-keys
+	a := newKeyManager(t, s, enc) // e.g. keywell rotate-keys
 	b := newKeyManager(t, s, enc) // e.g. the running server
 	oldKID := a.ActiveKID()
 
