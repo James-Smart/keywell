@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // This file holds the API's JSON shapes, one type per kind of record with

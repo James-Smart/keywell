@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // auditCategories are the audit log's categories, in order. Actions are

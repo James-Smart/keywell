@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/ratelimit"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/ratelimit"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Deps is what the API needs.

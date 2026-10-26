@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 const fresh = `# HELP keywell_build_info The running version of Keywell.

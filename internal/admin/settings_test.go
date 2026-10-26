@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"keywell/internal/admin"
-	"keywell/internal/audit"
-	"keywell/internal/mail"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // failingMailer fails every send with err.

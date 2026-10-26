@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"keywell/internal/admin"
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/session"
 )
 
 const (

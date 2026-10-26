@@ -14,16 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/api"
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/mail"
-	"keywell/internal/metrics"
-	"keywell/internal/password"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/api"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/metrics"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Deps are the collaborators the web handlers use.

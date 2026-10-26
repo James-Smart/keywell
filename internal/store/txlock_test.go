@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/db"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // A transaction that reads and then writes must not lose the race to

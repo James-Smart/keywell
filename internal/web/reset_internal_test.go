@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/mail"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/store/storetest"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/store/storetest"
 )
 
 // SendReset with purpose invite mails the invitation, with a link that

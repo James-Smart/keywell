@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/admin"
-	"keywell/internal/config"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 func TestAdminFailureFor(t *testing.T) {

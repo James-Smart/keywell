@@ -15,11 +15,11 @@ import (
 
 	pqtotp "github.com/pquerna/otp/totp"
 
-	"keywell/internal/audit"
-	"keywell/internal/authentik"
-	"keywell/internal/importer"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/importer"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // importEventCount is how many import.run audit events there are.

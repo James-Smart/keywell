@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // tileApp creates an app shown as a tile on the home page, open to members

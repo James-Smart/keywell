@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"keywell/internal/store/storetest"
+	"github.com/James-Smart/keywell/internal/store/storetest"
 )
 
 func TestSafeNext(t *testing.T) {

@@ -12,11 +12,11 @@ import (
 
 	"golang.org/x/term"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/store"
-	"keywell/internal/web"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/web"
 )
 
 // adminGroup is the group whose members administer Keywell.

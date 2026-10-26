@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"slices"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // logout handles GET and POST /oauth/logout, RP-initiated logout (OpenID

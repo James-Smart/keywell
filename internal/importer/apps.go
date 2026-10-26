@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	"keywell/internal/admin"
-	"keywell/internal/authentik"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Report copy for apps. Item reasons are full sentences about the app the

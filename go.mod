@@ -1,4 +1,4 @@
-module keywell
+module github.com/James-Smart/keywell
 
 go 1.27
 

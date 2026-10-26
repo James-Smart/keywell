@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Renderer shows the branded pages the OpenID Connect endpoints need. It is

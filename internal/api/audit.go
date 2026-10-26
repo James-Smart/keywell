@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // auditTime reads a ?since= or ?until= value: RFC 3339, or a date

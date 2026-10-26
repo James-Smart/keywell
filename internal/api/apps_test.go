@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/icons"
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/icons"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 const apiApps = "/api/v1/apps"

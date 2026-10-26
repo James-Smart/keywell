@@ -17,11 +17,11 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 const (

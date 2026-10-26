@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/authentik"
-	"keywell/internal/secrets"
-	"keywell/internal/totp"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/totp"
 )
 
 // newCredEnv is newEnv with an encryptor, which TOTP needs.

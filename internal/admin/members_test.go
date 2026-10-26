@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 func TestCreateMemberInvite(t *testing.T) {

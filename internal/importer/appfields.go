@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/authentik"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // Report copy for an app's fields. The report never quotes a link, which

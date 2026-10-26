@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/mail"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
-	"keywell/internal/web"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/web"
 )
 
 const newPW = "a brand new passphrase"

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Messages and limits for service accounts and API tokens.

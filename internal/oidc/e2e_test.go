@@ -11,8 +11,8 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // appCallback is the end-to-end applications' redirect URI. Nothing serves

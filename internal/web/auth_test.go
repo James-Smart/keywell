@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 const testPW = "correct horse battery staple"

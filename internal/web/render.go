@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/model"
-	"keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/session"
 )
 
 //go:embed templates/*.html static/*

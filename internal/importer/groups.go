@@ -3,8 +3,8 @@ package importer
 import (
 	"fmt"
 
-	"keywell/internal/authentik"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // Report copy for groups.

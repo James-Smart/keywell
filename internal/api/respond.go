@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Error messages, and the field message of a bad page or per_page. The

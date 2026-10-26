@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Every rejected sign-in shows msgNoMatch, whatever the reason, so the page

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/config"
 )
 
 func TestTemplatesContainLinkAndBrand(t *testing.T) {

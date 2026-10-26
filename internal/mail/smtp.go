@@ -6,7 +6,7 @@ import (
 
 	gomail "github.com/wneessen/go-mail"
 
-	"keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/config"
 )
 
 // SMTP delivers messages through an SMTP server.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // CreateResetToken stores a new reset or invite token (already hashed).

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 
-	"keywell/internal/audit"
-	"keywell/internal/authentik"
-	"keywell/internal/importer"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/importer"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // readAuthentik reads the Authentik database; tests replace it.

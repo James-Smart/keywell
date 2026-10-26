@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/config"
-	"keywell/internal/importer"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/importer"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // settingsData is what admin_settings.html shows.

@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/metrics"
-	"keywell/internal/session"
-	"keywell/internal/store/storetest"
-	"keywell/internal/testenv"
-	"keywell/internal/web"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/metrics"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store/storetest"
+	"github.com/James-Smart/keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/web"
 )
 
 func get(t *testing.T, c *http.Client, url string) (*http.Response, string) {

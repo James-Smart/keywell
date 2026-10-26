@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"keywell/internal/db"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // OpenTest returns a Store backed by a fresh, migrated temp-file database that

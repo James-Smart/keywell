@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
-	"keywell/internal/totp"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/totp"
 )
 
 const (

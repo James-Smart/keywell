@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/authentik"
 )
 
 // Report copy for access rules. Each "with …" phrase completes "Authentik

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 func TestAPIAudit(t *testing.T) {

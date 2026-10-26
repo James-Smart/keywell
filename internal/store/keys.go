@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // InsertSigningKey stores a signing key; ErrConflict if the kid exists.

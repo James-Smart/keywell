@@ -13,9 +13,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"keywell/internal/config"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // cmdInit sets up a new installation: the config file, the database, the

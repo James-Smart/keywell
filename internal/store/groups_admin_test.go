@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func TestUpdateGroup(t *testing.T) {

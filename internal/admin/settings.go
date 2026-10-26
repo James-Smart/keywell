@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/mail"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // KeyRetireAfter is how long a signing key stays published after a newer

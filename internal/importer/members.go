@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/authentik"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // Report copy for members. Item reasons are full sentences about the

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/db"
 )
 
 func open(t *testing.T) *sql.DB {

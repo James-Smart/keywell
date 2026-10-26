@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/icons"
+	"github.com/James-Smart/keywell/internal/icons"
 )
 
 const (

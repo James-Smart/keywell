@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // addEvent stores an audit event at the given time.

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/session"
-	"keywell/internal/store/storetest"
-	"keywell/internal/web"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store/storetest"
+	"github.com/James-Smart/keywell/internal/web"
 )
 
 // A reverse proxy missing from trusted_proxies makes every member share the

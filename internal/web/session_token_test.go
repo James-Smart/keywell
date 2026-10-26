@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // cookieValue returns the session cookie c holds, or "".

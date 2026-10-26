@@ -7,10 +7,10 @@ import (
 	"io"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // cmdRotateKeys makes a new active signing key, then retires the keys

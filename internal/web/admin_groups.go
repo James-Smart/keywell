@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Messages of the groups pages' own checks and the summaries shown at the

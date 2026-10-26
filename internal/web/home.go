@@ -8,8 +8,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"keywell/internal/model"
-	"keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/session"
 )
 
 // homeTile is one app on the member home.

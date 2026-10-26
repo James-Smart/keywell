@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"os"
 
-	"keywell/internal/icons"
+	"github.com/James-Smart/keywell/internal/icons"
 )
 
 const msgIconRead = "The upload couldn't be read. Try again."

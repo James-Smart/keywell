@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // serviceAccount finds the service account named by the request's {id}: an

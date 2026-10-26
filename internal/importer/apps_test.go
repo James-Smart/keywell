@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/authentik"
-	"keywell/internal/model"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // app returns the Keywell app with this slug.

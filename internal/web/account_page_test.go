@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // alexSmith creates alex@example.org, named Alex Smith, with username

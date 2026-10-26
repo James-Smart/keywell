@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/mail"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // failingMailer refuses every message with an error that echoes the

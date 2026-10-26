@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func oauthFixture(t *testing.T, s *Store) (*model.User, *model.Application) {

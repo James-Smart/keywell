@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // groupResponse makes the JSON of group g, counting its members.

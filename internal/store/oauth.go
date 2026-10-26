@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // CreateAuthCode stores a new authorization code (already hashed).

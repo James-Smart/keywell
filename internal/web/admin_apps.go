@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/config"
-	"keywell/internal/icons"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/icons"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Messages of the applications pages' own checks and the summaries shown

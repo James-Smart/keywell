@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Messages and limits for groups.

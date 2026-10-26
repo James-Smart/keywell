@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 const userCols = `id, name, type, COALESCE(email,''), COALESCE(username,''), password_hash,

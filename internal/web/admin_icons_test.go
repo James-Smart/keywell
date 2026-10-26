@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"testing"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // pngBytes is a valid PNG of w x 1 pixels.

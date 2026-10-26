@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // pkceS256 is the only PKCE method accepted (RFC 7636 §4.2); plain is not.

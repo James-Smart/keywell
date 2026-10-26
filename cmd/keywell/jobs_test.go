@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/db"
-	"keywell/internal/metrics"
-	"keywell/internal/model"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
-	"keywell/internal/store"
-	"keywell/internal/store/storetest"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/metrics"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/store/storetest"
 )
 
 // within bounds each wait in these tests, so a broken loop fails the test

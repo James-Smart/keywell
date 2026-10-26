@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 const appCols = `id, name, slug, client_id, client_secret_hash, client_type, redirect_uris,

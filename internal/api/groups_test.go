@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 const apiGroups = "/api/v1/groups"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func addAudit(t *testing.T, s *Store, at time.Time, actor, action, target, summary string) string {

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func TestTemplateFuncs(t *testing.T) {

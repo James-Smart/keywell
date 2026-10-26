@@ -5,8 +5,8 @@ import (
 	"context"
 	"log/slog"
 
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // ActorSystem is the actor type for events caused by Keywell itself.

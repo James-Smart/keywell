@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"keywell/internal/admin"
-	"keywell/internal/icons"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/icons"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // maxTTLSeconds stops a huge number of seconds overflowing a Duration. It

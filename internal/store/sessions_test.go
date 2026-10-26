@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func mkSession(t *testing.T, s *Store, id, userID string, exp time.Time) *model.Session {

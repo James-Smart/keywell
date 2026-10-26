@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // mkMember creates a member with the given name, email and username.

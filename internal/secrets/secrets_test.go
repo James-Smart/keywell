@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"testing"
 
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 func TestRandomTokenLengthAndUniqueness(t *testing.T) {

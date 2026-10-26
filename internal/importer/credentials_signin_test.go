@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"keywell/internal/importer"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/importer"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // An imported member signs in with their Authentik password, and the

@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"keywell/internal/admin"
-	"keywell/internal/model"
-	"keywell/internal/session"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/admin"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Admin pages live under /admin and make every change through the admin

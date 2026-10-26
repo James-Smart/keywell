@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"keywell/internal/oidc"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // How often serve runs its background jobs.

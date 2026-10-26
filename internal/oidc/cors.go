@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // corsRefresh is how long the set of allowed origins is used before it is

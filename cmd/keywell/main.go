@@ -18,16 +18,16 @@ import (
 	"syscall"
 	"time"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/db"
-	"keywell/internal/mail"
-	"keywell/internal/metrics"
-	"keywell/internal/oidc"
-	"keywell/internal/secrets"
-	"keywell/internal/session"
-	"keywell/internal/store"
-	"keywell/internal/web"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/metrics"
+	"github.com/James-Smart/keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/session"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/web"
 )
 
 // Version is set at build time with -ldflags "-X main.Version=...".

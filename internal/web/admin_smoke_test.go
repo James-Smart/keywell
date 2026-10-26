@@ -14,7 +14,7 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // adminCreate posts a create form with the admin's client and fails unless

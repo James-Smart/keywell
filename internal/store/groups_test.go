@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 func TestGroupsAndMembership(t *testing.T) {

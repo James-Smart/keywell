@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"keywell/internal/audit"
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // Registry holds the counters. Every series exists from the start at 0.

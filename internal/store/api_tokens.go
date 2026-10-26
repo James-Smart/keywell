@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 const apiTokenCols = `id, service_account_id, label, token_hash, scope, created_by_user_id, created_at, last_used_at, expires_at`

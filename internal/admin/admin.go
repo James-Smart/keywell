@@ -24,12 +24,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"keywell/internal/audit"
-	"keywell/internal/config"
-	"keywell/internal/mail"
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 // Notifier emails a member a link to choose a password. *web.Server

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"keywell/internal/audit"
-	"keywell/internal/db"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/db"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 func TestAuditInsertAndRecorder(t *testing.T) {

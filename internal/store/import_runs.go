@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/secrets"
 )
 
 // ImportRun is the record of one import from Authentik.

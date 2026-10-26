@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/mail"
-	"keywell/internal/model"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 const apiUsers = "/api/v1/users"

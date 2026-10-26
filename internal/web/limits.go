@@ -3,7 +3,7 @@ package web
 import (
 	"time"
 
-	"keywell/internal/ratelimit"
+	"github.com/James-Smart/keywell/internal/ratelimit"
 )
 
 // Limiters are the attempt limits on sign-in and password reset requests,

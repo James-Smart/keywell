@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/audit"
-	"keywell/internal/authentik"
-	"keywell/internal/model"
-	"keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/audit"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
 )
 
 const importDSN = "postgres://reader:s3cret@db.internal:5432/authentik"

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/config"
-	"keywell/internal/importer"
-	"keywell/internal/mail"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/config"
+	"github.com/James-Smart/keywell/internal/importer"
+	"github.com/James-Smart/keywell/internal/mail"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 func TestSettingsImportStatus(t *testing.T) {

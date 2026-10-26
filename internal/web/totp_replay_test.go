@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"keywell/internal/model"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // A TOTP code works once (RFC 6238 §5.2): signing in with it again, from

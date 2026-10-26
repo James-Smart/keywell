@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"testing"
 
-	"keywell/internal/model"
-	"keywell/internal/password"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // createServiceAccount stores an active service account with email and,

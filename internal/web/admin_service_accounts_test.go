@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/store"
-	"keywell/internal/testenv"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/store"
+	"github.com/James-Smart/keywell/internal/testenv"
 )
 
 // seedServiceAccount stores an active service account called name, in the

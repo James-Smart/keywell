@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"slices"
 
-	"keywell/internal/authentik"
-	"keywell/internal/password"
-	"keywell/internal/secrets"
-	"keywell/internal/totp"
+	"github.com/James-Smart/keywell/internal/authentik"
+	"github.com/James-Smart/keywell/internal/password"
+	"github.com/James-Smart/keywell/internal/secrets"
+	"github.com/James-Smart/keywell/internal/totp"
 )
 
 // Report copy for credentials.

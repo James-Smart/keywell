@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"keywell/internal/metrics"
+	"github.com/James-Smart/keywell/internal/metrics"
 )
 
 // contentSecurityPolicy allows forms to post to other origins because OIDC

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"keywell/internal/model"
-	"keywell/internal/oidc"
+	"github.com/James-Smart/keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/oidc"
 )
 
 func TestSubjectModes(t *testing.T) {

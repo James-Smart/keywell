@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"keywell/internal/model"
+	"github.com/James-Smart/keywell/internal/model"
 )
 
 // Scopes Keywell knows, in the order ParseScopes returns them.
