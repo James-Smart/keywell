@@ -111,8 +111,16 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 	case err != nil:
 		return nil, err
 	}
-	// The import.run audit event (Task 8) is recorded here: after commit,
-	// only when !opts.DryRun, and through d.Audit when it is set.
+	// The audit event is recorded after commit, through the outer store: the
+	// transaction's store is closed by now. Per-record detail is in the
+	// stored report.
+	if !opts.DryRun && d.Audit != nil {
+		d.Audit.Record(ctx, model.AuditEvent{
+			ActorType: model.ActorImporter,
+			Action:    audit.ImportRun,
+			Summary:   "Imported from Authentik: " + rep.Summary(),
+		})
+	}
 	return rep, nil
 }
 

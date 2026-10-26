@@ -9,11 +9,64 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"latch/internal/config"
+	"latch/internal/importer"
 	"latch/internal/mail"
+	"latch/internal/store"
 	"latch/internal/testenv"
 )
+
+func TestSettingsImportStatus(t *testing.T) {
+	env := testenv.New(t)
+	c, _ := env.AdminClient(t)
+	_, body := env.Page(t, c, "/admin/settings")
+	for _, want := range []string{"Import from Authentik", "Nothing has been imported from Authentik yet."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("no-run page missing %q", want)
+		}
+	}
+
+	rep := importer.Report{
+		Source:  "db.internal:5432/authentik",
+		Members: importer.Counts{Added: 6, Skipped: 1},
+		Groups:  importer.Counts{Added: 4, Updated: 1, Skipped: 2},
+		Apps:    importer.Counts{Added: 3, Skipped: 3},
+		Items: []importer.Item{
+			{Kind: "member", Name: "nomail", Skipped: true, Reason: "Has no email address, so Latch can't sign them in."},
+			{Kind: "app", Name: "Grafana", Reason: "Signs in with SAML, which Latch can't do <yet>."},
+		},
+	}
+	raw, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 3, 14, 5, 0, 0, time.UTC)
+	if err := env.Store.InsertImportRun(context.Background(), &store.ImportRun{
+		StartedAt: at, FinishedAt: at.Add(time.Minute), Source: rep.Source, Report: string(raw),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, body = env.Page(t, c, "/admin/settings")
+	for _, want := range []string{
+		"3 Oct 2026", "db.internal:5432/authentik",
+		"Members: 6 added, 0 updated, 1 skipped",
+		"Groups: 4 added, 1 updated, 2 skipped",
+		"Apps: 3 added, 0 updated, 3 skipped",
+		"<details>", "What was skipped or needs a look (2)",
+		"member nomail", "Has no email address, so Latch can&#39;t sign them in.",
+		"app Grafana", "which Latch can&#39;t do &lt;yet&gt;.",
+		">skipped<", ">warning<",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "Nothing has been imported") {
+		t.Error("empty-state sentence shown after a run")
+	}
+}
 
 // adminLinks are the admin sidebar's links, in order.
 var adminLinks = []string{

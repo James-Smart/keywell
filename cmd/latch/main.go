@@ -40,6 +40,7 @@ commands:
   create-admin    add someone to the Admin group, creating their account if needed
   reset-password  print a one-time link for choosing a new password
   rotate-keys     make a new token signing key and retire old ones
+  import-authentik  copy members, groups and apps from an Authentik database
   version         print the version
 
 Every command but version takes --config PATH (default ./latch.yaml).
@@ -50,12 +51,13 @@ Run latch <command> -h for its flags.
 type command func(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 
 var commands = map[string]command{
-	"init":           cmdInit,
-	"serve":          cmdServe,
-	"create-admin":   cmdCreateAdmin,
-	"reset-password": cmdResetPassword,
-	"rotate-keys":    cmdRotateKeys,
-	"version":        cmdVersion,
+	"init":             cmdInit,
+	"serve":            cmdServe,
+	"create-admin":     cmdCreateAdmin,
+	"reset-password":   cmdResetPassword,
+	"rotate-keys":      cmdRotateKeys,
+	"import-authentik": cmdImportAuthentik,
+	"version":          cmdVersion,
 }
 
 func main() {

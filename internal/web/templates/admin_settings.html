@@ -63,5 +63,30 @@
   </form>
   <p class="hint">Apps pick up the new key automatically. Older keys are retired {{.RetireDays}} days after they're replaced.</p>
 </section>
+
+<section class="panel" aria-labelledby="import">
+  <h2 id="import">Import from Authentik</h2>
+  {{- with .Import}}
+  <p>Imported on {{date .At}} from <code>{{.Source}}</code>.</p>
+  <ul>
+  {{- range .CountLines}}
+    <li>{{.}}</li>
+  {{- end}}
+  </ul>
+  {{- if .Items}}
+  <details>
+    <summary>What was skipped or needs a look ({{len .Items}})</summary>
+    <ul>
+    {{- range .Items}}
+      <li>{{if .Skipped}}<span class="status status-disabled">skipped</span>{{else}}<span class="status">warning</span>{{end}} {{.Kind}} {{.Name}}: {{.Reason}}</li>
+    {{- end}}
+    </ul>
+  </details>
+  {{- end}}
+  {{- else}}
+  <p>Nothing has been imported from Authentik yet.</p>
+  {{- end}}
+  <p class="hint">To import or re-run, use <code>latch import-authentik</code> on the server.</p>
+</section>
 {{- end}}
 {{end}}

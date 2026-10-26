@@ -77,11 +77,8 @@ func (r *Report) WriteText(w io.Writer) error {
 	} else {
 		fmt.Fprintf(&b, "Imported from %s.\n", r.Source)
 	}
-	for _, c := range []struct {
-		kind string
-		n    Counts
-	}{{"Members", r.Members}, {"Groups", r.Groups}, {"Apps", r.Apps}} {
-		fmt.Fprintf(&b, "%s: %d added, %d updated, %d skipped\n", c.kind, c.n.Added, c.n.Updated, c.n.Skipped)
+	for _, line := range r.CountLines() {
+		b.WriteString(line + "\n")
 	}
 	if r.LeftOut > 0 {
 		fmt.Fprintf(&b, "Left out %d service accounts and Authentik's own accounts.\n", r.LeftOut)
@@ -122,6 +119,18 @@ func (r *Report) WriteText(w io.Writer) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// CountLines is the "Members: …", "Groups: …" and "Apps: …" lines.
+func (r *Report) CountLines() []string {
+	var lines []string
+	for _, c := range []struct {
+		kind string
+		n    Counts
+	}{{"Members", r.Members}, {"Groups", r.Groups}, {"Apps", r.Apps}} {
+		lines = append(lines, fmt.Sprintf("%s: %d added, %d updated, %d skipped", c.kind, c.n.Added, c.n.Updated, c.n.Skipped))
+	}
+	return lines
 }
 
 // writeKeys writes the metadata keys apps will see for one kind of record.

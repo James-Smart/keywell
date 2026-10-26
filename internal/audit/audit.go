@@ -60,6 +60,9 @@ const (
 	APITokenRevoke = "api_token.revoke"
 
 	SMTPTest = "settings.smtp_test"
+
+	// ImportRun is one real run of the Authentik importer.
+	ImportRun = "import.run"
 )
 
 // UserActor returns the actor type and ID for an event caused by a user.

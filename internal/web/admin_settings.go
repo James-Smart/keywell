@@ -1,12 +1,16 @@
 package web
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"latch/internal/admin"
 	"latch/internal/config"
+	"latch/internal/importer"
 	"latch/internal/session"
+	"latch/internal/store"
 )
 
 // settingsData is what admin_settings.html shows.
@@ -16,7 +20,16 @@ type settingsData struct {
 	SMTP       smtpSettings
 	AdminEmail string // where the test email goes
 	Keys       []settingsKey
-	RetireDays int // how long a replaced key stays published
+	RetireDays int             // how long a replaced key stays published
+	Import     *settingsImport // nil: nothing has been imported
+}
+
+// settingsImport is the last import from Authentik, as shown.
+type settingsImport struct {
+	At         time.Time
+	Source     string
+	CountLines []string
+	Items      []importer.Item
 }
 
 // smtpSettings are the email settings shown: never the password.
@@ -67,6 +80,20 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 		AdminEmail: user.Email,
 		Keys:       keys,
 		RetireDays: int(admin.KeyRetireAfter / (24 * time.Hour)),
+	}
+	run, err := s.d.Store.LastImportRun(ctx)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+	case err != nil:
+		s.serverError(w, r, "settings: last import run", err)
+		return
+	default:
+		var rep importer.Report
+		if err := json.Unmarshal([]byte(run.Report), &rep); err != nil {
+			s.serverError(w, r, "settings: decode import report", err)
+			return
+		}
+		d.Import = &settingsImport{At: run.FinishedAt, Source: run.Source, CountLines: rep.CountLines(), Items: rep.Items}
 	}
 	if cfg.Branding.Logo != "" {
 		d.LogoURL = "/static/logo"
