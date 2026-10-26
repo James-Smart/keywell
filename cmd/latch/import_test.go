@@ -43,6 +43,16 @@ func importRunCount(t *testing.T, st *store.Store) int {
 	return 1
 }
 
+// importEvents is how many import.run audit events there are.
+func importEvents(t *testing.T, st *store.Store) int {
+	t.Helper()
+	page, err := st.ListAuditEvents(context.Background(), store.AuditFilter{Actions: []string{audit.ImportRun}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(page.Rows)
+}
+
 func TestImportCommand(t *testing.T) {
 	ctx := context.Background()
 	users := []authentik.User{
@@ -62,8 +72,8 @@ func TestImportCommand(t *testing.T) {
 			!strings.Contains(stdout, "Members: 2 added") {
 			t.Errorf("stdout %q", stdout)
 		}
-		if importRunCount(t, st) != 0 {
-			t.Error("a dry run stored an import run")
+		if importRunCount(t, st) != 0 || importEvents(t, st) != 0 {
+			t.Error("a dry run stored an import run or audit event")
 		}
 		if _, err := st.GetUserByEmail(ctx, "alex@example.org"); err == nil {
 			t.Error("a dry run added a member")
@@ -141,8 +151,17 @@ func TestImportCommand(t *testing.T) {
 			!strings.Contains(stdout, "have the same email address apart from capitals") {
 			t.Errorf("stdout %q", stdout)
 		}
-		if importRunCount(t, st) != 0 {
-			t.Error("a blocked import stored a run")
+		if importRunCount(t, st) != 0 || importEvents(t, st) != 0 {
+			t.Error("a blocked import stored a run or audit event")
+		}
+	})
+
+	t.Run("extra arguments are not echoed", func(t *testing.T) {
+		// An unquoted keyword DSN leaves its password as a positional argument.
+		code, stdout, stderr := latch("", "import-authentik", "--config", initInstall(t),
+			"--from", "host=db", "password=s3cret")
+		if code != 2 || strings.Contains(stdout+stderr, "s3cret") || !strings.Contains(stderr, "unexpected arguments") {
+			t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 		}
 	})
 

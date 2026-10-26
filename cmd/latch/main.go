@@ -35,13 +35,13 @@ var Version = "dev"
 const usage = `usage: latch <command> [flags]
 
 commands:
-  init            write a config file, set up the database and the first admin
-  serve           run the web server
-  create-admin    add someone to the Admin group, creating their account if needed
-  reset-password  print a one-time link for choosing a new password
-  rotate-keys     make a new token signing key and retire old ones
+  init              write a config file, set up the database and the first admin
+  serve             run the web server
+  create-admin      add someone to the Admin group, creating their account if needed
+  reset-password    print a one-time link for choosing a new password
+  rotate-keys       make a new token signing key and retire old ones
   import-authentik  copy members, groups and apps from an Authentik database
-  version         print the version
+  version           print the version
 
 Every command but version takes --config PATH (default ./latch.yaml).
 Run latch <command> -h for its flags.

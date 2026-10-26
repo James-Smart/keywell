@@ -37,7 +37,9 @@ func cmdImportAuthentik(args []string, _ io.Reader, stdout, stderr io.Writer) in
 	}
 	switch {
 	case flags.NArg() > 0:
-		return usageError(stderr, "import-authentik", "unexpected argument %q", flags.Arg(0))
+		// Never echo the arguments: an unquoted keyword DSN leaves its
+		// password here.
+		return usageError(stderr, "import-authentik", "unexpected arguments; put the --from value in quotes if it has spaces")
 	case *from == "":
 		return usageError(stderr, "import-authentik", "--from is required")
 	}
