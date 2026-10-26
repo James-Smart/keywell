@@ -32,7 +32,7 @@ func (r *run) writeCredentials() error {
 		tokens[t.UserPK] = append(tokens[t.UserPK], t.Token)
 	}
 	for _, m := range r.members {
-		if m.skipped {
+		if !m.synced() {
 			continue
 		}
 		if m.latch.PasswordHash != "" {

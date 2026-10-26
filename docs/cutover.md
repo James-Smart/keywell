@@ -132,6 +132,8 @@ After fixing, take a fresh copy and run the dry run again.
 - `Has no email address, which Latch needs to sign them in.` Add an email address in Authentik if they should be able to sign in. Otherwise leave them out.
 - `Has an email address Latch can't use.` Correct the address in Authentik.
 
+These two are only for members Latch doesn't have yet. A member an earlier import brought in gets a warning instead (next list).
+
 ### Members: warnings
 
 - `Has a password Latch can't check. They'll need a reset link.` See "What changes for members".
@@ -143,6 +145,8 @@ After fixing, take a fresh copy and run the dry run again.
 - `Has the username …, which differs only in capitals from the username … of member …. Latch keeps both, but apps that ignore capitals may mix them up.` Rename one in Authentik if any of your apps ignores capitals.
 - `Was linked to an Authentik account that no longer exists. Latch now links them to this one, so apps that identify people by their Authentik ID will see a new ID.` Their Authentik account was deleted and made again. An app that identifies people by their Authentik ID will treat them as a new person. Check that app for them after the switch.
 - `Is no longer in Authentik. Latch has left them as they are.` See "Things that disappear from Authentik".
+- `Has no usable email address in Authentik, so Latch kept the one it had.` An earlier import brought them in, and since then their email address in Authentik was removed or broken. Everything else about them is still copied from Authentik, so if Authentik turned them off, Latch does too. Correct the address in Authentik.
+- `Is now a service account in Authentik, so Latch turned their account off.` An earlier import brought them in as a person, and Authentik now marks the account as a service account. Latch turns them off and signs them out, and changes nothing else. If that was a mistake, change the account back in Authentik and import again.
 
 ### Groups
 

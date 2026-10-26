@@ -22,21 +22,29 @@ const (
 	warnRelinked    = "Was linked to an Authentik account that no longer exists. Latch now links them to this one, " +
 		"so apps that identify people by their Authentik ID will see a new ID."
 	warnMemberGone   = "Is no longer in Authentik. Latch has left them as they are."
+	warnKeptEmail    = "Has no usable email address in Authentik, so Latch kept the one it had."
+	warnNowService   = "Is now a service account in Authentik, so Latch turned their account off."
 	warnUsernameCase = "Has the username %s, which differs only in capitals from the username %s of member %s. " +
 		"Latch keeps both, but apps that ignore capitals may mix them up."
 )
 
-// member is a snapshot user who is not left out, and what the import does
-// with them.
+// member is a snapshot user who is not left out, or a Latch member who is
+// now a service account in Authentik, and what the import does with them.
 type member struct {
 	src                   authentik.User
 	name, email, username string         // as Latch stores them
 	metadata              map[string]any // the attributes Latch keeps
 	skipped               bool
+	keptEmail             bool        // email is Latch's, as Authentik has no usable one (Ruling AB)
+	turnOff               bool        // now a service account, so only turned off (Ruling AB)
 	latch                 *model.User // the Latch member matched, nil for a new one; once written, as stored
 	groups                []string    // UUIDs of their Authentik groups, direct and through child groups
 	items                 []Item
 }
+
+// synced reports whether the import keeps the member in step with
+// Authentik: their details, memberships and credentials.
+func (m *member) synced() bool { return !m.skipped && !m.turnOff }
 
 // label names the member in the report: their email, or their username
 // when they have none.
@@ -120,6 +128,15 @@ func (r *run) planMembers() {
 	for i := range r.snap.Users {
 		u := &r.snap.Users[i]
 		if leftOut(u) {
+			// Ruling AB. Matched by Authentik ID only: an email address shared
+			// with a Latch member is no sign they are the same person.
+			if l := idx.byUUID[u.UUID]; l != nil {
+				m := &member{src: *u, latch: l, turnOff: true}
+				m.warn(warnNowService)
+				r.members = append(r.members, m)
+				claimed[l.ID] = true
+				continue
+			}
 			r.rep.LeftOut++
 			continue
 		}
@@ -132,11 +149,16 @@ func (r *run) planMembers() {
 		if m.latch != nil {
 			claimed[m.latch.ID] = true
 		}
-		if prev := emails[foldEmail(m.email)]; prev != nil {
+		// An email address Latch kept isn't Authentik's, so it can't clash
+		// within the snapshot. A snapshot member who has it matches this
+		// Latch member by email, and planMember blocks that.
+		switch prev := emails[foldEmail(m.email)]; {
+		case m.keptEmail:
+		case prev != nil:
 			r.block("Authentik members %s and %s have the same email address apart from capitals. "+
 				"Latch needs a different email address for each member, so change one of them in Authentik.",
 				akRef(&prev.src), akRef(&m.src))
-		} else {
+		default:
 			emails[foldEmail(m.email)] = m
 		}
 		// Ruling 9: usernames stay unique by exact case, with a warning.
@@ -158,24 +180,39 @@ func (r *run) planMembers() {
 	}
 }
 
+// emailProblem is why a member with this email address can't be added to
+// Latch, or "" when Latch can use it.
+func emailProblem(email string) string {
+	switch {
+	case email == "":
+		return reasonNoEmail
+	case admin.MemberProblems("", email, "", nil)["email"] != "":
+		return reasonBadEmail
+	}
+	return ""
+}
+
 // planMember works out how Latch stores u, and which Latch member u is.
 func (r *run) planMember(u *authentik.User, idx latchUsers, inSnap map[string]*authentik.User) *member {
 	m := &member{src: *u}
 	m.email = strings.TrimSpace(u.Email)
-	if m.email == "" {
-		m.skip(reasonNoEmail)
-		return m
-	}
 	m.username = strings.TrimSpace(u.Username)
-	m.name = cmp.Or(strings.TrimSpace(u.Name), m.username, m.email)
 	m.metadata = r.keep(u.Attributes)
-
-	// Ruling D: the member pages' rules.
-	probs := admin.MemberProblems(m.name, m.email, m.username, m.metadata)
-	if probs["email"] != "" {
-		m.skip(reasonBadEmail)
-		return m
+	// Ruling AB: the Authentik ID is matched before the email is checked, so
+	// a member Latch has stays in step when their email address goes bad.
+	linked := idx.byUUID[u.UUID]
+	if reason := emailProblem(m.email); reason != "" {
+		if linked == nil {
+			m.skip(reason)
+			return m
+		}
+		m.email, m.keptEmail = linked.Email, true
+		m.warn(warnKeptEmail)
 	}
+	m.name = cmp.Or(strings.TrimSpace(u.Name), m.username, m.email)
+
+	// Ruling D: the member pages' rules. The email address passes by now.
+	probs := admin.MemberProblems(m.name, m.email, m.username, m.metadata)
 	if probs["name"] != "" {
 		m.warn(warnLongName)
 	}
@@ -188,11 +225,12 @@ func (r *run) planMember(u *authentik.User, idx latchUsers, inSnap map[string]*a
 	}
 
 	// Match on Authentik UUID, then email.
-	if l := idx.byUUID[u.UUID]; l != nil {
-		m.latch = l
-		if other := idx.byEmail[foldEmail(m.email)]; other != nil && other.ID != l.ID {
+	if linked != nil {
+		m.latch = linked
+		if other := idx.byEmail[foldEmail(m.email)]; other != nil && other.ID != linked.ID {
 			r.block("%s is linked to %s, but %s already has that email address. "+
-				"Change the email address of one of them in Authentik or Latch.", akMember(u), latchRef(l), latchRef(other))
+				"Change the email address of one of them in Authentik or Latch.", akMember(u), latchRef(linked),
+				latchRef(other))
 		}
 	} else if l := idx.byEmail[foldEmail(m.email)]; l != nil {
 		switch old := inSnap[l.AuthentikUUID]; {
@@ -221,6 +259,11 @@ func (r *run) writeMembers() error {
 	for _, m := range r.members {
 		switch {
 		case m.skipped:
+		case m.turnOff:
+			if err := r.turnOffMember(m); err != nil {
+				return err
+			}
+			r.rep.Members.Updated++
 		case m.latch == nil:
 			if err := r.addMember(m); err != nil {
 				return err
@@ -280,14 +323,42 @@ func (r *run) updateMember(m *member) error {
 		u.LastLoginAt = utc(at)
 	}
 	if old.IsActive && !u.IsActive {
-		if err := r.tx.DeleteSessionsForUser(r.ctx, u.ID); err != nil {
-			return fmt.Errorf("importer: sign out member %s: %w", m.email, err)
-		}
-		if err := r.tx.RevokeRefreshTokensForUser(r.ctx, u.ID); err != nil {
-			return fmt.Errorf("importer: sign out member %s: %w", m.email, err)
+		if err := r.signOut(&u); err != nil {
+			return err
 		}
 	}
 	m.latch = &u
+	return nil
+}
+
+// turnOffMember turns off a Latch member who is now a service account in
+// Authentik, and signs them out everywhere. Nothing else about them
+// changes.
+func (r *run) turnOffMember(m *member) error {
+	old := m.latch
+	if !old.IsActive {
+		return nil
+	}
+	u := *old
+	u.IsActive = false
+	if err := r.tx.UpdateUser(r.ctx, &u); err != nil {
+		return fmt.Errorf("importer: turn off member %s: %w", u.Email, err)
+	}
+	if err := r.signOut(&u); err != nil {
+		return err
+	}
+	m.latch = &u
+	return nil
+}
+
+// signOut ends the member's sessions and revokes their refresh tokens.
+func (r *run) signOut(u *model.User) error {
+	if err := r.tx.DeleteSessionsForUser(r.ctx, u.ID); err != nil {
+		return fmt.Errorf("importer: sign out member %s: %w", u.Email, err)
+	}
+	if err := r.tx.RevokeRefreshTokensForUser(r.ctx, u.ID); err != nil {
+		return fmt.Errorf("importer: sign out member %s: %w", u.Email, err)
+	}
 	return nil
 }
 

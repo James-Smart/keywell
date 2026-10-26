@@ -48,7 +48,7 @@ func (r *run) planGroups() {
 	// A member of a group is a member of every group above it.
 	memberCount := map[string]int{}
 	for _, m := range r.members {
-		if m.skipped {
+		if !m.synced() {
 			continue
 		}
 		m.groups = withAncestors(direct[m.src.PK], parents)
@@ -193,7 +193,7 @@ func (r *run) writeMemberships() error {
 		}
 	}
 	for _, m := range r.members {
-		if m.skipped {
+		if !m.synced() {
 			continue
 		}
 		want := map[string]bool{}

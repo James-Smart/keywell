@@ -189,7 +189,7 @@ func (r *run) finish() {
 	var memberMeta, groupMeta []map[string]any
 	for _, m := range r.members {
 		r.rep.Items = append(r.rep.Items, m.items...)
-		if !m.skipped {
+		if m.synced() {
 			memberMeta = append(memberMeta, m.metadata)
 		}
 	}

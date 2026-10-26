@@ -27,11 +27,12 @@ const testSource = "db.internal:5432/authentik"
 
 // env is a migrated database and the Deps of an import into it.
 type env struct {
-	t   *testing.T
-	st  *store.Store
-	db  *sql.DB
-	d   Deps
-	now time.Time // what Deps.Now returns
+	t         *testing.T
+	st        *store.Store
+	db        *sql.DB
+	d         Deps
+	now       time.Time          // what Deps.Now returns
+	signInApp *model.Application // the app signIn gives refresh tokens for, made on first use
 }
 
 func newEnv(t *testing.T) *env {
@@ -568,35 +569,60 @@ func TestImportKeepsLatchOnlyState(t *testing.T) {
 	}
 }
 
-func TestImportDisablesAndSignsOut(t *testing.T) {
+// signIn gives the member with this email a session and a refresh token,
+// as signing in to Latch and then to an app would, and returns them.
+func (e *env) signIn(email string) (sessionID, tokenHash string) {
+	e.t.Helper()
 	ctx := context.Background()
+	if e.signInApp == nil {
+		e.signInApp = &model.Application{Name: "Signed in", Slug: "signed-in", ClientID: "signed-in"}
+		if err := e.st.CreateApplication(ctx, e.signInApp); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+	u := e.user(email)
+	now := time.Now().UTC()
+	sessionID, tokenHash = secrets.NewID(), secrets.HashToken(secrets.NewID())
+	if err := e.st.CreateSession(ctx, &model.Session{ID: sessionID, UserID: u.ID, CreatedAt: now,
+		LastSeenAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := e.st.CreateRefreshToken(ctx, &model.RefreshToken{TokenHash: tokenHash, FamilyID: secrets.NewID(),
+		ApplicationID: e.signInApp.ID, UserID: u.ID, AuthTime: now, CreatedAt: now, ExpiresAt: now.Add(time.Hour),
+		AbsoluteExpiresAt: now.Add(time.Hour)}); err != nil {
+		e.t.Fatal(err)
+	}
+	return sessionID, tokenHash
+}
+
+// signedIn reports whether the session still exists and the refresh token
+// is still unrevoked, failing the test when they disagree.
+func (e *env) signedIn(sessionID, tokenHash string) bool {
+	e.t.Helper()
+	ctx := context.Background()
+	_, err := e.st.GetSession(ctx, sessionID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		e.t.Fatal(err)
+	}
+	tok, terr := e.st.GetRefreshToken(ctx, tokenHash)
+	if terr != nil {
+		e.t.Fatal(terr)
+	}
+	if session, token := err == nil, tok.RevokedAt == nil; session != token {
+		e.t.Fatalf("session kept %v, refresh token kept %v", session, token)
+	}
+	return err == nil
+}
+
+func TestImportDisablesAndSignsOut(t *testing.T) {
 	e := newEnv(t)
 	s := NewSnap()
 	pat := s.User("pat", "pat@example.org")
 	s.User("alex", "alex@example.org")
 	e.run(s)
 
-	app := &model.Application{Name: "Wiki", Slug: "wiki", ClientID: "wiki"}
-	if err := e.st.CreateApplication(ctx, app); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	signIn := func(email string) (sessionID, tokenHash string) {
-		u := e.user(email)
-		sessionID, tokenHash = secrets.NewID(), secrets.HashToken(secrets.NewID())
-		if err := e.st.CreateSession(ctx, &model.Session{ID: sessionID, UserID: u.ID, CreatedAt: now,
-			LastSeenAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
-			t.Fatal(err)
-		}
-		if err := e.st.CreateRefreshToken(ctx, &model.RefreshToken{TokenHash: tokenHash, FamilyID: secrets.NewID(),
-			ApplicationID: app.ID, UserID: u.ID, AuthTime: now, CreatedAt: now, ExpiresAt: now.Add(time.Hour),
-			AbsoluteExpiresAt: now.Add(time.Hour)}); err != nil {
-			t.Fatal(err)
-		}
-		return sessionID, tokenHash
-	}
-	patSession, patToken := signIn("pat@example.org")
-	alexSession, alexToken := signIn("alex@example.org")
+	patSession, patToken := e.signIn("pat@example.org")
+	alexSession, alexToken := e.signIn("alex@example.org")
 
 	s.U(pat).IsActive = false
 	e.run(s)
@@ -604,17 +630,176 @@ func TestImportDisablesAndSignsOut(t *testing.T) {
 	if e.user("pat@example.org").IsActive {
 		t.Error("pat is still active")
 	}
-	if _, err := e.st.GetSession(ctx, patSession); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("pat's session: %v", err)
+	if e.signedIn(patSession, patToken) {
+		t.Error("pat is still signed in")
 	}
-	if tok, err := e.st.GetRefreshToken(ctx, patToken); err != nil || tok.RevokedAt == nil {
-		t.Errorf("pat's refresh token not revoked: %+v, %v", tok, err)
+	if !e.signedIn(alexSession, alexToken) {
+		t.Error("alex was signed out")
 	}
-	if _, err := e.st.GetSession(ctx, alexSession); err != nil {
-		t.Errorf("alex's session: %v", err)
+}
+
+// Ruling AB, the review's probe: a member Latch already has whose email
+// Authentik clears is still kept in step. Bob is disabled, removed from
+// Laser and changed in every other way in the same snapshot.
+func TestImportSyncsMemberWithNoUsableEmail(t *testing.T) {
+	e := newEnv(t)
+	s := NewSnap()
+	laser := s.Group("Laser")
+	bob := s.User("bob", "bob@example.org", WithName("Bob"))
+	s.Join(bob, laser)
+	e.run(s)
+	before := e.user("bob@example.org")
+	if !before.IsActive || before.LegacyPasswordHash != UsableHash {
+		t.Fatalf("bob after the first run = %+v", before)
 	}
-	if tok, err := e.st.GetRefreshToken(ctx, alexToken); err != nil || tok.RevokedAt != nil {
-		t.Errorf("alex's refresh token: %+v, %v", tok, err)
+	session, token := e.signIn("bob@example.org")
+
+	b := s.U(bob)
+	b.Email, b.IsActive, b.Name, b.Username = "", false, "Robert", "robert"
+	b.Attributes = map[string]any{"member_number": 7}
+	b.Password = ""
+	s.Leave(bob, laser)
+	rep := e.run(s)
+
+	u := e.user("bob@example.org")
+	if u.ID != before.ID || u.Email != "bob@example.org" || u.IsActive || u.Name != "Robert" || u.Username != "robert" ||
+		!reflect.DeepEqual(u.Metadata, map[string]any{"member_number": float64(7)}) {
+		t.Errorf("bob = %+v", u)
+	}
+	if got := e.groupsOf("bob@example.org"); len(got) != 0 {
+		t.Errorf("bob in %v, want no groups", got)
+	}
+	if e.signedIn(session, token) {
+		t.Error("bob is still signed in")
+	}
+	if u.LegacyPasswordHash != "" || rep.NoPassword != 1 {
+		t.Errorf("password not carried over: legacy %q, no password %d", u.LegacyPasswordHash, rep.NoPassword)
+	}
+	want := []Item{{Kind: "member", Name: "robert",
+		Reason: "Has no usable email address in Authentik, so Latch kept the one it had."}}
+	if !reflect.DeepEqual(rep.Items, want) {
+		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
+	}
+	if rep.Members != (Counts{Updated: 1}) {
+		t.Errorf("Members = %+v", rep.Members)
+	}
+}
+
+// Ruling AB: a matched member whose Authentik email Latch can't use keeps
+// the email Latch has. A new member with one is still skipped.
+func TestImportKeepsLatchEmailWhenAuthentiksIsBad(t *testing.T) {
+	e := newEnv(t)
+	s := NewSnap()
+	bob := s.User("bob", "bob@example.org")
+	e.run(s)
+	session, token := e.signIn("bob@example.org")
+
+	s.U(bob).Email = "bob at example.org"
+	s.U(bob).Name = "Bob Bobson"
+	s.User("new", "new at example.org")
+	rep := e.run(s)
+
+	u := e.user("bob@example.org")
+	if u.Email != "bob@example.org" || !u.IsActive || u.Name != "Bob Bobson" {
+		t.Errorf("bob = %+v", u)
+	}
+	if !e.signedIn(session, token) {
+		t.Error("bob was signed out")
+	}
+	want := []Item{
+		{Kind: "member", Name: "bob at example.org",
+			Reason: "Has no usable email address in Authentik, so Latch kept the one it had."},
+		{Kind: "member", Name: "new at example.org", Skipped: true, Reason: "Has an email address Latch can't use."},
+	}
+	if !reflect.DeepEqual(rep.Items, want) {
+		t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
+	}
+	if rep.Members != (Counts{Updated: 1, Skipped: 1}) {
+		t.Errorf("Members = %+v", rep.Members)
+	}
+}
+
+// An email address Latch kept for a member is not one of Authentik's, so
+// another Authentik member who has it is blocked as having that Latch
+// member's email address, and not as sharing an email within Authentik.
+func TestImportKeptEmailTakenInAuthentik(t *testing.T) {
+	e := newEnv(t)
+	s := NewSnap()
+	bob := s.User("bob", "bob@example.org")
+	e.run(s)
+	s.U(bob).Email = ""
+	s.User("robert", "Bob@example.org")
+
+	rep, err := e.try(s)
+	if !errors.Is(err, ErrBlocked) {
+		t.Fatalf("err = %v, want ErrBlocked", err)
+	}
+	want := []string{"Authentik member robert (Bob@example.org) has the email address of Latch member bob@example.org, " +
+		"but that Latch member is linked to Authentik member bob. Change the email address of one of them in Authentik or Latch."}
+	if !reflect.DeepEqual(rep.Blocking, want) {
+		t.Errorf("Blocking:\n got %q\nwant %q", rep.Blocking, want)
+	}
+}
+
+// Ruling AB: a matched member who is now a service account in Authentik is
+// turned off and signed out everywhere, and counted as updated.
+func TestImportTurnsOffMemberWhoIsNowAServiceAccount(t *testing.T) {
+	for _, typ := range []string{"service_account", "internal_service_account"} {
+		t.Run(typ, func(t *testing.T) {
+			e := newEnv(t)
+			s := NewSnap()
+			laser := s.Group("Laser")
+			bob := s.User("bob", "bob@example.org", WithName("Bob"))
+			s.User("sam", "sam@example.org")
+			s.Join(bob, laser)
+			e.run(s)
+			bobSession, bobToken := e.signIn("bob@example.org")
+			samSession, samToken := e.signIn("sam@example.org")
+
+			// Only turned off: what else Authentik changed stays as it was.
+			s.U(bob).Type, s.U(bob).Name, s.U(bob).Password = typ, "Door Bot", ""
+			s.Leave(bob, laser)
+			rep := e.run(s)
+
+			if u := e.user("bob@example.org"); u.IsActive || u.Name != "Bob" || u.LegacyPasswordHash != UsableHash {
+				t.Errorf("bob = %+v, want only turned off", u)
+			}
+			if got := e.groupsOf("bob@example.org"); !slices.Equal(got, []string{"Laser"}) {
+				t.Errorf("bob in %v, want still in Laser", got)
+			}
+			if e.signedIn(bobSession, bobToken) {
+				t.Error("bob is still signed in")
+			}
+			if !e.user("sam@example.org").IsActive || !e.signedIn(samSession, samToken) {
+				t.Error("sam was turned off or signed out")
+			}
+			want := []Item{{Kind: "member", Name: "bob@example.org",
+				Reason: "Is now a service account in Authentik, so Latch turned their account off."}}
+			if !reflect.DeepEqual(rep.Items, want) {
+				t.Errorf("Items:\n got %+v\nwant %+v", rep.Items, want)
+			}
+			if rep.Members != (Counts{Updated: 2}) || rep.LeftOut != 0 {
+				t.Errorf("Members = %+v, left out %d", rep.Members, rep.LeftOut)
+			}
+		})
+	}
+}
+
+// A service account is matched only by its Authentik ID: one that shares an
+// email address with a Latch member Authentik never linked to it leaves
+// that member alone.
+func TestImportServiceAccountNeverMatchesByEmail(t *testing.T) {
+	e := newEnv(t)
+	ada := e.mkLatchAdmin("ada@example.org")
+	s := NewSnap()
+	s.User("ada-bot", "ada@example.org", WithType("service_account"))
+	rep := e.run(s)
+
+	if u := e.user("ada@example.org"); !u.IsActive || u.AuthentikUUID != "" || u.ID != ada.ID {
+		t.Errorf("ada = %+v", u)
+	}
+	if rep.LeftOut != 1 || rep.Members != (Counts{}) || len(rep.Items) != 0 {
+		t.Errorf("left out %d, members %+v, items %+v", rep.LeftOut, rep.Members, rep.Items)
 	}
 }
 
