@@ -498,13 +498,14 @@ func TestImportAppMapping(t *testing.T) {
 	}
 }
 
-// An app whose client ID a Latch app linked to another Authentik app still
-// has is skipped, and the import carries on; a Latch app whose Authentik
-// app is gone is left as it is.
+// An app whose client ID another Latch app has is skipped, and the import
+// carries on; a Latch app whose Authentik app is gone is left as it is.
 func TestImportAppConflicts(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := NewSnap()
+	groupA := s.Group("A")
+	s.Join(s.User("ann", "ann@x.org"), groupA)
 	lab := s.App("Lab", "lab")
 	labPK := s.Provider(labProvider())
 	s.Use(lab, labPK)
@@ -548,8 +549,39 @@ func TestImportAppConflicts(t *testing.T) {
 	if rep.Apps != (Counts{Added: 1, Updated: 1}) {
 		t.Errorf("second run: Apps = %+v", rep.Apps)
 	}
-	if a := e.app("lab"); a.ClientID != "lab-client-id" || a.AuthentikProviderPK == nil || *a.AuthentikProviderPK != labPK {
-		t.Errorf("lab = %+v", a)
+	labBefore := e.app("lab")
+	if labBefore.ClientID != "lab-client-id" || labBefore.AuthentikProviderPK == nil || *labBefore.AuthentikProviderPK != labPK {
+		t.Errorf("lab = %+v", labBefore)
+	}
+
+	// Lab, imported open, now takes a hand-made app's client ID and is
+	// limited to group A in Authentik. It is skipped, but who can use it
+	// follows Authentik (Ruling N).
+	spare := &model.Application{Name: "Spare", Slug: "spare", ClientID: "spare-client-id"}
+	if err := e.st.CreateApplication(ctx, spare); err != nil {
+		t.Fatal(err)
+	}
+	s.P(labPK).ClientID = "spare-client-id"
+	s.Bind(lab, groupA)
+	rep = e.run(s)
+	want = []Item{{Kind: "app", Name: "Lab", Skipped: true,
+		Reason: "Another app in Latch already uses its client ID. Who can use it still follows Authentik."}}
+	var got []Item
+	for _, it := range appItems(rep) {
+		if it.Name == "Lab" {
+			got = append(got, it)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("third run Lab items:\n got %s\nwant %s", itemLines(got), itemLines(want))
+	}
+	a := e.app("lab")
+	if !slices.Equal(a.AllowedGroupIDs, e.groupIDs("A")) {
+		t.Errorf("skipped lab allows %v, want only A", a.AllowedGroupIDs)
+	}
+	a.AllowedGroupIDs, a.UpdatedAt = labBefore.AllowedGroupIDs, labBefore.UpdatedAt
+	if !reflect.DeepEqual(a, labBefore) {
+		t.Errorf("skipped lab changed beyond its groups:\n%+v\n%+v", labBefore, a)
 	}
 }
 
@@ -622,29 +654,57 @@ func TestImportAppsUpdate(t *testing.T) {
 		}
 	}
 
-	// An app that breaks the app pages' rules is skipped and left as it was.
+	// An app that breaks the app pages' rules is skipped and left as it was,
+	// except that who can use it follows Authentik (Ruling N): here
+	// Authentik narrows Wiki from Members to Laser.
 	p := s.P(providerPK(s, "wiki"))
 	for i := range 20 {
 		p.RedirectURIs = append(p.RedirectURIs, authentik.RedirectURI{URL: fmt.Sprintf("https://wiki.example.org/cb%d", i),
 			MatchingMode: "strict", Type: "authorization"})
 	}
-	s.A(appUUID(s, "Wiki")).Description = strings.Repeat("d", 501)
-	rep = e.run(s)
-	want := []Item{{Kind: "app", Name: "Wiki", Skipped: true,
-		Reason: "Use at most 500 characters. Add at most 20 addresses."}}
-	var got []Item
-	for _, it := range appItems(rep) {
-		if it.Name == "Wiki" {
-			got = append(got, it)
+	wikiUUID := appUUID(s, "Wiki")
+	s.A(wikiUUID).Description = strings.Repeat("d", 501)
+	for i := range s.Bindings {
+		if s.Bindings[i].TargetUUID == wikiUUID {
+			s.Bindings[i].GroupUUID = e.group("Laser").AuthentikUUID
 		}
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Wiki items:\n got %s\nwant %s", itemLines(got), itemLines(want))
+	wantWiki := []Item{{Kind: "app", Name: "Wiki", Skipped: true,
+		Reason: "Use at most 500 characters. Add at most 20 addresses. Who can use it still follows Authentik."}}
+	wikiItems := func(rep *Report) []Item {
+		var out []Item
+		for _, it := range appItems(rep) {
+			if it.Name == "Wiki" {
+				out = append(out, it)
+			}
+		}
+		return out
+	}
+
+	rep = e.run(s)
+	if got := wikiItems(rep); !reflect.DeepEqual(got, wantWiki) {
+		t.Errorf("Wiki items:\n got %s\nwant %s", itemLines(got), itemLines(wantWiki))
 	}
 	if rep.Apps != (Counts{Updated: 2, Skipped: 4}) {
 		t.Errorf("third run: Apps = %+v", rep.Apps)
 	}
-	if now := e.app("wiki"); !reflect.DeepEqual(now, before["wiki"]) {
-		t.Errorf("skipped wiki changed:\n%+v\n%+v", before["wiki"], now)
+	narrowed := e.app("wiki")
+	if !slices.Equal(narrowed.AllowedGroupIDs, e.groupIDs("Laser")) {
+		t.Errorf("skipped wiki allows %v, want only Laser", narrowed.AllowedGroupIDs)
+	}
+	sameApart := *narrowed
+	sameApart.AllowedGroupIDs, sameApart.UpdatedAt = before["wiki"].AllowedGroupIDs, before["wiki"].UpdatedAt
+	if !reflect.DeepEqual(&sameApart, before["wiki"]) {
+		t.Errorf("skipped wiki changed beyond its groups:\n%+v\n%+v", before["wiki"], narrowed)
+	}
+
+	// When the groups already match, nothing is written, and the reason
+	// still says so.
+	rep = e.run(s)
+	if got := wikiItems(rep); !reflect.DeepEqual(got, wantWiki) {
+		t.Errorf("fourth run Wiki items:\n got %s\nwant %s", itemLines(got), itemLines(wantWiki))
+	}
+	if now := e.app("wiki"); !reflect.DeepEqual(now, narrowed) {
+		t.Errorf("fourth run wrote wiki:\n%+v\n%+v", narrowed, now)
 	}
 }

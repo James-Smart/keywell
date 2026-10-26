@@ -20,6 +20,10 @@ const (
 		"Only admins can use it until you choose its groups on the app's page."
 	reasonNoAdminGroup = "Authentik limited who could use it %s, and Latch has no admin group to limit it to " +
 		"instead. Make an admin group in Latch, then import again."
+
+	// noteAccessFollows ends the reason of a skipped app whose groups still
+	// follow Authentik (Ruling N).
+	noteAccessFollows = " Who can use it still follows Authentik."
 )
 
 // accessGroups is what appAccess needs to know about Latch's groups once
@@ -123,4 +127,31 @@ func appAccess(engineMode string, bindings []authentik.Binding, ag accessGroups)
 		return access{skip: fmt.Sprintf(reasonNoAdminGroup, with)}
 	}
 	return access{groupIDs: slices.Clone(ag.admins), warning: fmt.Sprintf(warnAdminsOnly, with)}
+}
+
+// skipFollowingAccess skips a with reason. When a's Latch app came from an
+// earlier import, its allowed groups still become allowed, as appAccess
+// decided for this run, so that a skip never leaves an app open wider than
+// Authentik (Ruling N). Every other field is left as it was, and nothing is
+// written when the groups already match.
+func (r *run) skipFollowingAccess(a *importApp, reason string, allowed []string) error {
+	l := a.latch
+	if l == nil || l.AuthentikProviderPK == nil {
+		a.skip(reason)
+		return nil
+	}
+	if !sameIDs(l.AllowedGroupIDs, allowed) {
+		u := *l
+		u.AllowedGroupIDs = allowed
+		if err := r.tx.UpdateApplication(r.ctx, &u); err != nil {
+			return fmt.Errorf("importer: set who can use app %s: %w", a.src.Name, err)
+		}
+	}
+	a.skip(reason + noteAccessFollows)
+	return nil
+}
+
+// sameIDs reports whether a and b hold the same IDs, in any order.
+func sameIDs(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
 }

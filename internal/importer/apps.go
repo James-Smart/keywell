@@ -201,21 +201,22 @@ func (r *run) matchApps(apps []*importApp) map[string]bool {
 
 // writeApp maps one application, checks it with the app pages' rules, and
 // adds or updates its Latch app. An app that breaks a rule, or whose client
-// ID another Latch app has, is skipped; the store call undoes its own
-// writes, so the import carries on.
+// ID another Latch app has, is skipped (the store call undoes its own
+// writes, so the import carries on), but who can use it still follows
+// Authentik (Ruling N).
 func (r *run) writeApp(svc *admin.Service, a *importApp, ag accessGroups, bindings []authentik.Binding,
 	mappings []authentik.ProviderMapping) error {
 	app := r.mapApp(a, ag, bindings, mappings)
 	if a.skipped {
 		return nil
 	}
+	allowed := slices.Clone(app.AllowedGroupIDs) // as appAccess decided, before CheckApp tidies app
 	if err := svc.CheckApp(r.ctx, app); err != nil {
 		var ve *admin.ValidationError
 		if !errors.As(err, &ve) {
 			return fmt.Errorf("importer: check app %s: %w", a.src.Name, err)
 		}
-		a.skip(joinMessages(ve.Fields))
-		return nil
+		return r.skipFollowingAccess(a, joinMessages(ve.Fields), allowed)
 	}
 	var err error
 	switch {
@@ -232,7 +233,7 @@ func (r *run) writeApp(svc *admin.Service, a *importApp, ag accessGroups, bindin
 	}
 	switch {
 	case errors.Is(err, store.ErrConflict): // CheckApp checked the slug, so it is the client ID
-		a.skip(reasonClientTaken)
+		return r.skipFollowingAccess(a, reasonClientTaken, allowed)
 	case err != nil:
 		return fmt.Errorf("importer: save app %s: %w", a.src.Name, err)
 	}
@@ -390,7 +391,7 @@ func appChanged(a, b *model.Application) bool {
 	return a.Name != b.Name || a.Slug != b.Slug || a.ClientID != b.ClientID || a.ClientSecretHash != b.ClientSecretHash ||
 		a.ClientType != b.ClientType || !slices.Equal(a.RedirectURIs, b.RedirectURIs) ||
 		!slices.Equal(a.PostLogoutRedirectURIs, b.PostLogoutRedirectURIs) ||
-		!slices.Equal(slices.Sorted(slices.Values(a.AllowedGroupIDs)), slices.Sorted(slices.Values(b.AllowedGroupIDs))) ||
+		!sameIDs(a.AllowedGroupIDs, b.AllowedGroupIDs) ||
 		a.SubjectMode != b.SubjectMode || a.AccessTokenTTL != b.AccessTokenTTL || a.IDTokenTTL != b.IDTokenTTL ||
 		a.RefreshTokenTTL != b.RefreshTokenTTL || a.LaunchURL != b.LaunchURL || a.IconURL != b.IconURL ||
 		a.Description != b.Description || a.ShowTile != b.ShowTile || a.ServiceAccountID != b.ServiceAccountID ||

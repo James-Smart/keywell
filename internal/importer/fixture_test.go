@@ -278,9 +278,9 @@ func DevStack() *Snap {
 	s.Join(pat, members)
 	s.Join(nomail, members)
 
-	// The seed sets only Tool Booking's grant types and leaves the others at
-	// Authentik's default, taken here to exclude client_credentials.
-	defaultGrants := []string{"authorization_code", "refresh_token"}
+	// The seed sets only Tool Booking's grant types; the others keep the
+	// default, which is empty (checked on the dev stack).
+	defaultGrants := []string{}
 	strict := func(url, typ string) authentik.RedirectURI {
 		return authentik.RedirectURI{URL: url, MatchingMode: "strict", Type: typ}
 	}
