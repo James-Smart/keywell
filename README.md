@@ -196,9 +196,9 @@ Every command except `version` takes `--config PATH` (default `./latch.yaml`). R
 | `latch create-admin --email EMAIL` | Adds someone to the Admin group, creating their account if they don't have one. |
 | `latch reset-password EMAIL` | Prints a link the member can use once, within an hour, to choose a new password. |
 | `latch rotate-keys [--retire-after 90d]` | Makes a new token signing key and retires older keys that were replaced more than `--retire-after` ago. A running server picks up the change within 5 minutes. |
-| `latch import-authentik --from DSN [--dry-run] [--drop-key KEY]...` | Copies members, groups and apps from an Authentik database, with their passwords, two-step sign in and recovery codes. `--dry-run` shows what would be copied and saves nothing. Rerun it as often as you like. Put the database password in the `PGPASSWORD` environment variable instead of in `--from` if you prefer. |
+| `latch import-authentik --from DSN [--dry-run] [--drop-key KEY]...` | Copies members, groups and apps from an Authentik database, with their passwords, two-step sign in and recovery codes. `--dry-run` shows what would be copied and saves nothing. Rerun it as often as you like. The step-by-step move is in [docs/cutover.md](docs/cutover.md). Put the database password in the `PGPASSWORD` environment variable instead of in `--from` if you prefer. |
 | `latch version` | Prints the version. |
 
 ## Status
 
-Sign-in, password reset, two-step sign in, the member home page, the OpenID Connect endpoints, the commands above, the admin pages, the admin API and the Authentik importer work. To move from Authentik to Latch, follow `docs/cutover.md`.
+Sign-in, password reset, two-step sign in, the member home page, the OpenID Connect endpoints, the commands above, the admin pages, the admin API and the Authentik importer work. To move from Authentik to Latch, follow [docs/cutover.md](docs/cutover.md).

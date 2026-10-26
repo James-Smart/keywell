@@ -1,0 +1,291 @@
+# Moving from Authentik to Latch
+
+This is a checklist for the person doing the move. You don't need to know how Latch works inside. You do need to be able to log in to the server that runs Authentik, the server that will run Latch, and the server that runs the wiki.
+
+The plan: install Latch beside Authentik, copy everything across a few times to practise, then on one chosen day copy it a last time and point the wiki and the other apps at Latch. Authentik stays untouched until you are happy, so you can always go back.
+
+Every command below was tried against a test Authentik. Where a command has `…` in it, fill in your own value.
+
+## 1. What changes for members
+
+- The login page looks different. Nothing else does.
+- Passwords carry over, so members sign in with the password they have now.
+- Authenticator apps carry over too, with their recovery codes. Members keep using the same app and the same codes.
+- A few members may have a password Latch can't check. The report counts them as "no usable password" (see "Reading the report"). They click "Forgot your password?" on the login page and get an email with a link to choose a new one. If email isn't set up, or someone is stuck, run `latch reset-password their@email` and send them the link it prints.
+- The wiki and your own apps see the same member IDs as before, so nobody loses their account in an app.
+
+## 2. A week before
+
+1. **Install Latch** on its own web address, for example `https://login.example.org`, following "Running Latch for real" in the README. Authentik keeps running on its own address. Don't send members to Latch yet.
+
+   `latch init` ends by telling you to edit `latch.yaml`. If you run Latch under Docker, don't: the image has no editor, and you change settings with `LATCH_…` variables instead. The Docker part of "Running Latch for real" in the README explains how.
+
+2. **Take a copy of Authentik's database.** On the server that runs Authentik, go to the folder that holds Authentik's `docker-compose.yml` and run:
+
+   ```sh
+   docker compose exec -T postgresql pg_dump -U authentik -d authentik -Fc > authentik.dump
+   ```
+
+   This only reads. Authentik carries on as normal. If the database service, user or database has another name on your server, use those names. They are in Authentik's `.env` file and compose file. The dump holds everyone's password hashes, so keep it private and delete it when you finish (section 7).
+
+3. **Put the copy into a throwaway database.** This is a small, temporary database that exists only so Latch can read the copy. Pick any password for it.
+
+   ```sh
+   docker run -d --name ak-copy -e POSTGRES_PASSWORD=… -p 127.0.0.1:55433:5432 postgres:16-alpine
+   docker exec ak-copy createdb -U postgres authentik
+   docker exec -i ak-copy pg_restore -U postgres -d authentik --no-owner < authentik.dump
+   ```
+
+   Wait a few seconds after the first line before running the second. The restore prints nothing when it works.
+
+4. **Try the import without saving anything.** This is called a dry run. Put the throwaway database's password in `PGPASSWORD` rather than in the address, so it never shows up in the command, the report or your shell history. On the Latch server:
+
+   ```sh
+   export PGPASSWORD=…
+   latch import-authentik --config /etc/latch/latch.yaml --dry-run \
+     --from postgres://postgres@127.0.0.1:55433/authentik
+   ```
+
+   Never type a password into the `--from` address.
+
+   **If Latch runs under Docker,** run the command through compose, and hand the password to the container with `-e PGPASSWORD`:
+
+   ```sh
+   export PGPASSWORD=…
+   docker compose -f deploy/docker-compose.yml run --rm -e PGPASSWORD latch import-authentik \
+     --config /var/lib/latch/latch.yaml --dry-run \
+     --from postgres://postgres@ak-copy:5432/authentik
+   ```
+
+   Inside the container, `127.0.0.1` is the container itself, not your server, so an address that starts `127.0.0.1` fails with "connection refused". The container must reach the throwaway database some other way: by your server's own address, or by sharing a Docker network with it. The simple way is the shared network. Docker Compose names Latch's network after the folder the compose file is in, plus `_default`, so `deploy_default` for `deploy/docker-compose.yml`. Check with `docker network ls`, then join the throwaway database to it:
+
+   ```sh
+   docker network connect deploy_default ak-copy
+   ```
+
+   The address then uses the database's container name, `ak-copy`, and its normal port 5432, as above. (The other way is to publish the throwaway database on your server's own address instead of `127.0.0.1` and use that address in `--from`. That makes it reachable from the whole network, so use a strong password and remove it afterwards.)
+
+5. **Read the report** (next section). Fix what you can in Authentik, take a new copy (steps 2 and 3, running `docker rm -f ak-copy` first to start clean), and run the dry run again. Repeat until you're happy. A dry run is safe to repeat as often as you like, and safe while Latch is running.
+
+**Another way, without a copy.** You can point `--from` at Authentik's own database. The import only reads from it. But Authentik's database isn't reachable from outside its container by default, so you would first have to publish its port (add `ports: ["127.0.0.1:5432:5432"]` to its database service in Authentik's compose file and restart it). Most people find the copy simpler and safer, and it gives you something to practise on.
+
+## 3. Reading the report
+
+The command prints the report. After a real import it is also kept in Latch, under Settings, then Import from Authentik. Each skipped item and each warning has its own line:
+
+```
+member nomail: Has no email address, which Latch needs to sign them in.
+app Wiki: Its icon is stored in Authentik. Upload it on the app's page.
+```
+
+*Skipped* means that item is not copied. *Warnings* mean it is copied, with something for you to look at. Below, each message is shown with its fixed words, and `…` stands for the part that changes. Each says whether to fix it in Authentik before the final import, or on the item's page in Latch afterwards.
+
+### Top of the report
+
+| It says | What it means |
+|---|---|
+| `Dry run of an import from …. Nothing was saved.` | You ran with `--dry-run`. |
+| `Imported from ….` | A real import finished. |
+| `Members: … added, … updated, … skipped` (also Groups and Apps) | The totals. "Updated" counts everything that matched something already in Latch, even if nothing changed. |
+| `Left out … service accounts and Authentik's own accounts.` | Nothing to do. These are not people and are not copied. |
+| `Two-step sign in carried over for … members, with … recovery codes.` | Nothing to do. |
+| `… members already use Latch and kept their Latch password and two-step sign in.` | Members who signed in to Latch after an earlier import. Their Latch password is never replaced. |
+| `… members have no usable password and will need a reset link.` | See "What changes for members". |
+| `Metadata apps will see for members:` (and `…for groups:`), then a list of names with counts | See "Extra details apps can see". |
+
+### Extra details apps can see
+
+Authentik lets you store extra details on members and groups. Latch passes them to apps as "metadata". The report lists each name it found, with how many members or groups have it, for example `member_number (1 member)`. Names that begin with `goauthentik.io/` are Authentik's own and are dropped without being listed. If a name on the list is something you don't want apps to see, leave it out by adding `--drop-key NAME` to the command, once for each name:
+
+```sh
+latch import-authentik --config … --dry-run --from … --drop-key secret_note --drop-key internal_id
+```
+
+Use the same `--drop-key` options on the final import.
+
+### Fix these first
+
+If the report starts like this, nothing was imported, and nothing will be until you fix every line under it:
+
+```
+Nothing was imported from …. Fix these first:
+  …
+```
+
+Find your line below.
+
+- `Authentik members … and … have the same email address apart from capitals. Latch needs a different email address for each member, so change one of them in Authentik.` Change one of the two email addresses in Authentik.
+- `… is linked to …, but … already has that email address. Change the email address of one of them in Authentik or Latch.` Two people clash. Change one address.
+- `… has the email address of …, but that Latch member is linked to …. Change the email address of one of them in Authentik or Latch.` Same.
+- `… has the username …, which … already has. Change one of the usernames in Authentik or Latch.` Change one username.
+- `Authentik has two groups called …. Rename one of them in Authentik.`
+- `Authentik group … has the same name as Latch group …, which is linked to a different Authentik group. Rename the Latch group on its page, then import again.` Rename it in Latch, on the group's page.
+- `Authentik group … is linked to Latch group …, but another Latch group is already called …. Rename that Latch group on its page, then import again.` Rename that group in Latch.
+- `Authentik's group "…" has the same name as Latch's admin group. Rename one of them before importing.` Rename one of the two.
+- `Latch has no admin group, so "…" can't be limited to admins. Give a group admin access before importing.` On a group's page in Latch, give it admin access.
+
+After fixing, take a fresh copy and run the dry run again.
+
+### Members: skipped
+
+- `Has no email address, which Latch needs to sign them in.` Add an email address in Authentik if they should be able to sign in. Otherwise leave them out.
+- `Has an email address Latch can't use.` Correct the address in Authentik.
+
+### Members: warnings
+
+- `Has a password Latch can't check. They'll need a reset link.` See "What changes for members".
+- `Used a kind of two-step code Latch doesn't support. They'll set up two-step sign in again.` Tell them. They set it up again the next time they sign in.
+- `Had … authenticator apps in Authentik. Latch kept the one used most recently ("…").` Nothing to do. If they say their code doesn't work, this is why.
+- `Has a username Latch can't use, so it was left off.` Optional: fix the username in Authentik.
+- `Has a name longer than Latch allows. Latch kept it, but shorten it before editing them on their page.` Optional, in Authentik.
+- `Has more than 8 KB of metadata. Latch kept it, but shorten it before editing them on their page.` Optional, in Authentik.
+- `Has the username …, which differs only in capitals from the username … of member …. Latch keeps both, but apps that ignore capitals may mix them up.` Rename one in Authentik if any of your apps ignores capitals.
+- `Was linked to an Authentik account that no longer exists. Latch now links them to this one, so apps that identify people by their Authentik ID will see a new ID.` Their Authentik account was deleted and made again. An app that identifies people by their Authentik ID will treat them as a new person. Check that app for them after the switch.
+- `Is no longer in Authentik. Latch has left them as they are.` See "Things that disappear from Authentik".
+
+### Groups
+
+- Skipped: `Has no members and no app uses it.` Nothing to do, unless you wanted the group. Then add a member in Authentik.
+- Warning: `Isn't an admin group in Authentik any more. Latch leaves admin access on; untick it on the group's page if that's right.` On the group's page in Latch, untick admin access if the group should no longer have it. Latch never takes admin access away on its own, so nobody gets locked out.
+- Warning: `Is no longer in Authentik. Latch has left it as it is.` See "Things that disappear from Authentik".
+
+### Apps: skipped
+
+- `Has nothing to sign in with in Authentik.` The app has no login settings in Authentik. If it should sign people in, set that up in Authentik, or add the app by hand in Latch.
+- `Signs in with something other than OpenID Connect, which is all Latch supports.` The app uses another kind of login. Latch can't do it. Keep that app on Authentik for now, or change the app.
+- `Isn't used by any application in Authentik.` Login settings are left in Authentik that no app uses. Ignore it, unless an app lost its settings by mistake.
+- `Identifies people in a way Latch doesn't support.` Change the app's setting for how it identifies people in Authentik to one of its usual choices, or add the app by hand in Latch.
+- `Another app in Latch already uses its client ID.` Another app in Latch has the same client ID. Delete or change one of them.
+- A sentence from Latch's own app checks, such as `Another app already uses that short name.`, `Line … isn't a full web address starting with https:// or http://.`, `Line … can't contain a # part.` or `Add at most 20 addresses.` Fix the app's name or return addresses in Authentik.
+
+For an app that an earlier import already put in Latch, the line ends with `Who can use it still follows Authentik.` (its other details stay as they were) or `Only admins can use it until you choose its groups on the app's page.`
+
+### Apps: warnings
+
+- `Its short name changed from … to ….` Informational. Latch uses lower-case letters, numbers and hyphens.
+- `Return address … is a pattern. Add the real addresses on the app's page.` Authentik accepted a pattern for the address the app sends people back to. Latch needs the real addresses, one by one. Add them on the app's page in Latch afterwards. Until you do, the app can't sign anyone in, so don't skip this one.
+- `Sign-out return address … is a pattern. Add the real addresses on the app's page.` Same, for the address people land on after signing out.
+- `Identified people by UPN in Authentik. Latch uses their email address instead.` Check the app copes with that.
+- `Its link to open the app isn't a web address Latch can use, so it was left off.` Add the link on the app's page if you want a tile on the home page.
+- `Its icon is stored in Authentik. Upload it on the app's page.`
+- `Authentik sent extra details through "…", which Latch doesn't send.` Someone wrote a custom rule in Authentik that put extra details into the app's login. Latch doesn't send them. If the app needs them, ask whoever runs the app whether it can use members' metadata instead.
+- `Authentik sent group names to it with "profile". Latch sends them only when an app asks for "groups", so add groups to its scopes if it uses them.` An app that reads group names needs `groups` added to the list of things it asks for (its scopes). For the wiki, see "The wiki" in section 5.
+- `Authentik's access tokens lasted …; Latch's limit is …, so it uses that.` (and the same with `Latch's minimum is …`) Nothing to do unless the app depended on the other time. You can set the times on the app's page.
+- `Authentik kept sign-ins for …; Latch's limit is …, so it uses that.` (and the same with `Latch's minimum is …`) Same.
+- `Latch couldn't read how long Authentik's access tokens lasted, so it uses the default.` (and `…how long Authentik kept sign-ins, so it uses the default.`) Same.
+- `Authentik limited who could use it …. Only admins can use it until you choose its groups on the app's page.` The `…` is one of: `with a policy`, `with a named person`, `with a rule that left people out`, `with several groups that all had to match`, `with a group Latch doesn't have`. Latch can only say "these groups may use this app", so it makes the app admins-only rather than let in anyone Authentik kept out. Either fix the access in Authentik before the final import (for example, replace a rule about one person with a group), or choose the groups on the app's page afterwards.
+- `Authentik let it sign in by itself. To allow that in Latch, choose a service account on the app's page.` See "Apps that sign in by themselves".
+- `Is no longer in Authentik. Latch has left it as it is.` See "Things that disappear from Authentik".
+
+### Apps that sign in by themselves
+
+Some apps ask for a login with nobody there: a script, a door controller, a billing job. In Authentik they use the "client credentials" setting. In Latch such an app needs a service account, chosen on the app's page.
+
+The report only warns about this when Authentik's list of allowed settings named it. Most apps in Authentik leave that list empty, so the report can say nothing even though the app does sign in by itself. Check each such app by hand. If you don't know which apps do this, ask whoever runs them, or look for sign-ins in their logs with no person behind them.
+
+### Things that disappear from Authentik
+
+Members, groups and apps that an earlier import put into Latch, and that are no longer in Authentik, are not removed. Latch leaves them exactly as they are and warns with `Is no longer in Authentik. Latch has left them as they are.` (members) or `…left it as it is.` (groups and apps). This includes an app deleted in Authentik, an app changed to another kind of login, and an app whose login settings were detached from it. If they shouldn't stay, disable or delete them in Latch by hand.
+
+## 4. Until the switch
+
+- **Make changes in Authentik, not in Latch.** Each import overwrites Latch's copy of the members, groups and apps it imports with what Authentik says. Anything edited on those in Latch is lost on the next import.
+- **Don't change app secrets in Latch.** An import puts Authentik's secret back.
+- **Re-importing resets who can use each app** to what Authentik allows. A rule Latch can't express becomes admins-only, never wider. So before the final import, either fix the access in Authentik, or plan to choose the app's groups again on its page in Latch afterwards. One exception: an app you added by hand in Latch, which the import matched by its client ID but which fails Latch's checks, keeps the access it has in Latch.
+- Re-run the dry run whenever you like.
+
+## 5. Switch day
+
+Before you start, have open: the Authentik server, the Latch server and the wiki's server, and the clean report from your last dry run.
+
+1. **Announce a short window** (half an hour is plenty) and ask other admins not to change anything in Authentik until you say so.
+2. **Take a fresh copy and restore it** (section 2, steps 2 and 3, running `docker rm -f ak-copy` first). Under Docker, join the new `ak-copy` to the Latch network again.
+3. **Run the import for real.** It is the dry-run command without `--dry-run`, with the same `--drop-key` options:
+
+   ```sh
+   export PGPASSWORD=…
+   latch import-authentik --config /etc/latch/latch.yaml \
+     --from postgres://postgres@127.0.0.1:55433/authentik
+   ```
+
+   Under Docker, use the compose form from section 2, step 4, without `--dry-run`. It is safe to do this while `latch serve` is running. The import locks Latch's database for as long as it runs, so a sign-in that needs to save something waits a few seconds at most and then carries on.
+4. **Check the result.** Sign in to Latch as an admin and open Settings, then Import from Authentik. It shows when the import ran and the same counts and list as the command printed. Check the counts match your last dry run. Choose groups again on any app the report made admins-only.
+5. **Switch the wiki.** See below.
+6. **Switch each of your own apps.** See below.
+7. **Sign in to each app once** as an ordinary member, to see that it works: the wiki and each of your own apps. Try a member who has an authenticator app, too.
+8. **Turn Authentik off,** but keep the last dump file somewhere safe. Then tell people the window is over.
+
+### The wiki
+
+These names were checked against the OpenID Connect extension's page on mediawiki.org (extension version 8.3.0, page last edited 23 October 2026, read on 26 October 2026) and its source. If your wiki has an older version, check that version's page.
+
+1. **In Latch,** open the wiki's page under Applications. It needs the return address `https://wiki.example.org/index.php/Special:PluggableAuthLogin` (your wiki's own address). The import copied it, with the client ID and secret. The Setup details panel on the same page shows the settings below, ready to copy.
+2. **In `LocalSettings.php`,** change `providerURL` to Latch's address, with no `/` at the end:
+
+   ```php
+   $wgPluggableAuth_Config['Latch'] = [
+       'plugin' => 'OpenIDConnect',
+       'data' => [
+           'providerURL' => 'https://login.example.org',
+           'clientID' => '…',
+           'clientsecret' => '…',
+           'scope' => [ 'openid', 'profile', 'email', 'groups' ],
+       ],
+   ];
+   ```
+
+   Add `'groups'` to `scope` only if the wiki turns group names into wiki rights. Without a `scope` setting the extension asks for `openid`, `profile` and `email`.
+3. **Tell the wiki who is who.** The wiki remembers each person by the pair of Authentik's address and their ID, in a table called `openid_connect`. Its columns are `oidc_id`, `oidc_user` (the wiki's own user number), `oidc_subject` (their ID) and `oidc_issuer` (Authentik's address). Latch keeps each app's IDs the same, so `oidc_subject` stays right. Only `oidc_issuer` needs changing.
+
+   Back the table up first. Then use your wiki's database tool (if the wiki uses a table prefix, `$wgDBprefix`, put it in front of the table name) to look at what is there:
+
+   ```sql
+   SELECT DISTINCT oidc_issuer FROM openid_connect;
+   ```
+
+   It shows Authentik's address for the wiki, for example `https://authentik.example.org/application/o/wiki/`. Write it down, then replace it exactly as shown with Latch's:
+
+   ```sql
+   UPDATE openid_connect
+     SET oidc_issuer = 'https://login.example.org'
+     WHERE oidc_issuer = 'https://authentik.example.org/application/o/wiki/';
+   ```
+
+   Do this during the window, at the same moment as the change to `LocalSettings.php`.
+4. **Migrate by email (an extra safety net).** The extension's setting `$wgOpenIDConnect_MigrateUsersByEmail = true;` matches a person to a wiki account with the same email address. It is off by default. Turn it on for the first few weeks. Note that the extension's page says it only matches wiki accounts that have no stored address and ID at all. Accounts already linked to Authentik are not matched by it, which is why the `UPDATE` above is the step that matters for them. The setting helps with wiki accounts that exist but were never linked.
+5. Sign in to the wiki as yourself. Check that you reach your own account and not a new one.
+
+### Each of your own apps
+
+For each app:
+
+1. Change the address of the login service to Latch's. Depending on the app that is called the issuer, the discovery URL, or both:
+   - Issuer: `https://login.example.org`
+   - Discovery URL: `https://login.example.org/.well-known/openid-configuration`
+   - Keys (JWKS) URL: `https://login.example.org/.well-known/jwks.json`
+
+   Use your own Latch address, which is the app's `public_url`.
+2. Keep the client ID and secret the same. The import copied both.
+3. Check the return addresses on the app's page in Latch. If the report said an address was a pattern, add the real ones now.
+4. Sign in once.
+
+People's IDs (the `sub` value) in these apps don't change, because the import kept each app's way of identifying people. The app's page in Latch shows a warning triangle about that. That is expected for now.
+
+## 6. If something goes wrong
+
+- **Point the apps back at Authentik.** It still has everything. For the wiki, put `providerURL` back and run the `UPDATE` the other way round, with the old address you wrote down. Members who changed their password in Latch since the switch use their old one in Authentik.
+- **Importing again is safe at any time.** It updates what is already in Latch and never makes duplicates. Remember that it resets who can use each app (section 4).
+
+## 7. A few weeks later
+
+1. Turn off `$wgOpenIDConnect_MigrateUsersByEmail` in the wiki. It is no longer needed.
+2. Once an app no longer depends on Authentik's IDs for people, consider switching its identity setting to Latch's own IDs on the app's page in Latch (the warning triangle explains it). Check the app first: everyone's ID in it changes.
+3. Remove the throwaway database and the dumps:
+
+   ```sh
+   docker rm -f ak-copy
+   rm authentik.dump
+   ```
+
+   Delete any other copies of the dump too. Keep one only if you want a last record of Authentik, and keep it private.
+4. When you're happy, shut Authentik down for good and remove its data.
