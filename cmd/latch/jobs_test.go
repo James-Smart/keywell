@@ -16,6 +16,7 @@ import (
 
 	"latch/internal/config"
 	"latch/internal/db"
+	"latch/internal/metrics"
 	"latch/internal/model"
 	"latch/internal/oidc"
 	"latch/internal/secrets"
@@ -367,26 +368,18 @@ func getEventually(t *testing.T, url string) (int, string) {
 	}
 }
 
-// With metrics.listen empty, nothing listens at the address it would use.
-func TestServeNoMetricsListenerByDefault(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	main, unused := freeAddr(t), freeAddr(t)
-	cfg, _, _ := serveInstall(t, main)
-	errc := make(chan error, 1)
-	go func() { errc <- serve(ctx, cfg, slog.New(slog.DiscardHandler)) }()
-	getEventually(t, "http://"+main+"/healthz")
-	if c, err := net.DialTimeout("tcp", unused, time.Second); err == nil {
-		c.Close()
-		t.Error("something listens with metrics.listen empty")
+// metrics.listen empty means no metrics server; set, it is that address.
+func TestMetricsServerOnlyWhenConfigured(t *testing.T) {
+	log := slog.New(slog.DiscardHandler)
+	reg := metrics.New("v1")
+	cfg := &config.Config{}
+	if srv := metricsServer(cfg, reg, log); srv != nil {
+		t.Fatalf("metricsServer with metrics.listen empty = %v, want nil", srv.Addr)
 	}
-	cancel()
-	select {
-	case err := <-errc:
-		if err != nil {
-			t.Fatalf("serve: %v", err)
-		}
-	case <-time.After(within):
-		t.Fatal("serve still running after its context ended")
+	cfg.Metrics.Listen = "127.0.0.1:9100"
+	srv := metricsServer(cfg, reg, log)
+	if srv == nil || srv.Addr != "127.0.0.1:9100" || srv.ReadHeaderTimeout != 10*time.Second {
+		t.Fatalf("metricsServer = %+v", srv)
 	}
 }
 
@@ -424,7 +417,7 @@ func TestServeMetricsListener(t *testing.T) {
 	}
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if strings.Contains(string(b), "latch_build_info") {
+	if strings.Contains(string(b), "latch_build_info") || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain; version=0.0.4") {
 		t.Errorf("main listener served metrics:\n%s", b)
 	}
 	if resp.StatusCode != 404 && resp.StatusCode != 303 && resp.StatusCode != 302 {

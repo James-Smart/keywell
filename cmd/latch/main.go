@@ -188,6 +188,30 @@ func newLogger(c config.LogConfig, w io.Writer) (*slog.Logger, error) {
 	}
 }
 
+// newServer returns an http.Server with Latch's timeouts.
+func newServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+}
+
+// metricsServer returns the server for metrics.listen, serving only
+// GET /metrics, or nil when metrics are off.
+func metricsServer(cfg *config.Config, reg *metrics.Registry, log *slog.Logger) *http.Server {
+	if cfg.Metrics.Listen == "" {
+		return nil
+	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", reg.Handler())
+	return newServer(cfg.Metrics.Listen, mux, log)
+}
+
 // serve opens the database, builds the handler and runs the HTTP server
 // until ctx is cancelled, then shuts down gracefully.
 func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
@@ -259,18 +283,7 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Version:    Version,
 	})
 
-	newServer := func(addr string, h http.Handler) *http.Server {
-		return &http.Server{
-			Addr:              addr,
-			Handler:           h,
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      60 * time.Second,
-			IdleTimeout:       120 * time.Second,
-			ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
-		}
-	}
-	srv := newServer(cfg.Listen, handler)
+	srv := newServer(cfg.Listen, handler, log)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	log.Info("listening", "addr", cfg.Listen, "issuer", cfg.Issuer(), "version", Version)
@@ -278,10 +291,7 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	// Metrics are served on their own listener, never the public one.
 	var msrv *http.Server
 	merrc := make(chan error, 1)
-	if cfg.Metrics.Listen != "" {
-		mux := http.NewServeMux()
-		mux.Handle("GET /metrics", reg.Handler())
-		msrv = newServer(cfg.Metrics.Listen, mux)
+	if msrv = metricsServer(cfg, reg, log); msrv != nil {
 		go func() { merrc <- msrv.ListenAndServe() }()
 		log.Info("serving metrics", "addr", cfg.Metrics.Listen)
 	}
