@@ -14,6 +14,9 @@ import (
 // TestInstallID is the Authentik install ID of every snapshot NewSnap builds.
 const TestInstallID = "6f1c2a9e-3b7d-4e1a-9c55-0d8e2f4b7a13"
 
+// WeekdaysPolicy is the UUID of the dev stack's "Weekdays only" policy.
+const WeekdaysPolicy = "30000000-0000-4000-8000-000000000001"
+
 // UsableHash is a password hash password.CheckStored accepts.
 const UsableHash = "pbkdf2_sha256$870000$vK9mZ2pQxL3n$k/YNzDxY8WuRK/+6PjMgYNCGxD4pyHdDwQFRbvUuXCo="
 
@@ -22,9 +25,10 @@ const UsableHash = "pbkdf2_sha256$870000$vK9mZ2pQxL3n$k/YNzDxY8WuRK/+6PjMgYNCGxD
 // and G, or edit the slices directly.
 type Snap struct {
 	*authentik.Snapshot
-	nextPK    int64
-	nextGroup int
-	nextApp   int
+	nextPK       int64
+	nextGroup    int
+	nextApp      int
+	nextProvider int64
 }
 
 // NewSnap returns an empty snapshot with TestInstallID.
@@ -161,7 +165,52 @@ func (s *Snap) App(name, slug string) string {
 	return a.UUID
 }
 
-// BindingOpt changes a binding that Snap.Bind adds.
+// A returns the application with this UUID, for changing between runs.
+func (s *Snap) A(uuid string) *authentik.Application {
+	for i := range s.Applications {
+		if s.Applications[i].UUID == uuid {
+			return &s.Applications[i]
+		}
+	}
+	panic("no application " + uuid)
+}
+
+// Provider adds an OAuth2 provider with the next provider PK and returns
+// the PK. No application uses it until Use.
+func (s *Snap) Provider(p authentik.OAuth2Provider) int64 {
+	s.nextProvider++
+	p.PK = s.nextProvider
+	s.Providers = append(s.Providers, p)
+	return p.PK
+}
+
+// P returns the OAuth2 provider with this PK, for changing between runs.
+func (s *Snap) P(pk int64) *authentik.OAuth2Provider {
+	for i := range s.Providers {
+		if s.Providers[i].PK == pk {
+			return &s.Providers[i]
+		}
+	}
+	panic(fmt.Sprintf("no provider with pk %d", pk))
+}
+
+// Use makes the application use the provider with this PK.
+func (s *Snap) Use(app string, pk int64) { s.A(app).ProviderPK = &pk }
+
+// UseOther makes the application use a provider of a kind the snapshot
+// doesn't hold, such as SAML.
+func (s *Snap) UseOther(app string) {
+	s.nextProvider++
+	s.Use(app, s.nextProvider)
+}
+
+// Map attaches a claim mapping to the provider with this PK. managed is ""
+// for a mapping an admin wrote.
+func (s *Snap) Map(pk int64, name, managed string) {
+	s.Mappings = append(s.Mappings, authentik.ProviderMapping{ProviderPK: pk, Name: name, Managed: managed})
+}
+
+// BindingOpt changes a binding that Snap.Bind, BindUser or BindPolicy adds.
 type BindingOpt func(*authentik.Binding)
 
 // Disabled makes the binding disabled.
@@ -172,7 +221,21 @@ func Negated() BindingOpt { return func(b *authentik.Binding) { b.Negate = true 
 
 // Bind adds an enabled group binding of group to the application target.
 func (s *Snap) Bind(target, group string, opts ...BindingOpt) {
-	b := authentik.Binding{TargetUUID: target, GroupUUID: group, Enabled: true}
+	s.bind(authentik.Binding{TargetUUID: target, GroupUUID: group, Enabled: true}, opts)
+}
+
+// BindUser adds an enabled user binding of the user with this PK to the
+// application target.
+func (s *Snap) BindUser(target string, pk int64, opts ...BindingOpt) {
+	s.bind(authentik.Binding{TargetUUID: target, UserPK: &pk, Enabled: true}, opts)
+}
+
+// BindPolicy adds an enabled policy binding to the application target.
+func (s *Snap) BindPolicy(target, policy string, opts ...BindingOpt) {
+	s.bind(authentik.Binding{TargetUUID: target, PolicyUUID: policy, Enabled: true}, opts)
+}
+
+func (s *Snap) bind(b authentik.Binding, opts []BindingOpt) {
 	for _, o := range opts {
 		o(&b)
 	}
@@ -180,10 +243,11 @@ func (s *Snap) Bind(target, group string, opts ...BindingOpt) {
 }
 
 // DevStack is the dev stack fixture (see the plan's "Dev stack fixture")
-// as far as members, groups and access rules go: Authentik's own accounts
-// and groups, the seeded members and groups, and the group bindings of
-// Wiki and Tool Booking. Applications carry only their names; providers,
-// TOTP devices and recovery codes are not filled in.
+// as far as members, groups, applications and access rules go: Authentik's
+// own accounts and groups, the seeded members and groups, the applications
+// with their OAuth2 providers and claim mappings, the orphan provider, and
+// the access rules of Wiki and Tool Booking. TOTP devices and recovery
+// codes are not filled in.
 func DevStack() *Snap {
 	s := NewSnap()
 	s.User("AnonymousUser", "", WithPassword("!"))
@@ -214,14 +278,59 @@ func DevStack() *Snap {
 	s.Join(pat, members)
 	s.Join(nomail, members)
 
+	// The seed sets only Tool Booking's grant types and leaves the others at
+	// Authentik's default, taken here to exclude client_credentials.
+	defaultGrants := []string{"authorization_code", "refresh_token"}
+	strict := func(url, typ string) authentik.RedirectURI {
+		return authentik.RedirectURI{URL: url, MatchingMode: "strict", Type: typ}
+	}
+	builtin := func(pk int64) {
+		s.Map(pk, "authentik default OAuth Mapping: OpenID 'email'", "goauthentik.io/providers/oauth2/scope-email")
+		s.Map(pk, "authentik default OAuth Mapping: OpenID 'openid'", "goauthentik.io/providers/oauth2/scope-openid")
+		s.Map(pk, "authentik default OAuth Mapping: OpenID 'profile'", authentik.ManagedProfileScope)
+	}
+	wikiP := s.Provider(authentik.OAuth2Provider{Name: "wiki", ClientType: "confidential",
+		ClientID: "wiki-client-id", ClientSecret: "wiki-client-secret-0123456789", SubMode: "hashed_user_id",
+		AccessTokenValidity: "hours=2", RefreshTokenValidity: "days=30", GrantTypes: defaultGrants,
+		RedirectURIs: []authentik.RedirectURI{
+			strict("https://wiki.example.org/index.php/Special:PluggableAuthLogin", "authorization"),
+			{URL: `https://.*\.example\.org/cb`, MatchingMode: "regex", Type: "authorization"},
+			strict("https://wiki.example.org/", "logout"),
+		}})
+	builtin(wikiP)
+	s.Map(wikiP, "Wiki extra claims", "")
+	doorP := s.Provider(authentik.OAuth2Provider{Name: "door-app", ClientType: "public",
+		ClientID: "door-app-client-id", SubMode: "user_email", AccessTokenValidity: "minutes=5",
+		RefreshTokenValidity: "weeks=20", GrantTypes: defaultGrants,
+		RedirectURIs: []authentik.RedirectURI{strict("https://door.example.org/callback", "authorization")}})
+	builtin(doorP)
+	toolsP := s.Provider(authentik.OAuth2Provider{Name: "tools", ClientType: "confidential",
+		ClientID: "tools-client-id", ClientSecret: "tools-client-secret-0123456789", SubMode: "user_uuid",
+		AccessTokenValidity: "hours=36", RefreshTokenValidity: "days=30",
+		GrantTypes:   []string{"authorization_code", "client_credentials"},
+		RedirectURIs: []authentik.RedirectURI{strict("https://tools.example.org/oauth/callback", "authorization")}})
+	builtin(toolsP)
+	orphanP := s.Provider(authentik.OAuth2Provider{Name: "orphan", ClientType: "confidential",
+		ClientID: "orphan-client-id", ClientSecret: "orphan-client-secret-0123456789", SubMode: "hashed_user_id",
+		AccessTokenValidity: "hours=1", RefreshTokenValidity: "days=30", GrantTypes: defaultGrants,
+		RedirectURIs: []authentik.RedirectURI{strict("https://orphan.example.org/cb", "authorization")}})
+	builtin(orphanP)
+
 	wiki := s.App("Wiki", "wiki")
-	s.App("Door Booking", "Door_Booking")
+	w := s.A(wiki)
+	w.LaunchURL, w.Icon, w.Description = "https://wiki.example.org/", "/media/public/application-icons/wiki.png",
+		"The makerspace wiki"
+	s.Use(wiki, wikiP)
+	door := s.App("Door Booking", "Door_Booking")
+	s.A(door).LaunchURL, s.A(door).Icon = "https://door.example.org/", "https://door.example.org/icon.png"
+	s.Use(door, doorP)
 	tools := s.App("Tool Booking", "tools")
-	s.App("Grafana", "grafana")
+	s.A(tools).LaunchURL = "https://tools.example.org/"
+	s.Use(tools, toolsP)
+	s.UseOther(s.App("Grafana", "grafana")) // SAML
 	s.App("Printer", "printer")
 	s.Bind(wiki, members)
 	s.Bind(tools, laser)
-	s.Bindings = append(s.Bindings, authentik.Binding{TargetUUID: tools,
-		PolicyUUID: "30000000-0000-4000-8000-000000000001", Enabled: true})
+	s.BindPolicy(tools, WeekdaysPolicy)
 	return s
 }

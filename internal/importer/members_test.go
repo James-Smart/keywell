@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"latch/internal/authentik"
+	"latch/internal/config"
 	"latch/internal/model"
 	"latch/internal/secrets"
 	"latch/internal/store"
@@ -36,8 +37,12 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st, db := storetest.OpenTestDB(t)
+	cfg, err := config.Load("", func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("default config: %v", err)
+	}
 	e := &env{t: t, st: st, db: db, now: testNow}
-	e.d = Deps{Store: st, Now: func() time.Time { return e.now }}
+	e.d = Deps{Store: st, Cfg: cfg, Now: func() time.Time { return e.now }}
 	return e
 }
 
@@ -408,8 +413,9 @@ func TestImportGroupsAndMemberships(t *testing.T) {
 func TestImportDevStack(t *testing.T) {
 	e := newEnv(t)
 	rep := e.run(DevStack())
-	if rep.Members != (Counts{Added: 6, Skipped: 1}) || rep.Groups != (Counts{Added: 4, Skipped: 2}) || rep.LeftOut != 3 {
-		t.Errorf("members %+v, groups %+v, left out %d", rep.Members, rep.Groups, rep.LeftOut)
+	if rep.Members != (Counts{Added: 6, Skipped: 1}) || rep.Groups != (Counts{Added: 4, Skipped: 2}) ||
+		rep.Apps != (Counts{Added: 3, Skipped: 3}) || rep.LeftOut != 3 {
+		t.Errorf("members %+v, groups %+v, apps %+v, left out %d", rep.Members, rep.Groups, rep.Apps, rep.LeftOut)
 	}
 	if want := []KeyCount{{"member_number", 1}}; !reflect.DeepEqual(rep.MemberKeys, want) {
 		t.Errorf("MemberKeys = %+v", rep.MemberKeys)
@@ -425,7 +431,9 @@ func TestImportDevStack(t *testing.T) {
 	}
 	var skipped []string
 	for _, it := range rep.Items {
-		skipped = append(skipped, it.Kind+" "+it.Name)
+		if it.Kind != "app" { // TestImportApps checks the app items
+			skipped = append(skipped, it.Kind+" "+it.Name)
+		}
 	}
 	if want := []string{"member nomail", "group authentik Read-only", "group authentik Agent-Users"}; !slices.Equal(skipped, want) {
 		t.Errorf("items %v, want %v", skipped, want)

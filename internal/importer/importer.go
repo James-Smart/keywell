@@ -65,7 +65,7 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 	}
 	rep := &Report{Source: opts.Source, DryRun: opts.DryRun, StartedAt: now().UTC()}
 	err := d.Store.InTx(ctx, func(tx *store.Store) error {
-		r := &run{ctx: ctx, tx: tx, enc: d.Enc, snap: snap, opts: opts, rep: rep}
+		r := &run{ctx: ctx, tx: tx, enc: d.Enc, cfg: d.Cfg, snap: snap, opts: opts, rep: rep}
 		if err := r.load(); err != nil {
 			return err
 		}
@@ -92,7 +92,9 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 		if err := r.writeCredentials(); err != nil {
 			return err
 		}
-		// Applications (Task 7) are written here.
+		if err := r.writeApps(); err != nil {
+			return err
+		}
 		r.finish()
 		rep.FinishedAt = now().UTC()
 		if opts.DryRun {
@@ -118,6 +120,7 @@ type run struct {
 	ctx  context.Context
 	tx   *store.Store
 	enc  *secrets.Encryptor
+	cfg  *config.Config
 	snap *authentik.Snapshot
 	opts Options
 	rep  *Report
@@ -131,6 +134,7 @@ type run struct {
 	goneUsers  []Item    // Latch members whose Authentik account is gone
 	groups     []*group  // every snapshot group, in snapshot order
 	goneGroups []Item    // Latch groups whose Authentik group is gone
+	appItems   []Item    // app items, in snapshot order, then providers no app uses, then apps gone
 	blocking   []string
 }
 
@@ -185,6 +189,7 @@ func (r *run) finish() {
 		}
 	}
 	r.rep.Items = append(r.rep.Items, r.goneGroups...)
+	r.rep.Items = append(r.rep.Items, r.appItems...)
 	r.rep.MemberKeys = countKeys(memberMeta)
 	r.rep.GroupKeys = countKeys(groupMeta)
 }
