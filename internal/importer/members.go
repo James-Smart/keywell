@@ -9,7 +9,6 @@ import (
 	"latch/internal/admin"
 	"latch/internal/authentik"
 	"latch/internal/model"
-	"latch/internal/password"
 )
 
 // Report copy for members. Item reasons are full sentences about the
@@ -241,33 +240,23 @@ func (r *run) writeMembers() error {
 func (r *run) addMember(m *member) error {
 	pk := m.src.PK
 	u := &model.User{
-		Name:               m.name,
-		Type:               model.UserTypeMember,
-		Email:              m.email,
-		Username:           m.username,
-		LegacyPasswordHash: newMemberHash(m.src.Password),
-		IsActive:           m.src.IsActive,
-		Metadata:           m.metadata,
-		AuthentikPK:        &pk,
-		AuthentikUUID:      m.src.UUID,
-		AuthentikUID:       authentik.HashedUserID(pk, r.snap.InstallID),
-		LastLoginAt:        utc(m.src.LastLogin),
-		CreatedAt:          m.src.DateJoined.UTC(),
+		Name:          m.name,
+		Type:          model.UserTypeMember,
+		Email:         m.email,
+		Username:      m.username,
+		IsActive:      m.src.IsActive,
+		Metadata:      m.metadata,
+		AuthentikPK:   &pk,
+		AuthentikUUID: m.src.UUID,
+		AuthentikUID:  authentik.HashedUserID(pk, r.snap.InstallID),
+		LastLoginAt:   utc(m.src.LastLogin),
+		CreatedAt:     m.src.DateJoined.UTC(),
 	}
 	if err := r.tx.CreateUser(r.ctx, u); err != nil {
 		return fmt.Errorf("importer: add member %s: %w", m.email, err)
 	}
 	m.latch = u
 	return nil
-}
-
-// newMemberHash is the password hash a member Latch adds starts with
-// (Ruling B): Authentik's when Latch can check it, otherwise none.
-func newMemberHash(authentikHash string) string {
-	if password.CheckStored(authentikHash) != nil {
-		return ""
-	}
-	return authentikHash
 }
 
 // updateMember overwrites the matched Latch member's imported fields with

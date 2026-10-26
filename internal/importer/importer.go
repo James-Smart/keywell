@@ -65,7 +65,7 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 	}
 	rep := &Report{Source: opts.Source, DryRun: opts.DryRun, StartedAt: now().UTC()}
 	err := d.Store.InTx(ctx, func(tx *store.Store) error {
-		r := &run{ctx: ctx, tx: tx, snap: snap, opts: opts, rep: rep}
+		r := &run{ctx: ctx, tx: tx, enc: d.Enc, snap: snap, opts: opts, rep: rep}
 		if err := r.load(); err != nil {
 			return err
 		}
@@ -89,8 +89,9 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 		if err := r.writeMemberships(); err != nil {
 			return err
 		}
-		// Credentials (Task 6) are written here: passwords of members
-		// already in Latch, TOTP and recovery codes.
+		if err := r.writeCredentials(); err != nil {
+			return err
+		}
 		// Applications (Task 7) are written here.
 		r.finish()
 		rep.FinishedAt = now().UTC()
@@ -116,6 +117,7 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 type run struct {
 	ctx  context.Context
 	tx   *store.Store
+	enc  *secrets.Encryptor
 	snap *authentik.Snapshot
 	opts Options
 	rep  *Report
