@@ -16,10 +16,13 @@ import (
 var migrationsFS embed.FS
 
 // Open opens (creating if needed) the SQLite database at path with WAL,
-// foreign keys and a busy timeout. A single connection is used so concurrent
+// foreign keys and a busy timeout. Transactions begin IMMEDIATE, taking the
+// write lock up front: under WAL a deferred one that reads and then writes
+// fails at once with SQLITE_BUSY_SNAPSHOT if another process commits in
+// between. A single connection is used so concurrent
 // writers queue instead of failing with SQLITE_BUSY.
 func Open(path string) (*sql.DB, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate"
 	d, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("db: open: %w", err)
