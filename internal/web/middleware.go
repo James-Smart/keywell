@@ -220,22 +220,36 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 
 func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-// requestLog logs one line per request. Query strings are never logged
-// because they can carry authorization codes.
+// requestLog logs and counts one line per request. Query strings are never
+// logged because they can carry authorization codes.
+//
+// A handler that panics is logged and counted too, as the 500 recoverer
+// answers it with (or as what it wrote before panicking), and the panic
+// then carries on out to recoverer.
 func requestLog(log *slog.Logger, m *metrics.Registry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
+			defer func() {
+				v := recover()
+				status := sw.status
+				switch {
+				case status != 0:
+				case v != nil:
+					status = http.StatusInternalServerError
+				default:
+					status = http.StatusOK
+				}
+				m.CountRequest(status)
+				log.InfoContext(r.Context(), "request",
+					"method", r.Method, "path", logPath(r.URL.Path), "status", status,
+					"duration", time.Since(start), "ip", ClientIP(r))
+				if v != nil {
+					panic(v)
+				}
+			}()
 			next.ServeHTTP(sw, r)
-			status := sw.status
-			m.CountRequest(status)
-			if status == 0 {
-				status = http.StatusOK
-			}
-			log.InfoContext(r.Context(), "request",
-				"method", r.Method, "path", logPath(r.URL.Path), "status", status,
-				"duration", time.Since(start), "ip", ClientIP(r))
 		})
 	}
 }

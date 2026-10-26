@@ -116,6 +116,8 @@ var malformedHashes = []string{
 	"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$!!!",
 	"$argon2id$v=16$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
 	"argon2$argon2d$v=19$m=512,t=2,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",
+	"$argon2id$v=19$m=263168,t=1,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA",       // 257 MiB
+	"argon2$argon2id$v=19$m=263168,t=1,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaA", // 257 MiB
 	"pbkdf2_sha256$870000$salt$",
 	"pbkdf2_sha256$0$salt$aGFzaA==",
 	"pbkdf2_sha256$870000$salt",
@@ -198,13 +200,40 @@ func TestLegacyCeilings(t *testing.T) {
 	}
 }
 
-// A stored hash whose cost would take over a gigabyte of memory, or an
+// The scrypt ceilings hold at their edges, including for values that
+// overflow a 32-bit int (run with GOARCH=386 too).
+func TestScryptCeilingEdges(t *testing.T) {
+	for _, c := range []struct {
+		enc string
+		ok  bool
+	}{
+		{"scrypt$2$salt$262144$4$aGFzaA==", true},                                                   // 128·r·(N+p+2) = 256 MiB exactly
+		{"scrypt$2$salt$262144$5$aGFzaA==", false},                                                  // 288 MiB; N·r·p within the work ceiling
+		{"scrypt$2048$salt$1$2048$aGFzaA==", true},                                                  // N·r·p = 1<<22 exactly
+		{"scrypt$2048$salt$1$2049$aGFzaA==", false},                                                 // N·r·p just over; memory 2 MiB
+		{"scrypt$2$salt$2097152$1$aGFzaA==", false},                                                 // memory 1.25 GiB, within the work ceiling
+		{"scrypt$4294967296$salt$1$1$aGFzaA==", false},                                              // N = 1<<32
+		{"scrypt$2$salt$4294967296$1$aGFzaA==", false},                                              // r = 1<<32
+		{"scrypt$2$salt$1$4294967296$aGFzaA==", false},                                              // p = 1<<32
+		{"scrypt$4611686018427387904$salt$4611686018427387904$4611686018427387904$aGFzaA==", false}, // 1<<62 each
+		{"scrypt$2$salt$-1$1$aGFzaA==", false},
+		// N·r·p = 1<<32 and 128·r·(N+p+2) = 1<<39 + 3<<23: both wrap to
+		// small numbers in 32-bit arithmetic.
+		{"scrypt$65536$salt$65536$1$aGFzaA==", false},
+	} {
+		if err := password.CheckStored(c.enc); (err == nil) != c.ok {
+			t.Errorf("CheckStored(%q) = %v; want accepted %v", c.enc, err, c.ok)
+		}
+	}
+}
+
+// A stored hash whose cost would take over 256 MiB of memory, or an
 // unreasonable time, to check is refused as malformed without hashing.
 func TestCostCeilings(t *testing.T) {
 	const salt, sum = "c2FsdHNhbHRzYWx0c2FsdA", "aGFzaGhhc2hoYXNoaGFzaA"
 	for _, c := range []struct{ name, enc string }{
-		{"argon2_m", "$argon2id$v=19$m=1048577,t=1,p=1$" + salt + "$" + sum},
-		{"argon2_m_django", "argon2$argon2id$v=19$m=1048577,t=1,p=1$" + salt + "$" + sum},
+		{"argon2_m", "$argon2id$v=19$m=262145,t=1,p=1$" + salt + "$" + sum},
+		{"argon2_m_django", "argon2$argon2id$v=19$m=262145,t=1,p=1$" + salt + "$" + sum},
 		{"argon2_t", "$argon2id$v=19$m=8,t=17,p=1$" + salt + "$" + sum},
 		{"pbkdf2_iter", "pbkdf2_sha256$10000001$salt$aGFzaA=="},
 		{"scrypt_mem", "scrypt$2097152$salt$8$1$aGFzaA=="},   // 128·N·r = 2 GiB
@@ -216,6 +245,16 @@ func TestCostCeilings(t *testing.T) {
 				t.Fatalf("Verify = %v, %v; want false and a malformed-hash error", ok, err)
 			}
 		})
+	}
+	// At the memory ceiling a hash is still accepted (CheckStored hashes
+	// nothing, so this costs no memory).
+	for _, enc := range []string{
+		"$argon2id$v=19$m=262144,t=1,p=1$" + salt + "$" + sum,
+		"argon2$argon2id$v=19$m=262144,t=1,p=1$" + salt + "$" + sum,
+	} {
+		if err := password.CheckStored(enc); err != nil {
+			t.Errorf("CheckStored(%.40q) = %v; want nil", enc, err)
+		}
 	}
 	// At the time ceiling (and a tiny memory cost) a hash still verifies.
 	salt16 := []byte("0123456789abcdef")

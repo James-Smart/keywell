@@ -47,13 +47,15 @@ const (
 const nativePrefix = "$argon2id$"
 
 // Ceilings on the cost a stored hash may ask for. A hash above them is
-// refused as malformed, never checked: one sign-in against it could take a
-// gigabyte or more of memory, or many seconds of CPU. Native hashes cost
-// 64 MiB and 3 passes; the legacy formats' defaults are far below these.
+// refused as malformed, never checked: one sign-in against it could take
+// hundreds of megabytes of memory, or many seconds of CPU. Argon2 and
+// scrypt both stop at 256 MiB, so the hashing slots hold at most 1 GiB
+// between them. Native hashes cost 64 MiB and 3 passes, Django's argon2
+// default 100 MiB, and the other legacy formats' defaults are far below.
 // For scrypt, N·r·p bounds the CPU work and 128·r·(N+p+2) the memory
 // (scrypt.Key holds v = 128·N·r, B = 128·r·p and xy = 256·r bytes at once).
 const (
-	maxArgonMemory = 1 << 20 // KiB: 1 GiB
+	maxArgonMemory = 1 << 18 // KiB: 256 MiB
 	maxArgonTime   = 16
 	maxPBKDF2Iter  = 10_000_000
 	maxPBKDF2Len   = 64      // bytes of decoded hash

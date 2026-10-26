@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"latch/internal/config"
+	"latch/internal/metrics"
 	"latch/internal/session"
 	"latch/internal/store/storetest"
 	"latch/internal/testenv"
@@ -97,8 +99,8 @@ type mountFunc func(*http.ServeMux)
 func (f mountFunc) Mount(mux *http.ServeMux) { f(mux) }
 
 // customHandler builds the full web handler (all middleware) with extra
-// routes registered by mount.
-func customHandler(t *testing.T, trusted []string, mount mountFunc) http.Handler {
+// routes registered by mount. Each change runs on the Deps before New.
+func customHandler(t *testing.T, trusted []string, mount mountFunc, changes ...func(*web.Deps)) http.Handler {
 	t.Helper()
 	cfg, err := config.Load("", func(string) string { return "" })
 	if err != nil {
@@ -112,14 +114,18 @@ func customHandler(t *testing.T, trusted []string, mount mountFunc) http.Handler
 		t.Fatal(err)
 	}
 	st := storetest.OpenTest(t)
-	return web.New(web.Deps{
+	d := web.Deps{
 		Cfg:      cfg,
 		Store:    st,
 		Sessions: session.NewManager(st, time.Hour, 2*time.Hour, false),
 		Log:      log,
 		Renderer: rd,
 		OIDC:     mount,
-	})
+	}
+	for _, change := range changes {
+		change(&d)
+	}
+	return web.New(d)
 }
 
 // echoHandler adds /echo, which writes the client IP and scheme the
@@ -147,6 +153,44 @@ func TestPanicRendersGenericError(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Something went wrong") || strings.Contains(body, "hunter2") {
 		t.Fatalf("body %q", body)
+	}
+}
+
+// A panic answered with a 500 is counted and logged like any other
+// request.
+func TestPanicIsCountedAndLogged(t *testing.T) {
+	var logs bytes.Buffer
+	reg := metrics.New("test")
+	h := customHandler(t, nil, func(mux *http.ServeMux) {
+		mux.HandleFunc("GET /boom", func(http.ResponseWriter, *http.Request) { panic("boom") })
+	}, func(d *web.Deps) {
+		d.Log = slog.New(slog.NewTextHandler(&logs, nil))
+		d.Metrics = reg
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/boom", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d", rec.Code)
+	}
+
+	scrape := httptest.NewRecorder()
+	reg.Handler().ServeHTTP(scrape, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if !strings.Contains(scrape.Body.String(), `latch_http_requests_total{code="5xx"} 1`+"\n") {
+		t.Errorf("panic not counted as 5xx:\n%s", scrape.Body.String())
+	}
+	var logged bool
+	for line := range strings.Lines(logs.String()) {
+		if strings.Contains(line, "msg=request ") && strings.Contains(line, "path=/boom ") &&
+			strings.Contains(line, "status=500 ") {
+			logged = true
+		}
+	}
+	if !logged {
+		t.Errorf("no request line with status 500:\n%s", logs.String())
+	}
+	// The panic's own log line still shows where it happened.
+	if !strings.Contains(logs.String(), "TestPanicIsCountedAndLogged.func1") {
+		t.Errorf("panic stack lost the handler that panicked:\n%s", logs.String())
 	}
 }
 

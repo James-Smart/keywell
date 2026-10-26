@@ -72,28 +72,34 @@ func prepareScrypt(fields string) (checker, error) {
 	if len(f) != 5 {
 		return nil, malformed("scrypt")
 	}
-	n, errN := strconv.Atoi(f[0])
-	r, errR := strconv.Atoi(f[2])
-	p, errP := strconv.Atoi(f[3])
+	n, errN := strconv.ParseInt(f[0], 10, 64)
+	r, errR := strconv.ParseInt(f[2], 10, 64)
+	p, errP := strconv.ParseInt(f[3], 10, 64)
 	want, errH := base64.StdEncoding.DecodeString(f[4])
-	if errors.Join(errN, errR, errP, errH) != nil || len(want) == 0 {
-		return nil, malformed("scrypt")
-	}
-	// scrypt.Key refuses an N that is not a power of two above 1. N·r·p is
-	// compared by division so it cannot overflow; once it is within the
-	// ceiling each factor is at most 1<<22 and the memory sum fits an int.
-	if n < 2 || n&(n-1) != 0 || r < 1 || p < 1 || n > maxScryptWork/r/p ||
-		128*r*(n+p+2) > maxScryptMem {
+	if errors.Join(errN, errR, errP, errH) != nil || len(want) == 0 || !scryptCostOK(n, r, p) {
 		return nil, malformed("scrypt")
 	}
 	salt := []byte(f[1])
 	return func(password string) (bool, error) {
-		got, err := scrypt.Key([]byte(password), salt, n, r, p, len(want))
+		// scryptCostOK bounds each factor by 1<<22, which fits any int.
+		got, err := scrypt.Key([]byte(password), salt, int(n), int(r), int(p), len(want))
 		if err != nil {
 			return false, fmt.Errorf("password: scrypt: %w", err)
 		}
 		return subtle.ConstantTimeCompare(got, want) == 1, nil
 	}, nil
+}
+
+// scryptCostOK reports whether scrypt.Key accepts N (a power of two above
+// 1), r and p, and whether they are within the work and memory ceilings.
+// The maths is int64 whatever the size of int: N·r·p is compared by
+// division, so it cannot overflow, and once it is within maxScryptWork
+// each factor is at most 1<<22, so 128·r·(N+p+2) is below 1<<53.
+func scryptCostOK(n, r, p int64) bool {
+	if n < 2 || n&(n-1) != 0 || r < 1 || p < 1 || n > maxScryptWork/r/p {
+		return false
+	}
+	return 128*r*(n+p+2) <= maxScryptMem
 }
 
 // bcryptRE is the full 60-character bcrypt layout: version, two-digit cost,
