@@ -71,6 +71,7 @@ func Run(ctx context.Context, d Deps, snap *authentik.Snapshot, opts Options) (*
 		}
 		r.planMembers()
 		r.planGroups()
+		r.planApps()
 		if len(r.blocking) > 0 {
 			rep.Blocking = r.blocking
 			return ErrBlocked
@@ -130,12 +131,15 @@ type run struct {
 	latchGroups []model.Group
 	latchApps   []model.Application
 
-	members    []*member // every snapshot user not left out, in snapshot order
-	goneUsers  []Item    // Latch members whose Authentik account is gone
-	groups     []*group  // every snapshot group, in snapshot order
-	goneGroups []Item    // Latch groups whose Authentik group is gone
-	appItems   []Item    // app items, in snapshot order, then providers no app uses, then apps gone
-	blocking   []string
+	members    []*member    // every snapshot user not left out, in snapshot order
+	goneUsers  []Item       // Latch members whose Authentik account is gone
+	groups     []*group     // every snapshot group, in snapshot order
+	goneGroups []Item       // Latch groups whose Authentik group is gone
+	apps       []*importApp // every snapshot application, in snapshot order
+	// otherAppItems lists the providers no application uses, then the Latch
+	// apps whose Authentik app is gone.
+	otherAppItems []Item
+	blocking      []string
 }
 
 // load reads Latch's users, groups and applications.
@@ -189,7 +193,10 @@ func (r *run) finish() {
 		}
 	}
 	r.rep.Items = append(r.rep.Items, r.goneGroups...)
-	r.rep.Items = append(r.rep.Items, r.appItems...)
+	for _, a := range r.apps {
+		r.rep.Items = append(r.rep.Items, a.items...)
+	}
+	r.rep.Items = append(r.rep.Items, r.otherAppItems...)
 	r.rep.MemberKeys = countKeys(memberMeta)
 	r.rep.GroupKeys = countKeys(groupMeta)
 }

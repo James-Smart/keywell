@@ -38,8 +38,13 @@ const (
 	maxAppNameLen = 100
 	maxSlugLen    = 64
 	maxRedirects  = 20
-	minTokenTTL   = time.Minute
-	maxTokenTTL   = 24 * time.Hour
+)
+
+// The shortest and longest lifetimes an app's access and ID tokens may
+// have. Refresh tokens are limited by the tokens.refresh_absolute setting.
+const (
+	MinTokenTTL = time.Minute
+	MaxTokenTTL = 24 * time.Hour
 )
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -330,20 +335,20 @@ func (s *Service) validateApp(ctx context.Context, p problems, app *model.Applic
 		p.add("subject_mode", msgSubjectMode)
 	}
 
-	checkTTL(p, "access_token_ttl", app.AccessTokenTTL, maxTokenTTL, msgTokenTTL)
-	checkTTL(p, "id_token_ttl", app.IDTokenTTL, maxTokenTTL, msgTokenTTL)
+	checkTTL(p, "access_token_ttl", app.AccessTokenTTL, MaxTokenTTL, msgTokenTTL)
+	checkTTL(p, "id_token_ttl", app.IDTokenTTL, MaxTokenTTL, msgTokenTTL)
 	longest := s.d.Cfg.Tokens.RefreshAbsolute
 	checkTTL(p, "refresh_token_ttl", app.RefreshTokenTTL, longest, fmt.Sprintf(msgRefreshTTL, FormatDuration(longest)))
 
 	app.LaunchURL = strings.TrimSpace(app.LaunchURL)
 	switch {
-	case app.LaunchURL != "" && !isWebAddress(app.LaunchURL, "http", "https"):
+	case app.LaunchURL != "" && !IsWebAddress(app.LaunchURL, "http", "https"):
 		p.add("launch_url", msgLaunchURL)
 	case app.LaunchURL == "" && app.ShowTile: // the home page shows no tile without a link
 		p.add("launch_url", msgTileNeedsLink)
 	}
 	app.IconURL = strings.TrimSpace(app.IconURL)
-	if app.IconURL != "" && !isWebAddress(app.IconURL, "https") && !strings.HasPrefix(app.IconURL, "/icons/") {
+	if app.IconURL != "" && !IsWebAddress(app.IconURL, "https") && !strings.HasPrefix(app.IconURL, "/icons/") {
 		p.add("icon_url", msgIconURL)
 	}
 	app.Description = p.text("description", app.Description, maxDescriptionLen, "")
@@ -413,7 +418,7 @@ func cleanAddresses(p problems, field string, in []string) []string {
 			continue
 		}
 		switch {
-		case !isWebAddress(addr, "http", "https"):
+		case !IsWebAddress(addr, "http", "https"):
 			p.add(field, fmt.Sprintf(msgURIFormat, i+1))
 		case strings.Contains(addr, "#"):
 			p.add(field, fmt.Sprintf(msgURIFragment, i+1))
@@ -426,17 +431,18 @@ func cleanAddresses(p problems, field string, in []string) []string {
 	return out
 }
 
-// isWebAddress reports whether s is an absolute address with one of these
-// schemes, a host and no user name or password.
-func isWebAddress(s string, schemes ...string) bool {
+// IsWebAddress reports whether s is an absolute address with one of these
+// schemes, a host and no user name or password: the app pages' rule for
+// addresses, links and icons.
+func IsWebAddress(s string, schemes ...string) bool {
 	u, err := url.Parse(s)
 	return err == nil && slices.Contains(schemes, u.Scheme) && u.Host != "" && u.User == nil
 }
 
-// checkTTL adds msg for field to p unless d is 0 (the default) or between a
-// minute and max.
+// checkTTL adds msg for field to p unless d is 0 (the default) or between
+// MinTokenTTL and max.
 func checkTTL(p problems, field string, d, max time.Duration, msg string) {
-	if d != 0 && (d < minTokenTTL || d > max) {
+	if d != 0 && (d < MinTokenTTL || d > max) {
 		p.add(field, msg)
 	}
 }

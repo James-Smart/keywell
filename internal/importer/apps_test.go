@@ -71,6 +71,10 @@ func appUUID(s *Snap, name string) string {
 	panic("no application " + name)
 }
 
+// noAdminLine is the Blocking line for an app called Lab that can only be
+// limited to admins when Latch has no admin group (Ruling P).
+const noAdminLine = `Latch has no admin group, so "Lab" can't be limited to admins. Give a group admin access before importing.`
+
 const profileWarning = `Authentik sent group names to it with "profile". Latch sends them only when an app asks ` +
 	`for "groups", so add groups to its scopes if it uses them.`
 
@@ -198,7 +202,7 @@ func TestImportAppAccess(t *testing.T) {
 		bind     func(w *world)
 		allowed  []string // names of the allowed Latch groups; none is open to every active member
 		warning  string
-		skipped  string // the reason, when the app is skipped
+		blocked  bool // the import is blocked (Ruling P)
 		// Who could use the app in Authentik; nil when a policy decides.
 		authentik []string
 	}{{
@@ -289,8 +293,7 @@ func TestImportAppAccess(t *testing.T) {
 		name:     "no admin group for a policy",
 		noAdmins: true,
 		bind:     func(w *world) { w.s.BindPolicy(w.app, WeekdaysPolicy) },
-		skipped: "Authentik limited who could use it with a policy, and Latch has no admin group to limit it to " +
-			"instead. Make an admin group in Latch, then import again.",
+		blocked:  true,
 	}, {
 		name:      "no admin group for one group",
 		noAdmins:  true,
@@ -323,18 +326,17 @@ func TestImportAppAccess(t *testing.T) {
 			tc.bind(&world{s: s, app: app, a: a, b: b, ann: ann})
 
 			e := newEnv(t)
-			rep := e.run(s)
-
-			if tc.skipped != "" {
-				want := []Item{{Kind: "app", Name: "Lab", Skipped: true, Reason: tc.skipped}}
-				if got := appItems(rep); !reflect.DeepEqual(got, want) {
-					t.Errorf("app items:\n got %s\nwant %s", itemLines(got), itemLines(want))
+			if tc.blocked {
+				rep, err := e.try(s)
+				if !errors.Is(err, ErrBlocked) || !slices.Equal(blockingOf(rep), []string{noAdminLine}) {
+					t.Errorf("Run = %v, blocking %q; want ErrBlocked with %q", err, blockingOf(rep), noAdminLine)
 				}
 				if _, err := e.st.GetApplicationBySlug(ctx, "lab"); !errors.Is(err, store.ErrNotFound) {
-					t.Errorf("skipped app is in Latch: %v", err)
+					t.Errorf("blocked app is in Latch: %v", err)
 				}
 				return
 			}
+			rep := e.run(s)
 			var want []Item
 			if tc.warning != "" {
 				want = []Item{{Kind: "app", Name: "Lab", Reason: tc.warning}}
@@ -441,12 +443,30 @@ func TestImportAppMapping(t *testing.T) {
 	}, {
 		name:  "a launch link that isn't a web address",
 		edit:  func(s src) { s.a.LaunchURL = "/start" },
-		items: []string{"Its link to open the app, /start, isn't a full web address, so Latch left it off."},
+		items: []string{"Its link to open the app isn't a web address Latch can use, so it was left off."},
 		check: func(t *testing.T, app *model.Application) {
 			if app.LaunchURL != "" || app.ShowTile {
 				t.Errorf("launch %q, tile %v", app.LaunchURL, app.ShowTile)
 			}
 		},
+	}, {
+		// The report never quotes a user name and password.
+		name:  "a launch link with a password",
+		edit:  func(s src) { s.a.LaunchURL = "https://bot:hunter2@lab.example.org/" },
+		items: []string{"Its link to open the app isn't a web address Latch can use, so it was left off."},
+		check: func(t *testing.T, app *model.Application) {
+			if app.LaunchURL != "" || app.ShowTile {
+				t.Errorf("launch %q, tile %v", app.LaunchURL, app.ShowTile)
+			}
+		},
+	}, {
+		name: "a pattern with a password",
+		edit: func(s src) {
+			s.p.RedirectURIs = append(s.p.RedirectURIs,
+				authentik.RedirectURI{URL: `https://bot:hunter2@lab\.example\.org/.*`, MatchingMode: "regex",
+					Type: "authorization"})
+		},
+		items: []string{`Return address https://lab\.example\.org/.* is a pattern. Add the real addresses on the app's page.`},
 	}, {
 		name: "hidden",
 		edit: func(s src) { s.a.LaunchURL, s.a.Hide = "https://lab.example.org/", true },
@@ -484,6 +504,13 @@ func TestImportAppMapping(t *testing.T) {
 			}
 			if got := appItems(rep); !reflect.DeepEqual(got, want) {
 				t.Errorf("app items:\n got %s\nwant %s", itemLines(got), itemLines(want))
+			}
+			saved, err := e.st.LastImportRun(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(saved.Report, "hunter2") {
+				t.Errorf("the saved report quotes a password:\n%s", saved.Report)
 			}
 			if tc.skipped {
 				if n := e.rows()["applications"]; n != 0 {
@@ -582,6 +609,87 @@ func TestImportAppConflicts(t *testing.T) {
 	a.AllowedGroupIDs, a.UpdatedAt = labBefore.AllowedGroupIDs, labBefore.UpdatedAt
 	if !reflect.DeepEqual(a, labBefore) {
 		t.Errorf("skipped lab changed beyond its groups:\n%+v\n%+v", labBefore, a)
+	}
+}
+
+// Ruling P: every skip of an app an earlier import made still sets who can
+// use it from Authentik, here a skip for an unknown subject mode, and the
+// reason says when that is admins only.
+func TestImportSkipFollowsAccess(t *testing.T) {
+	cases := []struct {
+		name    string
+		bind    func(s *Snap, lab, a string)
+		allowed []string
+		reason  string
+	}{{
+		name:    "a group",
+		bind:    func(s *Snap, lab, a string) { s.Bind(lab, a) },
+		allowed: []string{"A"},
+		reason:  "Identifies people in a way Latch doesn't support. Who can use it still follows Authentik.",
+	}, {
+		name:    "admins only",
+		bind:    func(s *Snap, lab, a string) { s.BindPolicy(lab, WeekdaysPolicy) },
+		allowed: []string{"Trustees"},
+		reason: "Identifies people in a way Latch doesn't support. " +
+			"Only admins can use it until you choose its groups on the app's page.",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSnap()
+			a := s.Group("A")
+			s.Join(s.User("ann", "ann@x.org"), a)
+			s.Join(s.User("tess", "tess@x.org"), s.Group("Trustees", Superuser()))
+			lab := s.App("Lab", "lab")
+			pk := s.Provider(labProvider())
+			s.Use(lab, pk)
+			e := newEnv(t)
+			e.run(s)
+			before := e.app("lab")
+			if len(before.AllowedGroupIDs) != 0 {
+				t.Fatalf("first run: lab allows %v, want everyone", before.AllowedGroupIDs)
+			}
+
+			// Authentik limits Lab, and identifies people in a way Latch
+			// doesn't know.
+			tc.bind(s, lab, a)
+			s.P(pk).SubMode = "user_shoe_size"
+			rep := e.run(s)
+			want := []Item{{Kind: "app", Name: "Lab", Skipped: true, Reason: tc.reason}}
+			if got := appItems(rep); !reflect.DeepEqual(got, want) {
+				t.Errorf("app items:\n got %s\nwant %s", itemLines(got), itemLines(want))
+			}
+			after := e.app("lab")
+			if !slices.Equal(after.AllowedGroupIDs, e.groupIDs(tc.allowed...)) {
+				t.Errorf("skipped lab allows %v, want %v", after.AllowedGroupIDs, tc.allowed)
+			}
+			after.AllowedGroupIDs, after.UpdatedAt = before.AllowedGroupIDs, before.UpdatedAt
+			if !reflect.DeepEqual(after, before) {
+				t.Errorf("skipped lab changed beyond its groups:\n%+v\n%+v", before, after)
+			}
+		})
+	}
+}
+
+// Ruling P: an app that can only be limited to admins blocks the import
+// when Latch has no admin group, because no groups means open to all.
+func TestImportBlocksAppWithoutAdminGroup(t *testing.T) {
+	s := NewSnap()
+	s.Join(s.User("ann", "ann@x.org"), s.Group("A"))
+	lab := s.App("Lab", "lab")
+	s.Use(lab, s.Provider(labProvider()))
+	e := newEnv(t)
+	e.run(s) // Lab is open to everyone, and Latch has no admin group
+	s.BindPolicy(lab, WeekdaysPolicy)
+
+	for _, dry := range []bool{true, false} {
+		before := e.dump()
+		rep, err := e.try(s, func(o *Options) { o.DryRun = dry })
+		if !errors.Is(err, ErrBlocked) || !slices.Equal(blockingOf(rep), []string{noAdminLine}) {
+			t.Errorf("dry=%v: Run = %v, blocking %q; want ErrBlocked with %q", dry, err, blockingOf(rep), noAdminLine)
+		}
+		if after := e.dump(); after != before {
+			t.Errorf("dry=%v: database changed:\n%s\n---\n%s", dry, before, after)
+		}
 	}
 }
 

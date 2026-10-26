@@ -547,3 +547,26 @@ func TestCheckApp(t *testing.T) {
 		t.Errorf("SlugFromName = %q", got)
 	}
 }
+
+// The rules the importer shares with the app pages.
+func TestAppRulesExported(t *testing.T) {
+	for _, c := range []struct {
+		s       string
+		schemes []string
+		want    bool
+	}{
+		{"https://door.example.org/icon.png", []string{"https"}, true},
+		{"http://door.example.org/", []string{"https"}, false},
+		{"http://door.example.org/", []string{"http", "https"}, true},
+		{"https://bot:secret@door.example.org/", []string{"https"}, false},
+		{"/media/public/wiki.png", []string{"https"}, false},
+		{"blank://blank", []string{"http", "https"}, false},
+	} {
+		if got := admin.IsWebAddress(c.s, c.schemes...); got != c.want {
+			t.Errorf("IsWebAddress(%q, %q) = %v", c.s, c.schemes, got)
+		}
+	}
+	if admin.MinTokenTTL != time.Minute || admin.MaxTokenTTL != 24*time.Hour {
+		t.Errorf("token lifetimes %v to %v", admin.MinTokenTTL, admin.MaxTokenTTL)
+	}
+}
