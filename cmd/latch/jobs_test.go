@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -331,5 +334,117 @@ func TestServeReturnsWhenListenFails(t *testing.T) {
 		}
 	case <-time.After(within):
 		t.Fatalf("serve still running %v after failing to listen", within)
+	}
+}
+
+// freeAddr returns a local address nothing is listening on.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().String()
+}
+
+// getEventually fetches url, retrying while the server starts, and returns
+// the status and body.
+func getEventually(t *testing.T, url string) (int, string) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		resp, err := http.Get(url)
+		if err == nil {
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(b)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("GET %s: %v", url, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// With metrics.listen set, /metrics is served there and only there.
+func TestServeMetricsListener(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	main, metricsAddr := freeAddr(t), freeAddr(t)
+	cfg, _, _ := serveInstall(t, main)
+	cfg.Metrics.Listen = metricsAddr
+	errc := make(chan error, 1)
+	go func() { errc <- serve(ctx, cfg, slog.New(slog.DiscardHandler)) }()
+
+	status, body := getEventually(t, "http://"+metricsAddr+"/metrics")
+	if status != 200 || !strings.Contains(body, "latch_build_info") {
+		t.Fatalf("metrics listener: %d\n%s", status, body)
+	}
+	getEventually(t, "http://"+main+"/healthz")
+	resp, err := http.PostForm("http://"+main+"/login", url.Values{"email": {"nobody@example.org"}, "password": {"wrong"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	_, body = getEventually(t, "http://"+metricsAddr+"/metrics")
+	if !strings.Contains(body, `latch_logins_total{result="failure"} 1`+"\n") {
+		t.Errorf("sign-in failure not counted:\n%s", body)
+	}
+	if strings.Contains(body, `latch_http_requests_total{code="2xx"} 0`) {
+		t.Errorf("requests not counted:\n%s", body)
+	}
+	// The public listener never serves it.
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err = noFollow.Get("http://" + main + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(b), "latch_build_info") {
+		t.Errorf("main listener served metrics:\n%s", b)
+	}
+	if resp.StatusCode != 404 && resp.StatusCode != 303 && resp.StatusCode != 302 {
+		t.Errorf("main /metrics = %d", resp.StatusCode)
+	}
+	// Only /metrics is served on the metrics listener.
+	if status, _ := getEventually(t, "http://"+metricsAddr+"/healthz"); status != 404 {
+		t.Errorf("metrics listener /healthz = %d, want 404", status)
+	}
+
+	cancel()
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("serve: %v", err)
+		}
+	case <-time.After(within):
+		t.Fatal("serve still running after its context ended")
+	}
+	if c, err := net.DialTimeout("tcp", metricsAddr, time.Second); err == nil {
+		c.Close()
+		t.Error("metrics listener still open after shutdown")
+	}
+}
+
+// With metrics.listen empty nothing extra listens; one that cannot bind
+// fails serve.
+func TestServeMetricsListenFailure(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer taken.Close()
+	cfg, _, _ := serveInstall(t, freeAddr(t))
+	cfg.Metrics.Listen = taken.Addr().String()
+	errc := make(chan error, 1)
+	go func() { errc <- serve(t.Context(), cfg, slog.New(slog.DiscardHandler)) }()
+	select {
+	case err := <-errc:
+		if err == nil || !strings.Contains(err.Error(), "address already in use") {
+			t.Fatalf("serve: %v, want address already in use", err)
+		}
+	case <-time.After(within):
+		t.Fatal("serve still running after the metrics listener failed")
 	}
 }

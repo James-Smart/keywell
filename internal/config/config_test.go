@@ -247,6 +247,38 @@ func TestRootExampleMatchesEmbedded(t *testing.T) {
 	}
 }
 
+func TestMetricsListen(t *testing.T) {
+	c, err := Load("", noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Metrics.Listen != "" {
+		t.Errorf("default Metrics.Listen = %q", c.Metrics.Listen)
+	}
+	c, err = Load("", mapEnv(map[string]string{"LATCH_METRICS_LISTEN": "127.0.0.1:9100"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Metrics.Listen != "127.0.0.1:9100" {
+		t.Errorf("Metrics.Listen = %q", c.Metrics.Listen)
+	}
+	for _, ok := range []string{"", "127.0.0.1:9100", ":9100"} {
+		c := valid(t)
+		c.Metrics.Listen = ok
+		if err := c.Validate(); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"localhost", "127.0.0.1:x", "127.0.0.1:", "127.0.0.1:70000"} {
+		c := valid(t)
+		c.Metrics.Listen = bad
+		want := "metrics.listen must be host:port, got \"" + bad + "\""
+		if err := c.Validate(); err == nil || err.Error() != want {
+			t.Errorf("%q: err = %v, want %q", bad, err, want)
+		}
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	for in, want := range map[string]time.Duration{
 		"90d":  90 * 24 * time.Hour,

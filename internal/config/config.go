@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"net"
 	"net/netip"
 	"net/url"
 	"os"
@@ -59,6 +60,11 @@ type PasswordConfig struct {
 	MinLength int `yaml:"min_length"`
 }
 
+// MetricsConfig is the optional Prometheus listener.
+type MetricsConfig struct {
+	Listen string `yaml:"listen"`
+}
+
 type LogConfig struct {
 	Level  string
 	Format string
@@ -76,6 +82,7 @@ type Config struct {
 	Tokens         TokensConfig
 	Password       PasswordConfig
 	Log            LogConfig
+	Metrics        MetricsConfig
 }
 
 func defaults() *Config {
@@ -281,6 +288,7 @@ func applyEnv(c *Config, env func(string) string) error {
 	num("LATCH_PASSWORD_MIN_LENGTH", &c.Password.MinLength)
 	str("LATCH_LOG_LEVEL", &c.Log.Level)
 	str("LATCH_LOG_FORMAT", &c.Log.Format)
+	str("LATCH_METRICS_LISTEN", &c.Metrics.Listen)
 	return err
 }
 
@@ -350,6 +358,13 @@ func (c *Config) Validate() error {
 		}
 		if _, err := netip.ParseAddr(p); err != nil {
 			return fmt.Errorf("trusted_proxies entries must be CIDR ranges or IP addresses, got %q", p)
+		}
+	}
+	if l := c.Metrics.Listen; l != "" {
+		_, port, err := net.SplitHostPort(l)
+		n, perr := strconv.ParseUint(port, 10, 16)
+		if err != nil || perr != nil || n == 0 {
+			return fmt.Errorf("metrics.listen must be host:port, got %q", l)
 		}
 	}
 	return nil

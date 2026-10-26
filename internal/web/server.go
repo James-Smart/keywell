@@ -19,6 +19,7 @@ import (
 	"latch/internal/audit"
 	"latch/internal/config"
 	"latch/internal/mail"
+	"latch/internal/metrics"
 	"latch/internal/password"
 	"latch/internal/secrets"
 	"latch/internal/session"
@@ -36,6 +37,9 @@ type Deps struct {
 	Log      *slog.Logger
 	Renderer *Renderer
 	Limits   Limiters
+
+	// Metrics counts requests by status class; nil counts nothing.
+	Metrics *metrics.Registry
 
 	// OIDC mounts the OpenID Connect endpoints; nil leaves them out.
 	OIDC interface{ Mount(*http.ServeMux) }
@@ -131,7 +135,7 @@ func New(d Deps) http.Handler {
 	h = limitBody(d.Renderer)(h)
 	h = crossOriginProtection(d.Renderer).Handler(h)
 	h = securityHeaders(h)
-	h = requestLog(d.Log)(h)
+	h = requestLog(d.Log, d.Metrics)(h)
 	h = realIP(parseProxies(d.Cfg.TrustedProxies, d.Log), d.Log)(h)
 	h = recoverer(d.Log, d.Renderer)(h)
 	return h

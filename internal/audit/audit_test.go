@@ -47,3 +47,26 @@ func TestAuditInsertAndRecorder(t *testing.T) {
 		t.Fatalf("nil detail: %q %v", detail, err)
 	}
 }
+
+// The observer sees every event, including ones that could not be stored,
+// and the recorder it was added to is left unchanged.
+func TestWithObserver(t *testing.T) {
+	ctx := context.Background()
+	d, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Migrate(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	base := audit.New(store.New(d), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	var seen []string
+	r := base.WithObserver(func(e model.AuditEvent) { seen = append(seen, e.Action) })
+	r.Record(ctx, model.AuditEvent{ActorType: audit.ActorSystem, Action: audit.KeyRotated})
+	base.Record(ctx, model.AuditEvent{ActorType: audit.ActorSystem, Action: audit.Logout})
+	d.Close() // inserts now fail
+	r.Record(ctx, model.AuditEvent{ActorType: audit.ActorSystem, Action: audit.LoginFailure})
+	if len(seen) != 2 || seen[0] != audit.KeyRotated || seen[1] != audit.LoginFailure {
+		t.Fatalf("observed %v", seen)
+	}
+}

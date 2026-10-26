@@ -42,3 +42,5 @@ password:
 log:
   level: info
   format: json                              # json | text
+metrics:
+  listen: ""                                # host:port to serve Prometheus metrics at /metrics, e.g. 127.0.0.1:9100; empty = off

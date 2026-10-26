@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"latch/internal/metrics"
 )
 
 // contentSecurityPolicy allows forms to post to other origins because OIDC
@@ -220,13 +222,14 @@ func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 // requestLog logs one line per request. Query strings are never logged
 // because they can carry authorization codes.
-func requestLog(log *slog.Logger) func(http.Handler) http.Handler {
+func requestLog(log *slog.Logger, m *metrics.Registry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
 			status := sw.status
+			m.CountRequest(status)
 			if status == 0 {
 				status = http.StatusOK
 			}

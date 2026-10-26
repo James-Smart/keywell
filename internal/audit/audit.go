@@ -72,6 +72,8 @@ func UserActor(userID string) (model.ActorType, string) { return model.ActorUser
 type Recorder struct {
 	store *store.Store
 	log   *slog.Logger
+
+	observe func(model.AuditEvent)
 }
 
 // New returns a Recorder. A nil log uses slog.Default().
@@ -82,11 +84,23 @@ func New(s *store.Store, log *slog.Logger) *Recorder {
 	return &Recorder{store: s, log: log}
 }
 
+// WithObserver returns a Recorder that also calls f with every event it is
+// given, after the attempt to store it, whether or not that succeeded.
+func (r *Recorder) WithObserver(f func(model.AuditEvent)) *Recorder {
+	c := *r
+	c.observe = f
+	return &c
+}
+
 // Record stores the event (filling ID and At) and logs it. Failures are
 // logged, never returned: auditing must not break the action being audited.
 // Only identifying fields are logged; Detail is never written to the log.
 func (r *Recorder) Record(ctx context.Context, e model.AuditEvent) {
-	if err := r.store.InsertAuditEvent(ctx, &e); err != nil {
+	err := r.store.InsertAuditEvent(ctx, &e)
+	if r.observe != nil {
+		defer r.observe(e)
+	}
+	if err != nil {
 		r.log.ErrorContext(ctx, "audit insert failed", "action", e.Action, "error", err)
 		return
 	}

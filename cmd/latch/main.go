@@ -22,6 +22,7 @@ import (
 	"latch/internal/config"
 	"latch/internal/db"
 	"latch/internal/mail"
+	"latch/internal/metrics"
 	"latch/internal/oidc"
 	"latch/internal/secrets"
 	"latch/internal/session"
@@ -219,7 +220,8 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	rec := audit.New(st, log)
+	reg := metrics.New(Version)
+	rec := audit.New(st, log).WithObserver(reg.ObserveAudit)
 	keys, err := oidc.NewKeyManager(ctx, st, enc)
 	if err != nil {
 		return err
@@ -250,28 +252,49 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		Log:        log,
 		Renderer:   rend,
 		Limits:     web.NewLimiters(time.Now),
+		Metrics:    reg,
 		OIDC:       prov,
 		Keys:       keys,
 		Background: &background,
 		Version:    Version,
 	})
 
-	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	newServer := func(addr string, h http.Handler) *http.Server {
+		return &http.Server{
+			Addr:              addr,
+			Handler:           h,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+		}
 	}
+	srv := newServer(cfg.Listen, handler)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	log.Info("listening", "addr", cfg.Listen, "issuer", cfg.Issuer(), "version", Version)
 
+	// Metrics are served on their own listener, never the public one.
+	var msrv *http.Server
+	merrc := make(chan error, 1)
+	if cfg.Metrics.Listen != "" {
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", reg.Handler())
+		msrv = newServer(cfg.Metrics.Listen, mux)
+		go func() { merrc <- msrv.ListenAndServe() }()
+		log.Info("serving metrics", "addr", cfg.Metrics.Listen)
+	}
+
 	select {
 	case err := <-errc:
+		if msrv != nil {
+			msrv.Close()
+		}
 		return err
+	case err := <-merrc:
+		srv.Close()
+		return fmt.Errorf("metrics listener: %w", err)
 	case <-ctx.Done():
 	}
 	log.Info("shutting down")
@@ -279,6 +302,14 @@ func serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
+	}
+	if msrv != nil {
+		if err := msrv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("shutdown metrics: %w", err)
+		}
+		if err := <-merrc; !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 	}
 	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {
 		return err

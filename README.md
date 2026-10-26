@@ -38,6 +38,26 @@ Latch refuses to start if:
 - `tokens.access` or `tokens.id` is longer than 24h. A retired signing key keeps verifying tokens for only 24 hours.
 - `tokens.refresh_absolute` is shorter than `tokens.refresh`.
 - A `trusted_proxies` entry is not a CIDR range (`10.0.0.0/8`) or an IP address.
+- `metrics.listen` is set but is not `host:port`.
+
+## Metrics
+
+Latch can serve Prometheus metrics. Set `metrics.listen` (or `LATCH_METRICS_LISTEN`) to a `host:port` such as `127.0.0.1:9100`. It is off when empty. Metrics are served at `/metrics` on that address only.
+
+The listener is separate on purpose. `/metrics` is never on the public listener, so a reverse proxy in front of Latch cannot expose it by accident. Bind it to a private address and let only your Prometheus server reach it.
+
+There are four metric families:
+
+- `latch_build_info`: the running version.
+- `latch_http_requests_total`: requests answered, by status class (`1xx` to `5xx`).
+- `latch_logins_total`: sign-ins, by result (`success`, `failure`, `second_step_failure`). A correct password that still needs a second step counts only once that step is done.
+- `latch_tokens_issued_total`: tokens issued to apps, by grant (`authorization_code`, `refresh_token`, `client_credentials`).
+
+To scrape it, add this to Prometheus:
+
+```yaml
+scrape_configs: [{job_name: latch, static_configs: [{targets: ['127.0.0.1:9100']}]}]
+```
 
 ## Connecting MediaWiki
 
