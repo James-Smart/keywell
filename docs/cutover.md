@@ -28,20 +28,22 @@ Every command below was tried against a test Authentik. Where a command has `…
 
    This only reads. Authentik carries on as normal. If the database service, user or database has another name on your server, use those names. They are in Authentik's `.env` file and compose file. The dump holds everyone's password hashes, so keep it private and delete it when you finish (section 7).
 
-3. **Put the copy into a throwaway database.** This is a small, temporary database that exists only so Latch can read the copy. Pick any password for it.
+3. **Put the copy into a throwaway database.** This is a small, temporary database that exists only so Latch can read the copy. Pick any password for it. You will use the same password again in step 4, so type it once into `PGPASSWORD`. This way it isn't saved in your shell history (in fish, use `read -s -x PGPASSWORD` instead):
 
    ```sh
-   docker run -d --name ak-copy -e POSTGRES_PASSWORD=… -p 127.0.0.1:55433:5432 postgres:16-alpine
+   read -rs PGPASSWORD && export PGPASSWORD
+   docker run -d --name ak-copy -e POSTGRES_PASSWORD="$PGPASSWORD" -p 127.0.0.1:55433:5432 postgres:16-alpine
    docker exec ak-copy createdb -U postgres authentik
    docker exec -i ak-copy pg_restore -U postgres -d authentik --no-owner < authentik.dump
    ```
 
-   Wait a few seconds after the first line before running the second. The restore prints nothing when it works.
+   Use the same major version of Postgres as Authentik's own. It is the `image:` line of the `postgresql` service in Authentik's `docker-compose.yml`, which is `postgres:16-alpine` in Authentik 2026.8's standard file. If yours says another number, use that number instead of `16`, or the restore fails.
 
-4. **Try the import without saving anything.** This is called a dry run. Put the throwaway database's password in `PGPASSWORD` rather than in the address, so it never shows up in the command, the report or your shell history. On the Latch server:
+   Wait a few seconds after the `docker run` line before running the next. The restore prints nothing when it works.
+
+4. **Try the import without saving anything.** This is called a dry run. The password is the one you chose in step 3, in `PGPASSWORD`. Keeping it there rather than in the address means it never shows up in the `--from` address, in Latch's report or in its error messages. If you are in a new terminal, set it again the same way (`read -rs PGPASSWORD && export PGPASSWORD`). On the Latch server:
 
    ```sh
-   export PGPASSWORD=…
    latch import-authentik --config /etc/latch/latch.yaml --dry-run \
      --from postgres://postgres@127.0.0.1:55433/authentik
    ```
@@ -51,7 +53,6 @@ Every command below was tried against a test Authentik. Where a command has `…
    **If Latch runs under Docker,** run the command through compose, and hand the password to the container with `-e PGPASSWORD`:
 
    ```sh
-   export PGPASSWORD=…
    docker compose -f deploy/docker-compose.yml run --rm -e PGPASSWORD latch import-authentik \
      --config /var/lib/latch/latch.yaml --dry-run \
      --from postgres://postgres@ak-copy:5432/authentik
@@ -203,7 +204,7 @@ Before you start, have open: the Authentik server, the Latch server and the wiki
 3. **Run the import for real.** It is the dry-run command without `--dry-run`, with the same `--drop-key` options:
 
    ```sh
-   export PGPASSWORD=…
+   read -rs PGPASSWORD && export PGPASSWORD   # the new throwaway database's password
    latch import-authentik --config /etc/latch/latch.yaml \
      --from postgres://postgres@127.0.0.1:55433/authentik
    ```
@@ -217,7 +218,7 @@ Before you start, have open: the Authentik server, the Latch server and the wiki
 
 ### The wiki
 
-These names were checked against the OpenID Connect extension's page on mediawiki.org (extension version 8.3.0, page last edited 23 October 2026, read on 26 October 2026) and its source. If your wiki has an older version, check that version's page.
+These names were checked against the OpenID Connect extension 8.3.0 documentation on mediawiki.org on 26 October 2026, and the extension's source. If your wiki has an older version, check that version's page.
 
 1. **In Latch,** open the wiki's page under Applications. It needs the return address `https://wiki.example.org/index.php/Special:PluggableAuthLogin` (your wiki's own address). The import copied it, with the client ID and secret. The Setup details panel on the same page shows the settings below, ready to copy.
 2. **In `LocalSettings.php`,** change `providerURL` to Latch's address, with no `/` at the end:

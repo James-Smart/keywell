@@ -140,7 +140,7 @@ $wgPluggableAuth_Config['Latch'] = [
 
 `providerURL` is Latch's `public_url`, with no trailing slash. The wiki takes the account name from `preferred_username`, along with `email` and `name`.
 
-If the wiki's accounts came from Authentik, they are linked to Authentik's address, which changes when you switch. Set `$wgOpenIDConnect_MigrateUsersByEmail = true;` for the first sign-ins after the switch so existing accounts are matched by email.
+If the wiki's accounts came from Authentik, they are linked to Authentik's address, which changes when you switch. The step that must happen is updating the stored address in the wiki's `openid_connect` table with one `UPDATE`; see "The wiki" in [docs/cutover.md](docs/cutover.md#the-wiki). `$wgOpenIDConnect_MigrateUsersByEmail = true;` is only a safety net: it matches by email just the wiki accounts that have no stored subject or issuer, not accounts already linked to Authentik.
 
 ## Connecting your own app
 
