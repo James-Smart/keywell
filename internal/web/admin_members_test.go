@@ -271,7 +271,7 @@ func TestAddMemberInvite(t *testing.T) {
 		`name="setup" value="password">`, "Set a password now",
 		`name="password"`,
 	)
-	if d := between(body, "<details", ">"); d == "" || strings.Contains(d, "open") {
+	if d := between(between(body, "<main", "</main>"), "<details", ">"); d == "" || strings.Contains(d, "open") {
 		t.Errorf("metadata disclosure %q, want closed", d)
 	}
 	// The password field is hidden while an invitation is chosen, and a
@@ -366,7 +366,7 @@ func TestAddMemberErrorsKeepInput(t *testing.T) {
 	resp, body = env.Submit(t, c, "/admin/members", form)
 	assertStatus(t, resp, http.StatusUnprocessableEntity)
 	assertContains(t, body, "Metadata must be a JSON object", ">[1,2]</textarea>", `value="Sam Okafor"`)
-	if d := between(body, "<details", ">"); !strings.Contains(d, "open") {
+	if d := between(between(body, "<main", "</main>"), "<details", ">"); !strings.Contains(d, "open") {
 		t.Errorf("metadata disclosure %q, want open to show the message", d)
 	}
 

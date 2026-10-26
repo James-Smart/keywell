@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"latch/internal/config"
+	"latch/internal/model"
 )
 
 func TestTemplateFuncs(t *testing.T) {
@@ -78,6 +79,22 @@ func TestPartialsInEveryPage(t *testing.T) {
 		}
 		if set.Lookup("admin-nav") == nil {
 			t.Errorf("page %s lacks the admin partials", name)
+		}
+	}
+}
+
+func TestInitials(t *testing.T) {
+	for _, c := range []struct{ name, email, want string }{
+		{"Alex Smith", "alex@example.org", "AS"},
+		{"alex", "alex@example.org", "A"},
+		{"Alex van der Berg", "alex@example.org", "AB"},
+		{"  émile   zola ", "emile@example.org", "ÉZ"},
+		{"", "sam@example.org", "S"},
+		{"", "", "?"},
+	} {
+		u := &model.User{Name: c.name, Email: c.email}
+		if got := initials(u); got != c.want {
+			t.Errorf("initials(%q, %q) = %q, want %q", c.name, c.email, got, c.want)
 		}
 	}
 }

@@ -26,15 +26,4 @@
 <p>No apps yet. Ask an admin to give you access.</p>
 {{- end}}
 {{- end}}
-<h2>Your account</h2>
-<ul class="account-links">
-  <li><a href="/account/password">Change password</a></li>
-  <li><a href="/account/totp">Two-step sign in</a></li>
-{{- if .Data.IsAdmin}}
-  <li><a href="/admin">Admin pages</a></li>
-{{- end}}
-</ul>
-<form method="post" action="/logout">
-  <button type="submit" class="button-secondary">Sign out</button>
-</form>
 {{end}}

@@ -772,3 +772,67 @@ func TestResolveMemberAndGroups(t *testing.T) {
 		t.Errorf("unknown group: %q", got)
 	}
 }
+
+func TestSetOwnName(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	alex := mkMember(t, st, "Alex Rivera", "alex@example.org")
+
+	got, err := svc.SetOwnName(ctx, alex.ID, "  Alex Rivera-Smith ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Alex Rivera-Smith" {
+		t.Errorf("returned name %q", got.Name)
+	}
+	if stored, _ := st.GetUser(ctx, alex.ID); stored.Name != "Alex Rivera-Smith" || stored.Email != "alex@example.org" {
+		t.Errorf("stored %+v", stored)
+	}
+	ev := oneEvent(t, st, audit.UserUpdate)
+	wantChanged := map[string]any{"name": map[string]any{"from": "Alex Rivera", "to": "Alex Rivera-Smith"}}
+	if !reflect.DeepEqual(ev.Detail["changed"], wantChanged) || ev.ActorType != model.ActorUser ||
+		ev.ActorID != alex.ID || ev.TargetID != alex.ID || ev.Summary != "Changed name" {
+		t.Errorf("update event %+v", ev)
+	}
+
+	// The same name again changes nothing and records nothing.
+	before := countEvents(t, st)
+	if _, err := svc.SetOwnName(ctx, alex.ID, "Alex Rivera-Smith"); err != nil {
+		t.Fatal(err)
+	}
+	if after := countEvents(t, st); after != before {
+		t.Errorf("no-op save recorded %d events", after-before)
+	}
+}
+
+func TestSetOwnNameValidation(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+	alex := mkMember(t, st, "Alex Rivera", "alex@example.org")
+	for _, c := range []struct{ name, value, msg string }{
+		{"empty", "  ", "Enter a name."},
+		{"too long", strings.Repeat("x", 201), "Use at most 200 characters."},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := svc.SetOwnName(ctx, alex.ID, c.value)
+			if got := fields(t, err)["name"]; got != c.msg {
+				t.Errorf(`Fields["name"] = %q, want %q`, got, c.msg)
+			}
+			if stored, _ := st.GetUser(ctx, alex.ID); stored.Name != "Alex Rivera" {
+				t.Errorf("name changed to %q", stored.Name)
+			}
+			if n := countEvents(t, st); n != 0 {
+				t.Errorf("recorded %d events", n)
+			}
+		})
+	}
+}
+
+// Service accounts have no account page; their names are the admins' to set.
+func TestSetOwnNameNotForServiceAccounts(t *testing.T) {
+	svc, st, _ := newService(t)
+	bot := mkServiceAccount(t, st, "Door bot", "door-bot")
+	if _, err := svc.SetOwnName(context.Background(), bot.ID, "Renamed"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("err = %v, want store.ErrNotFound", err)
+	}
+}

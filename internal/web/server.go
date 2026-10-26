@@ -116,6 +116,9 @@ func New(d Deps) http.Handler {
 		HashPassword: s.hashPassword,
 		Now:          s.d.Now,
 	})
+	if d.Renderer != nil {
+		d.Renderer.isAdmin = s.isAdmin
+	}
 
 	pages := http.NewServeMux()
 	s.routes(pages)
@@ -154,6 +157,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /reset/{token}", s.resetSet)
 
 	signedIn := func(h http.HandlerFunc) http.Handler { return session.RequireUser(h) }
+	mux.Handle("GET /account", signedIn(s.accountPage))
+	mux.Handle("POST /account/name", signedIn(s.saveOwnName))
 	mux.Handle("GET /account/password", signedIn(s.accountPasswordPage))
 	mux.Handle("POST /account/password", signedIn(s.changePassword))
 

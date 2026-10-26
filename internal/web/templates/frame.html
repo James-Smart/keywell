@@ -6,12 +6,18 @@
 <title>{{if .Title}}{{.Title}} · {{end}}{{if .Section}}Admin · {{end}}{{.Brand.Name}}</title>
 <link rel="stylesheet" href="/static/latch.css">
 <style>:root{--primary: {{.Brand.PrimaryColor}}}</style>
+{{- if .User}}
+<script src="/static/latch.js" defer></script>
+{{- end}}
 </head>
 <body>
 <header class="bar">
   <a class="brand" href="/">{{if .Brand.LogoURL}}<img src="{{.Brand.LogoURL}}" alt="">{{end}}<span>{{.Brand.Name}}</span></a>
 {{- if .Section}}
 {{- template "admin-header" .}}
+{{- end}}
+{{- if .User}}
+{{- template "account-menu" .}}
 {{- end}}
 </header>
 {{- if .Section}}
@@ -33,6 +39,23 @@
 {{- end}}
 </body>
 </html>
+{{- define "account-menu"}}
+  <details class="account-menu">
+    <summary aria-label="Account menu"><span class="avatar" aria-hidden="true">{{initials .User}}</span></summary>
+    <div class="account-menu-panel">
+      <p class="account-menu-who">{{with .User.Name}}<strong>{{.}}</strong>{{end}}<span>{{.User.Email}}</span></p>
+      <ul>
+        <li><a href="/account">Your account</a></li>
+      {{- if .Section}}
+        <li><a href="/">Member home</a></li>
+      {{- else if .IsAdmin}}
+        <li><a href="/admin">Admin pages</a></li>
+      {{- end}}
+      </ul>
+      <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+    </div>
+  </details>
+{{- end}}
 {{- define "alerts"}}
 {{- if .Error}}
   <p class="alert alert-error" role="alert">{{.Error}}</p>

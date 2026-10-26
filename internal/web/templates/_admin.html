@@ -8,13 +8,6 @@
 
 {{- define "admin-header"}}
   <span class="bar-label">Admin</span>
-  <div class="bar-account">
-  {{- with .User}}
-    <span class="bar-email">{{.Email}}</span>
-  {{- end}}
-    <a href="/">Member home</a>
-    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
-  </div>
 {{- end}}
 
 {{- define "admin-nav"}}

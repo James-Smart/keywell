@@ -65,9 +65,7 @@ func TestHomeShowsTilesForUserGroups(t *testing.T) {
 		"wiki", `href="https://wiki.example.org"`, ">W</span>", "All about wiki",
 		// Open to Members, with an icon.
 		"Tool Booking", `href="https://tools.example.org/book"`, `src="https://tools.example.org/icon.png"`, "All about Tool Booking",
-		"Change password", `href="/account/password"`,
-		"Two-step sign in", `href="/account/totp"`,
-		`action="/logout"`,
+		`href="/account"`, `action="/logout"`, // the account menu
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q", want)
@@ -103,7 +101,7 @@ func TestHomeEmptyState(t *testing.T) {
 	for _, want := range []string{
 		"Hi sam", // no name: the email address before the @
 		"No apps yet. Ask an admin to give you access.",
-		`href="/account/password"`,
+		`href="/account"`,
 		`action="/logout"`,
 	} {
 		if !strings.Contains(body, want) {

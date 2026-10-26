@@ -43,8 +43,8 @@ h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 1rem; }
 h2 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; }
 p { margin: 0 0 1rem; }
 
-/* Header bar. Admin pages add a label and the admin's account links,
-   which wrap under the brand on phones. */
+/* Header bar: the brand, an "Admin" label on admin pages, and the account
+   menu at the right once signed in. */
 .bar {
   display: flex;
   flex-wrap: wrap;
@@ -73,27 +73,59 @@ p { margin: 0 0 1rem; }
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: var(--radius);
 }
-.bar-account {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  width: 100%;
-  font-size: 0.95rem;
-}
-.bar-account a { color: #fff; }
-.bar-account form { margin: 0; }
-.bar-account button {
-  margin: 0;
-  padding: 0.3rem 0.8rem;
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.7);
-}
-.bar-email { overflow-wrap: anywhere; }
 
-@media (min-width: 720px) {
-  .bar-account { width: auto; margin-left: auto; }
+/* Account menu: a round button with the member's initials that opens a
+   panel of account links. A <details> element, so it needs no script;
+   latch.js only closes it on a click outside or Escape. */
+.account-menu { position: relative; margin-left: auto; }
+.account-menu summary { display: block; list-style: none; cursor: pointer; border-radius: 50%; }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
+.account-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 10;
+  width: 15rem;
+  max-width: calc(100vw - 2rem);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+.account-menu-who { margin: 0; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+.account-menu-who strong, .account-menu-who span { display: block; overflow-wrap: anywhere; }
+.account-menu-who span { color: var(--muted); font-size: 0.9rem; }
+.account-menu ul { list-style: none; margin: 0; padding: 0.25rem 0; }
+.account-menu li a { display: block; padding: 0.5rem 1rem; color: var(--text); text-decoration: none; }
+.account-menu form { margin: 0; padding: 0.25rem 0; border-top: 1px solid var(--border); }
+.account-menu form button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  color: var(--primary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.account-menu li a:hover, .account-menu li a:focus-visible,
+.account-menu form button:hover, .account-menu form button:focus-visible { background: var(--background); filter: none; }
 
 /* Content column: narrow for sign-in pages, wide for the member home */
 main {
@@ -226,14 +258,16 @@ button:focus-visible, .button:focus-visible { outline: 2px solid var(--text); ou
 .tile-text { display: flex; flex-direction: column; min-width: 0; }
 .tile-name { font-weight: 600; color: var(--primary); overflow-wrap: anywhere; }
 .tile-description { color: var(--muted); font-size: 0.95rem; overflow-wrap: anywhere; }
-.account-links {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-}
+
+/* Your account: one section per detail */
+.account-section { padding: 1rem 0; border-top: 1px solid var(--border); }
+.account-section:first-of-type { padding-top: 0; border-top: 0; }
+.account-section h2 { display: flex; align-items: center; gap: 0.75rem; margin: 0 0 0.5rem; }
+.account-section h2 label { margin: 0; }
+.account-section h2 .status { font-size: 1rem; font-weight: 400; }
+.account-section .button { margin-top: 0; }
+.account-section .hint { margin: 0; }
+.account-value { margin: 0 0 0.25rem; overflow-wrap: anywhere; }
 
 @media (min-width: 720px) {
   .tiles { grid-template-columns: repeat(3, 1fr); }

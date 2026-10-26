@@ -188,6 +188,32 @@ func (s *Service) UpdateMember(ctx context.Context, a Actor, id string, p Member
 	return &next, nil
 }
 
+// SetOwnName changes the name of the member with this ID at their own
+// request, from their account page, and returns them as saved. It records
+// user.update with the member as the actor, unless the name is unchanged.
+func (s *Service) SetOwnName(ctx context.Context, id, name string) (*model.User, error) {
+	old, err := s.member(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	probs := problems{}
+	next := *old
+	next.Name = probs.name(name)
+	if err := probs.err(); err != nil {
+		return nil, err
+	}
+	if next.Name == old.Name {
+		return old, nil
+	}
+	if err := s.d.Store.UpdateUser(ctx, &next); err != nil {
+		return nil, fmt.Errorf("admin: set own name: %w", err)
+	}
+	changes := changeSet{}
+	noteChange(changes, "name", old.Name, next.Name)
+	s.record(ctx, Actor{Type: model.ActorUser, ID: id}, audit.UserUpdate, targetUser, id, "Changed name", changes.detail())
+	return &next, nil
+}
+
 // DeleteMember deletes the member, with their memberships, sessions and
 // tokens, and records user.delete with their email and name. Admins cannot
 // delete themselves (*RefusedError).

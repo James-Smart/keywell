@@ -1,0 +1,36 @@
+{{define "content"}}
+<h1>Your account</h1>
+{{- with .Data}}
+<section class="account-section">
+  <h2><label for="name">Name</label></h2>
+  <form method="post" action="/account/name" class="form account-name">
+    <input id="name" name="name" type="text" value="{{.Name}}" autocomplete="name" required{{if .NameError}} aria-invalid="true" aria-describedby="name-error"{{else}} aria-describedby="name-hint"{{end}}>
+    {{- if .NameError}}
+    <p class="field-error" id="name-error">{{.NameError}}</p>
+    {{- end}}
+    <p class="hint" id="name-hint">Shown to the apps you sign in to.</p>
+    <button type="submit">Save name</button>
+  </form>
+</section>
+<section class="account-section">
+  <h2>Email</h2>
+  <p class="account-value">{{.Email}}</p>
+  <p class="hint">You sign in with this. Ask an admin to change it.</p>
+</section>
+{{- with .Username}}
+<section class="account-section">
+  <h2>Username</h2>
+  <p class="account-value">{{.}}</p>
+  <p class="hint">Some apps know you by this. Ask an admin to change it.</p>
+</section>
+{{- end}}
+<section class="account-section">
+  <h2>Password</h2>
+  <a class="button button-secondary" href="/account/password">Change password</a>
+</section>
+<section class="account-section">
+  <h2>Two-step sign in {{if .TOTPOn}}<span class="status status-active">On</span>{{else}}<span class="status">Off</span>{{end}}</h2>
+  <a class="button button-secondary" href="/account/totp">{{if .TOTPOn}}Manage{{else}}Set up{{end}}</a>
+</section>
+{{- end}}
+{{end}}

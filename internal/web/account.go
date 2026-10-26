@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"latch/internal/admin"
 	"latch/internal/audit"
+	"latch/internal/model"
 	"latch/internal/password"
 	"latch/internal/session"
 )
@@ -12,7 +14,51 @@ import (
 const (
 	msgCurrentMismatch = "Your current password didn't match."
 	msgPasswordChanged = "Password changed."
+	msgNameSaved       = "Name saved."
 )
+
+// accountData is what account.html shows.
+type accountData struct {
+	Name, NameError string // the name as typed, and the message beside it
+	Email, Username string
+	TOTPOn          bool
+}
+
+// accountPage shows the member's details: their name to edit, their email
+// and username (which admins change), and the ways to their password and
+// two-step sign in.
+func (s *Server) accountPage(w http.ResponseWriter, r *http.Request) {
+	_, user, _ := session.FromContext(r.Context()) // RequireUser: a complete session
+	notice := ""
+	if r.URL.Query().Get("notice") == "name_saved" {
+		notice = msgNameSaved
+	}
+	s.renderAccount(w, r, http.StatusOK, user, user.Name, "", notice)
+}
+
+func (s *Server) renderAccount(w http.ResponseWriter, r *http.Request, status int, user *model.User, name, nameError, notice string) {
+	s.d.Renderer.Render(w, r, status, "account", Page{Title: "Your account", Notice: notice, Data: accountData{
+		Name: name, NameError: nameError, Email: user.Email, Username: user.Username,
+		TOTPOn: user.TOTPConfirmedAt != nil,
+	}})
+}
+
+// saveOwnName changes the member's name and returns to their account page.
+func (s *Server) saveOwnName(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, user, _ := session.FromContext(ctx) // RequireUser: a complete session
+	name := r.PostFormValue("name")
+	_, err := s.admin.SetOwnName(ctx, user.ID, name)
+	var invalid *admin.ValidationError
+	switch {
+	case errors.As(err, &invalid):
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, user, name, invalid.Fields["name"], "")
+	case err != nil:
+		s.serverError(w, r, "account: save name", err)
+	default:
+		http.Redirect(w, r, "/account?notice=name_saved", http.StatusSeeOther)
+	}
+}
 
 // accountPasswordData is what account_password.html shows.
 type accountPasswordData struct{ MinLength int }

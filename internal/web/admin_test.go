@@ -309,11 +309,14 @@ func TestAdminFrame(t *testing.T) {
 	}
 
 	header := between(body, "<header", "</header>")
-	for _, want := range []string{">Admin<", testenv.AdminEmail, `href="/"`, "Member home",
-		`<form method="post" action="/logout">`, "Sign out"} {
+	for _, want := range []string{">Admin<", testenv.AdminEmail, `class="account-menu"`, `href="/"`, "Member home",
+		`href="/account"`, "Your account", `<form method="post" action="/logout">`, "Sign out"} {
 		if !strings.Contains(header, want) {
 			t.Errorf("header missing %q:\n%s", want, header)
 		}
+	}
+	if strings.Contains(header, "Admin pages") {
+		t.Errorf("admin pages link to themselves:\n%s", header)
 	}
 }
 

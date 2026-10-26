@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"cmp"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -31,6 +33,9 @@ type Renderer struct {
 	pages map[string]*template.Template // page name -> frame.html + partials + page file
 	brand Brand
 	log   *slog.Logger
+	// isAdmin reports whether a user is in an admin group, for the account
+	// menu's link to the admin pages. New sets it; nil shows no link.
+	isAdmin func(ctx context.Context, userID string) (bool, error)
 }
 
 // Page is what a handler passes to Render.
@@ -62,6 +67,7 @@ type view struct {
 	Page
 	Brand    Brand
 	User     *model.User // nil unless signed in with every login step passed
+	IsAdmin  bool        // User is in an admin group
 	AdminNav []adminLink
 }
 
@@ -127,6 +133,15 @@ func (rd *Renderer) render(w http.ResponseWriter, r *http.Request, status int, n
 		return
 	}
 	v := view{Page: p, Brand: rd.brand, User: user, AdminNav: adminNav}
+	// Admin pages link to the member home instead, so need no check.
+	if user != nil && p.Section == "" && rd.isAdmin != nil {
+		isAdmin, err := rd.isAdmin(r.Context(), user.ID)
+		if err != nil {
+			// The page is still worth showing; only its admin link is lost.
+			rd.log.WarnContext(r.Context(), "render: check admin groups", "page", name, "err", err)
+		}
+		v.IsAdmin = isAdmin
+	}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "frame.html", v); err != nil {
 		rd.fail(w, r, fmt.Errorf("execute %s: %w", name, err))
@@ -171,8 +186,23 @@ func templateFuncs() template.FuncMap {
 		"ago":        func(t *time.Time) string { return ago(time.Now(), t) },
 		"date":       func(t time.Time) string { return t.UTC().Format("2 Jan 2006") },
 		"datetime":   func(t time.Time) string { return t.UTC().Format("2 Jan 2006 15:04 UTC") },
+		"initials":   initials,
 		"prettyJSON": prettyJSON,
 	}
+}
+
+// initials is what the account menu's button shows for u: the first
+// letters of the first and last words of their name, or the first letter
+// of their email address when they have no name, upper-cased.
+func initials(u *model.User) string {
+	if words := strings.Fields(u.Name); len(words) > 0 {
+		s := initial(words[0])
+		if len(words) > 1 {
+			s += initial(words[len(words)-1])
+		}
+		return s
+	}
+	return cmp.Or(initial(u.Email), "?")
 }
 
 // ago says roughly how long before now t was: "Never" for nil, then
