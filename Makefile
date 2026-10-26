@@ -13,7 +13,7 @@ docker:
 test:
 	go test ./...
 
-# Serve the development install made by the README's quickstart.
+# Serve the development instance made in the README's Development section.
 run:
 	go run ./cmd/keywell serve --config ./dev-data/keywell.yaml
 
