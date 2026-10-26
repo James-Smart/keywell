@@ -263,6 +263,19 @@ func (s *Service) ResolveApp(ctx context.Context, ref string) (*model.Applicatio
 	return s.d.Store.GetApplication(ctx, ref)
 }
 
+// CheckApp tidies app in place and checks it with the rules of the app
+// pages, for an app that comes from elsewhere, such as an import. app.ID,
+// when set, is the app's own ID, so its own slug is not taken. It returns a
+// *ValidationError when app breaks a rule; any other error is a failed
+// lookup.
+func (s *Service) CheckApp(ctx context.Context, app *model.Application) error {
+	p := problems{}
+	if err := s.validateApp(ctx, p, app, app.ID); err != nil {
+		return err
+	}
+	return p.err()
+}
+
 // validateApp tidies app in place (trimmed text, a slug made from the name
 // when blank, cleaned address lists, an ID for the default subject mode)
 // and adds a message to p for each rule it breaks. selfID is the app's own
@@ -273,7 +286,7 @@ func (s *Service) validateApp(ctx context.Context, p problems, app *model.Applic
 
 	app.Slug = strings.TrimSpace(app.Slug)
 	if app.Slug == "" {
-		app.Slug = slugFromName(app.Name)
+		app.Slug = SlugFromName(app.Name)
 	}
 	switch {
 	case utf8.RuneCountInString(app.Slug) > maxSlugLen:
@@ -362,9 +375,10 @@ func (s *Service) explainAppConflict(ctx context.Context, err error, slug, selfI
 	return err
 }
 
-// slugFromName makes a short name from an app's name: lower-case letters
-// and digits, with each other run of characters turned into one hyphen.
-func slugFromName(name string) string {
+// SlugFromName makes a short name from an app's name: lower-case letters
+// and digits, with each other run of characters turned into one hyphen. It
+// is at most 64 characters, and "app" when nothing is left.
+func SlugFromName(name string) string {
 	var b strings.Builder
 	dash := false
 	for _, r := range strings.ToLower(name) {

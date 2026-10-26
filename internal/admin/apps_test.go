@@ -511,3 +511,39 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
+
+// CheckApp applies the app pages' rules to an app made elsewhere, such as
+// by the importer.
+func TestCheckApp(t *testing.T) {
+	ctx := context.Background()
+	svc, st, _ := newService(t)
+
+	app := &model.Application{Name: "  Members Wiki ", ClientType: model.ClientTypeConfidential,
+		RedirectURIs: []string{" https://wiki.example.org/cb ", "", "https://wiki.example.org/cb"}}
+	if err := svc.CheckApp(ctx, app); err != nil {
+		t.Fatalf("valid app: %v", err)
+	}
+	if app.Name != "Members Wiki" || app.Slug != "members-wiki" || app.SubjectMode != model.SubjectModeID ||
+		!reflect.DeepEqual(app.RedirectURIs, []string{"https://wiki.example.org/cb"}) {
+		t.Errorf("not tidied: %+v", app)
+	}
+
+	taken := &model.Application{Name: "Door", Slug: "door", ClientID: "door-client-id"}
+	if err := st.CreateApplication(ctx, taken); err != nil {
+		t.Fatal(err)
+	}
+	other := &model.Application{Name: "Door Booking", Slug: "door", ClientType: model.ClientTypePublic}
+	if msg := fieldMessages(t, svc.CheckApp(ctx, other))["slug"]; msg != "Another app already uses that short name." {
+		t.Errorf("slug message %q", msg)
+	}
+	// An app's own slug is not taken.
+	self := *taken
+	self.Name = "Door renamed"
+	if err := svc.CheckApp(ctx, &self); err != nil {
+		t.Errorf("own slug: %v", err)
+	}
+
+	if got := admin.SlugFromName("Door_Booking"); got != "door-booking" {
+		t.Errorf("SlugFromName = %q", got)
+	}
+}
