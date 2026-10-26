@@ -11,7 +11,7 @@ Every command below was tried against a test Authentik. Where a command has `…
 - The login page looks different. Nothing else does.
 - Passwords carry over, so members sign in with the password they have now.
 - Authenticator apps carry over too, with their recovery codes. Members keep using the same app and the same codes.
-- A few members may have a password Latch can't check. The report counts them as "no usable password" (see "Reading the report"). They click "Forgot your password?" on the login page and get an email with a link to choose a new one. If email isn't set up, or someone is stuck, run `latch reset-password their@email` and send them the link it prints.
+- A few members may have a password Latch can't check. The report counts them as "no usable password" (see "Reading the report"). They click "Forgot your password?" on the login page and get an email with a link to choose a new one. If email isn't set up, or someone is stuck, run `sudo -u latch latch reset-password --config /etc/latch/latch.yaml their@email` on the Latch server and send them the link it prints. Under Docker, run `docker compose -f deploy/docker-compose.yml run --rm latch reset-password --config /var/lib/latch/latch.yaml their@email` instead. (Section 2, step 4 explains the `sudo -u latch`.)
 - The wiki and your own apps see the same member IDs as before, so nobody loses their account in an app.
 
 ## 2. A week before
@@ -26,9 +26,13 @@ Every command below was tried against a test Authentik. Where a command has `…
    docker compose exec -T postgresql pg_dump -U authentik -d authentik -Fc > authentik.dump
    ```
 
-   This only reads. Authentik carries on as normal. If the database service, user or database has another name on your server, use those names. They are in Authentik's `.env` file and compose file. The dump holds everyone's password hashes, so keep it private and delete it when you finish (section 7).
+   This only reads. Authentik carries on as normal. If the database service, user or database has another name on your server, use those names. They are in Authentik's `.env` file and compose file.
 
-3. **Put the copy into a throwaway database.** This is a small, temporary database that exists only so Latch can read the copy. Pick any password for it. You will use the same password again in step 4, so type it once into `PGPASSWORD`. This way it isn't saved in your shell history (in fish, use `read -s -x PGPASSWORD` instead):
+   The dump holds more than everyone's password hashes. It also holds every member's two-step sign in keys and recovery codes, and your apps' client secrets, and anyone who gets the file can use those as they are. Keep it private, and delete every copy when you finish (section 7).
+
+   Then copy `authentik.dump` to the Latch server, for example with `scp authentik.dump you@latch-server:`, and do step 3 there. If Authentik and Latch run on the same server, there is nothing to copy.
+
+3. **Put the copy into a throwaway database.** Do this on the Latch server, in the folder that holds `authentik.dump`. This is a small, temporary database that exists only so Latch can read the copy. Pick any password for it. You will use the same password again in step 4, so type it once into `PGPASSWORD`. This way it isn't saved in your shell history (in fish, use `read -s -x PGPASSWORD` instead):
 
    ```sh
    read -rs PGPASSWORD && export PGPASSWORD
@@ -44,9 +48,11 @@ Every command below was tried against a test Authentik. Where a command has `…
 4. **Try the import without saving anything.** This is called a dry run. The password is the one you chose in step 3, in `PGPASSWORD`. Keeping it there rather than in the address means it never shows up in the `--from` address, in Latch's report or in its error messages. If you are in a new terminal, set it again the same way (`read -rs PGPASSWORD && export PGPASSWORD`). On the Latch server:
 
    ```sh
-   latch import-authentik --config /etc/latch/latch.yaml --dry-run \
+   sudo -u latch --preserve-env=PGPASSWORD latch import-authentik --config /etc/latch/latch.yaml --dry-run \
      --from postgres://postgres@127.0.0.1:55433/authentik
    ```
+
+   This is for Latch installed with the systemd steps in the README. There, only the `latch` user can read Latch's config file and write its database, so the command runs as that user (`sudo -u latch`). `sudo` normally drops your environment variables, `PGPASSWORD` among them, and `--preserve-env=PGPASSWORD` passes that one on. Don't run the import as root instead: it can leave files beside the database that belong to root, which Latch then can't open.
 
    Never type a password into the `--from` address.
 
@@ -57,6 +63,8 @@ Every command below was tried against a test Authentik. Where a command has `…
      --config /var/lib/latch/latch.yaml --dry-run \
      --from postgres://postgres@ak-copy:5432/authentik
    ```
+
+   If you need `sudo` to run `docker`, keep the password the same way: `sudo --preserve-env=PGPASSWORD docker compose -f deploy/docker-compose.yml run --rm -e PGPASSWORD latch import-authentik …`, with the rest as above.
 
    Inside the container, `127.0.0.1` is the container itself, not your server, so an address that starts `127.0.0.1` fails with "connection refused". The container must reach the throwaway database some other way: by your server's own address, or by sharing a Docker network with it. The simple way is the shared network. Docker Compose names Latch's network after the folder the compose file is in, plus `_default`, so `deploy_default` for `deploy/docker-compose.yml`. Check with `docker network ls`, then join the throwaway database to it:
 
@@ -99,7 +107,8 @@ app Wiki: Its icon is stored in Authentik. Upload it on the app's page.
 Authentik lets you store extra details on members and groups. Latch passes them to apps as "metadata". The report lists each name it found, with how many members or groups have it, for example `member_number (1 member)`. Names that begin with `goauthentik.io/` are Authentik's own and are dropped without being listed. If a name on the list is something you don't want apps to see, leave it out by adding `--drop-key NAME` to the command, once for each name:
 
 ```sh
-latch import-authentik --config … --dry-run --from … --drop-key secret_note --drop-key internal_id
+sudo -u latch --preserve-env=PGPASSWORD latch import-authentik --config /etc/latch/latch.yaml --dry-run \
+  --from … --drop-key secret_note --drop-key internal_id
 ```
 
 Use the same `--drop-key` options on the final import.
@@ -198,6 +207,7 @@ Members, groups and apps that an earlier import put into Latch, and that are no 
 - **Make changes in Authentik, not in Latch.** Each import overwrites Latch's copy of the members, groups and apps it imports with what Authentik says. Anything edited on those in Latch is lost on the next import.
 - **Don't change app secrets in Latch.** An import puts Authentik's secret back.
 - **Re-importing resets who can use each app** to what Authentik allows. A rule Latch can't express becomes admins-only, never wider. So before the final import, either fix the access in Authentik, or plan to choose the app's groups again on its page in Latch afterwards. One exception: an app you added by hand in Latch, which the import matched by its client ID but which fails Latch's checks, keeps the access it has in Latch.
+- **Limits set on Authentik's sign-in steps aren't copied.** Access rules attached to Authentik's sign-in steps, rather than to the app itself, aren't carried over, and the report doesn't mention them. If you used any, set those limits as the app's groups in Latch.
 - Re-run the dry run whenever you like.
 
 ## 5. Switch day
@@ -205,16 +215,16 @@ Members, groups and apps that an earlier import put into Latch, and that are no 
 Before you start, have open: the Authentik server, the Latch server and the wiki's server, and the clean report from your last dry run.
 
 1. **Announce a short window** (half an hour is plenty) and ask other admins not to change anything in Authentik until you say so.
-2. **Take a fresh copy and restore it** (section 2, steps 2 and 3, running `docker rm -f ak-copy` first). Under Docker, join the new `ak-copy` to the Latch network again.
+2. **Take a fresh copy, copy it to the Latch server, and restore it there** (section 2, steps 2 and 3, running `docker rm -f ak-copy` on the Latch server first). Under Docker, join the new `ak-copy` to the Latch network again.
 3. **Run the import for real.** It is the dry-run command without `--dry-run`, with the same `--drop-key` options:
 
    ```sh
    read -rs PGPASSWORD && export PGPASSWORD   # the new throwaway database's password
-   latch import-authentik --config /etc/latch/latch.yaml \
+   sudo -u latch --preserve-env=PGPASSWORD latch import-authentik --config /etc/latch/latch.yaml \
      --from postgres://postgres@127.0.0.1:55433/authentik
    ```
 
-   Under Docker, use the compose form from section 2, step 4, without `--dry-run`. It is safe to do this while `latch serve` is running. The import locks Latch's database for as long as it runs, so a sign-in that needs to save something waits a few seconds at most and then carries on.
+   Under Docker, use the compose form from section 2, step 4, without `--dry-run` (with `sudo --preserve-env=PGPASSWORD` in front if you need `sudo` for `docker`). It is safe to do this while `latch serve` is running. The import locks Latch's database for as long as it runs, so a sign-in that needs to save something waits a few seconds at most and then carries on.
 4. **Check the result.** Sign in to Latch as an admin and open Settings, then Import from Authentik. It shows when the import ran and the same counts and list as the command printed. Check the counts match your last dry run. Choose groups again on any app the report made admins-only.
 5. **Switch the wiki.** See below.
 6. **Switch each of your own apps.** See below.
@@ -273,14 +283,15 @@ For each app:
    Use your own Latch address, which is the app's `public_url`.
 2. Keep the client ID and secret the same. The import copied both.
 3. Check the return addresses on the app's page in Latch. If the report said an address was a pattern, add the real ones now.
-4. Sign in once.
+4. If the app has no client secret (Latch's list of apps says "No secret (browser or phone app)"), check before the switch that it uses PKCE with the S256 method. Authentik didn't insist on it, but Latch refuses such an app's sign-ins without it, and refuses PKCE's `plain` method too.
+5. Sign in once.
 
 People's IDs (the `sub` value) in these apps don't change, because the import kept each app's way of identifying people. The app's page in Latch shows a warning triangle about that. That is expected for now.
 
 ## 6. If something goes wrong
 
 - **Point the apps back at Authentik.** It still has everything. For the wiki, put `providerURL` back and run the `UPDATE` the other way round, with the old address you wrote down. Members who changed their password in Latch since the switch use their old one in Authentik.
-- **Importing again is safe at any time.** It updates what is already in Latch and never makes duplicates. Remember that it resets who can use each app (section 4).
+- **Importing again is safe until anyone changes things in Latch.** It updates what is already in Latch and never makes duplicates. But it also puts Authentik's version back over changes made in Latch since the last import (section 4). After the switch, that means it turns members you turned off in Latch back on (unless Authentik has them off too), puts Authentik's client secrets back, and resets the members of the imported groups and who can use each app to what Authentik says. Members who have signed in to Latch keep their Latch password and two-step sign in. So once people use Latch, import again only if you are ready to make those changes again.
 
 ## 7. A few weeks later
 
@@ -293,5 +304,5 @@ People's IDs (the `sub` value) in these apps don't change, because the import ke
    rm authentik.dump
    ```
 
-   Delete any other copies of the dump too. Keep one only if you want a last record of Authentik, and keep it private.
+   Delete the other copies of the dump too, including the one on the server that runs Authentik. Keep one only if you want a last record of Authentik, and keep it private.
 4. When you're happy, shut Authentik down for good and remove its data.
